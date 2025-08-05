@@ -1,3 +1,11 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["peewee_migratey"]
+
+
 [project]
 name = "peewee-migrate2"
 version = "1.6.5"
@@ -23,18 +31,22 @@ classifiers=[
     'Topic :: Software Development :: Testing',
     'Topic :: Utilities',
 ]
-license = "BSD"
+license = "BSD-4-Clause"
 
 dependencies = [
     "peewee>=3.17.9",
     "click>=6.7"
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "pytest==8.3.5",
-    "psycopg2-binary>==2.8.1",
+    "psycopg2-binary>=2.8.1",
+    "build"
+    "twine"
 ]
+
+
 
 [project.urls]
 Homepage = "https://github.com/kalombos/peewee_migrate2"
