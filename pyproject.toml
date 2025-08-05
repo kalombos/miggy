@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["peewee_migrate"]
+
+
+[project]
+name = "peewee-migrate2"
+version = "1.6.5"
+authors = [
+  {name = "Gorshkov Nikolay", email = "nogamemorebrain@gmail.com"},
+  {name = "Kirill Klenov"},
+  {name = "spumer"},
+]
+
+description = "a database migration tool for usage with the peewee ORM"
+readme = "README.rst"
+requires-python = ">=3.10"
+classifiers=[
+    'Development Status :: 4 - Beta',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: BSD License',
+    'Natural Language :: English',
+    'Natural Language :: Russian',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+    'Topic :: Software Development :: Testing',
+    'Topic :: Utilities',
+]
+license = "BSD-4-Clause"
+
+dependencies = [
+    "peewee>=3.17.9",
+    "click>=6.7"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+    "psycopg2-binary>=2.8.1",
+    "build",
+    "twine"
+]
+
+
+
+[project.urls]
+Homepage = "https://github.com/kalombos/peewee_migrate2"
+Issues = "https://github.com/kalombos/peewee_migrate2/issues"
+
+
+[project.scripts]
+pw_migrate = "peewee_migrate.cli:cli"
