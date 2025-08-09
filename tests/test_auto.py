@@ -2,17 +2,32 @@ import os.path as path
 import datetime as dt
 
 import peewee as pw
+from peewee_migrate.auto import diff_one, diff_many, model_to_code
+from peewee_migrate.cli import get_router
 from playhouse.postgres_ext import (ArrayField, BinaryJSONField, DateTimeTZField,
                                     HStoreField, IntervalField, JSONField,
                                     TSVectorField)
 
+from peewee_migrate.migrator import Migrator
+from playhouse.db_url import connect
+
 CURDIR = path.abspath(path.dirname(__file__))
 
 
-def test_auto():
-    from peewee_migrate.auto import diff_one, diff_many, model_to_code
-    from peewee_migrate.cli import get_router
+def test_add_index():
+    migrator = Migrator(connect('sqlite:///:memory:'))
 
+    class _Test(pw.Model):
+        first_name = pw.IntegerField()
+
+    class Test(pw.Model):
+        first_name = pw.IntegerField(index=True)
+
+    changes = diff_one(Test, _Test, migrator=migrator)
+    print(changes)
+
+
+def test_auto():
     router = get_router(path.join(CURDIR, 'migrations'), 'sqlite:///:memory:')
     router.run()
     migrator = router.migrator
@@ -63,7 +78,6 @@ def test_auto():
 
 
 def test_auto_postgresext():
-    from peewee_migrate.auto import model_to_code
 
     class Object(pw.Model):
         array_field = ArrayField()
@@ -81,7 +95,6 @@ def test_auto_postgresext():
 
 
 def test_auto_multi_column_index():
-    from peewee_migrate.auto import model_to_code
 
     class Object(pw.Model):
         first_name = pw.CharField()
