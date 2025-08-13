@@ -8,23 +8,7 @@ from playhouse.postgres_ext import (ArrayField, BinaryJSONField, DateTimeTZField
                                     HStoreField, IntervalField, JSONField,
                                     TSVectorField)
 
-from peewee_migrate.migrator import Migrator
-from playhouse.db_url import connect
-
 CURDIR = path.abspath(path.dirname(__file__))
-
-
-def test_add_index():
-    migrator = Migrator(connect('sqlite:///:memory:'))
-
-    class _Test(pw.Model):
-        first_name = pw.IntegerField()
-
-    class Test(pw.Model):
-        first_name = pw.IntegerField(index=True)
-
-    changes = diff_one(Test, _Test, migrator=migrator)
-    print(changes)
 
 
 def test_auto():
