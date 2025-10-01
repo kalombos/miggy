@@ -3,7 +3,7 @@ import datetime as dt
 
 import peewee as pw
 import pytest
-from peewee_migrate.auto import diff_one
+from peewee_migrate.auto import diff_one, model_to_code
 
 
 from peewee_migrate.migrator import Migrator
@@ -37,8 +37,7 @@ def test_add_unique_index(migrator: Migrator) -> None:
     assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.add_index('test', 'first_name', unique=True)"
 
 
-def test_change_to_unqiue_index() -> None:
-    migrator = Migrator(connect('sqlite:///:memory:'))
+def test_change_to_unqiue_index(migrator: Migrator) -> None:
 
     class _Test(pw.Model):
         first_name = pw.CharField(index=True)
@@ -48,8 +47,7 @@ def test_change_to_unqiue_index() -> None:
 
     assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=True)"]
 
-def test_change_to_non_unqiue_index() -> None:
-    migrator = Migrator(connect('sqlite:///:memory:'))
+def test_change_to_non_unqiue_index(migrator: Migrator) -> None:
 
     class _Test(pw.Model):
         first_name = pw.CharField(index=True, unique=True)
@@ -71,7 +69,7 @@ def test_drop_index(migrator: Migrator) -> None:
     assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.drop_index('test', 'first_name')"
 
 
-def test_drop_unique_index(migrator: Migrator) -> None:
+def test_unique_index__dropped(migrator: Migrator) -> None:
 
     class _Test(pw.Model):
         first_name = pw.CharField(index=True, unique=True)
@@ -81,8 +79,9 @@ def test_drop_unique_index(migrator: Migrator) -> None:
 
     assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.drop_index('test', 'first_name')"
 
+
 @pytest.mark.xfail
-def test_add_index_composite_index(migrator: Migrator) -> None:
+def test_composite_index__added(migrator: Migrator) -> None:
 
     class _Test(pw.Model):
         first_name = pw.CharField()
@@ -101,7 +100,7 @@ def test_add_index_composite_index(migrator: Migrator) -> None:
 
 
 @pytest.mark.xfail
-def test_add_index_composite_unique_index(migrator: Migrator) -> None:
+def test_composite_unique_index__added(migrator: Migrator) -> None:
 
     class _Test(pw.Model):
         first_name = pw.CharField()
@@ -117,3 +116,19 @@ def test_add_index_composite_unique_index(migrator: Migrator) -> None:
                 (('first_name', "last_name"), True),
             )
     assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', 'last_name', unique=True)"]
+
+
+def test_composite_unique_index__create_model():
+
+    class Object(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        class Meta:
+            indexes = (
+                (('first_name', 'last_name'), True),
+            )
+
+    code = model_to_code(Object)
+    assert code
+    assert "indexes = [(('first_name', 'last_name'), True)]" in code
