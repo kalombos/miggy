@@ -1,6 +1,7 @@
 import peewee as pw
 import collections
 from playhouse.reflection import Column as VanilaColumn
+from typing import Sequence
 
 
 INDENT = '    '
@@ -72,14 +73,55 @@ class Column(VanilaColumn):
         name, _, field = [s and s.strip() for s in field.partition('=')]
         return '{name}{space}={space}{module}.{field}'.format(
             name=name, field=field, space=space, module=module)
+    
+class IndexMetaData:
+    def __init__(self, model: pw.Model, columns: Sequence[str], unique: bool):
+        self.model = model
+        self.columns = columns
+        self.unique = unique
+
+    def __hash__(self):
+        return hash(f"{self.model._meta.table_name}__{self.columns}_{self.unique}")
+    
+    def __eq__(self, value: "IndexMetaData") -> bool:
+        return self.__hash__() == value.__hash__()
+    
 
 
-def diff_one(model1, model2, **kwargs):
+def extract_index_meta_data(model) -> list[IndexMetaData]:
+    indexes = []
+    for index_obj in model._meta.indexes:
+        if isinstance(index_obj, (list, tuple)):
+            columns, unique = index_obj
+            indexes.append(IndexMetaData(model, columns, unique=unique))
+
+    return indexes
+
+
+def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str], list[str]]:
+    create_changes = []
+    drop_changes = []
+    current_indexes = extract_index_meta_data(current)
+    prev_indexes = extract_index_meta_data(prev)
+
+    for index in set(current_indexes) - set(prev_indexes):
+        create_changes.append(
+            add_index(index.model, *index.columns, unique=index.unique)
+        )
+    return create_changes, drop_changes
+
+
+def diff_one(model1: pw.Model, model2: pw.Model, **kwargs) -> list[str]:
     """Find difference between given peewee models."""
     changes = []
 
     fields1 = model1._meta.fields
     fields2 = model2._meta.fields
+
+    create_index_changes, drop_index_changes = diff_indexes_from_meta(model1, model2)
+
+    # Drop non-field indexes before dropping and creating fields
+    changes.extend(drop_index_changes)
 
     # Add fields
     names1 = set(fields1) - set(fields2)
@@ -91,6 +133,9 @@ def diff_one(model1, model2, **kwargs):
     names2 = set(fields2) - set(fields1)
     if names2:
         changes.append(drop_fields(model1, *names2))
+
+    # Create non-field indexes after dropping and creating fields
+    changes.extend(create_index_changes)
 
     # Change fields
     fields_ = []
@@ -121,7 +166,7 @@ def diff_one(model1, model2, **kwargs):
         if index is True or unique is True:
             if fields2[name].unique or fields2[name].index:
                 changes.append(drop_index(model1, name))
-            changes.append(add_index(model1, name, unique))
+            changes.append(add_index(model1, name, unique=unique))
         else:
             changes.append(drop_index(model1, name))
 
@@ -244,10 +289,10 @@ def change_not_null(Model, name, null):
     return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
 
 
-def add_index(Model, name, unique):
+def add_index(Model, *columns, unique):
     operation = 'add_index'
     return "migrator.%s('%s', %s, unique=%s)" %\
-        (operation, Model._meta.table_name, repr(name), unique)
+        (operation, Model._meta.table_name, ', '.join(map(repr, columns)), unique)
 
 
 def drop_index(Model, name):

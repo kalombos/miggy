@@ -91,12 +91,11 @@ def test_migrator_sqlite_common():
     migrator.remove_fields(Order, 'customer')
     migrator.run()
     assert not hasattr(Order, 'customer')
-
     migrator.add_index(Order, 'identifier', unique=True)
     migrator.run()
-    assert not Order.identifier.index
+    assert Order.identifier.index
     assert Order.identifier.unique
-    assert Order._meta.indexes
+    assert not Order._meta.indexes
 
     # TODO fix change_columns
     # migrator.change_columns(Order, identifier=pw.IntegerField(default=0))

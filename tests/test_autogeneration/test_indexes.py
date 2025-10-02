@@ -80,7 +80,24 @@ def test_unique_index__dropped(migrator: Migrator) -> None:
     assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.drop_index('test', 'first_name')"
 
 
-@pytest.mark.xfail
+def test_index__from_meta(migrator: Migrator) -> None:
+
+    class _Test(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+
+    class Test(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        class Meta:
+            indexes = (
+                (('first_name', ), False),
+            )
+    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', unique=False)"]
+
+
 def test_composite_index__added(migrator: Migrator) -> None:
 
     class _Test(pw.Model):
@@ -99,7 +116,6 @@ def test_composite_index__added(migrator: Migrator) -> None:
     assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', 'last_name', unique=False)"]
 
 
-@pytest.mark.xfail
 def test_composite_unique_index__added(migrator: Migrator) -> None:
 
     class _Test(pw.Model):

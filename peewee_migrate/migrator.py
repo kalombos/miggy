@@ -59,18 +59,18 @@ class AddIndex(MigrateOperation):
         self.unique = kwargs.pop('unique', False)
 
     def state_forwards(self) -> None:
-        self.model._meta.indexes.append((self.columns, self.unique))
+        if len(self.columns) == 1:
+            field = self.model._meta.fields.get(self.columns[0])
+            field.unique = self.unique
+            field.index = True
+        else:
+            self.model._meta.indexes.append((self.columns, self.unique))
 
     def database_forwards(self) -> Operation:
         columns = self.columns
         columns_ = []
         for col in columns:
             field = self.model._meta.fields.get(col)
-
-            if len(columns) == 1:
-                field.unique = self.unique
-                field.index = not self.unique
-
             if isinstance(field, pw.ForeignKeyField):
                 col = col + '_id'
 
