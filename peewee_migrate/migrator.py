@@ -1,3 +1,5 @@
+from ast import Call
+from typing import Callable
 import peewee as pw
 from functools import wraps
 from playhouse.migrate import (
@@ -14,6 +16,13 @@ from peewee_migrate import LOGGER
 
 
 class MigrateOperation:
+
+    migrator: "Migrator"
+
+    @property
+    def schema_migrator(self) -> "SchemaMigrator":
+        return self.migrator.schema_migrator
+
     def state_forwards(self, migrator: 'Migrator') -> None:
         """
         Take the state from the previous migration, and mutate it
@@ -22,7 +31,7 @@ class MigrateOperation:
 
         raise NotImplementedError
 
-    def database_forwards(self) -> None:
+    def database_forwards(self) -> Operation | Callable:
         """
         Perform the mutation on the database schema in the normal
         (forwards) direction.
@@ -34,37 +43,61 @@ class CreateTable(MigrateOperation):
     def __init__(self, model: pw.Model) -> None:
         self.model = model
 
-    def state_forwards(self, migrator: 'Migrator') -> None:
-        migrator.orm[self.model._meta.table_name] = self.model
-        self.model._meta.database = migrator.database  # without it we can't run `model.create_table`
+    def state_forwards(self) -> None:
+        self.migrator.orm[self.model._meta.table_name] = self.model
+        
 
-    def database_forwards(self):
-        self.model.create_table()
+    def database_forwards(self) -> Callable:
+        self.model._meta.database = self.migrator.database  # without it we can't run `model.create_table`
+        return lambda: self.model.create_table()
+
+
+class AddIndex(MigrateOperation):
+    def __init__(self, model: pw.Model, *columns, **kwargs) -> None:
+        self.model = model
+        self.columns = columns
+        self.unique = kwargs.pop('unique', False)
+
+    def state_forwards(self) -> None:
+        self.model._meta.indexes.append((self.columns, self.unique))
+
+    def database_forwards(self) -> Operation:
+        columns = self.columns
+        columns_ = []
+        for col in columns:
+            field = self.model._meta.fields.get(col)
+
+            if len(columns) == 1:
+                field.unique = self.unique
+                field.index = not self.unique
+
+            if isinstance(field, pw.ForeignKeyField):
+                col = col + '_id'
+
+            columns_.append(col)
+        return self.schema_migrator.add_index(self.model._meta.table_name, columns_, unique=self.unique)
 
 
 class Migration:
     def __init__(self, migrator: 'Migrator') -> None:
         self.migrator = migrator
-        self.ops: list[MigrateOperation] = []
+        self.ops: list[Operation | Callable] = []
 
     def append(self, op: MigrateOperation) -> None:
         if isinstance(op, MigrateOperation):
-            op.state_forwards(self.migrator)
-        self.ops.append(op)
-
-    def apply_legacy_op(self, op) -> None:
-        if isinstance(op, Operation):
-            LOGGER.info("%s %s", op.method, op.args)
-            op.run()
+            op.migrator = self.migrator
+            op.state_forwards()
+            self.ops.append(op.database_forwards())
         else:
-            op()
+            self.ops.append(op)
 
     def apply(self) -> None:
         for op in self.ops:
-            if isinstance(op, MigrateOperation):
-                op.database_forwards()
+            if isinstance(op, Operation):
+                LOGGER.info("%s %s", op.method, op.args)
+                op.run()
             else:
-                self.apply_legacy_op(op)
+                op()
 
     def clean(self) -> None:
         self.ops = list()
@@ -232,7 +265,7 @@ class Migrator(object):
 
         >> migrator.create_table(model)
         """
-        self.ops.append(CreateTable(model))
+        self.migration.append(CreateTable(model))
         return model
 
     create_model = create_table
@@ -361,25 +394,11 @@ class Migrator(object):
         self.orm[model._meta.table_name] = model
         self.ops.append(self.migrator.rename_table(old_name, new_name))
         return model
-
+    
     @get_model
     def add_index(self, model, *columns, **kwargs):
         """Create indexes."""
-        unique = kwargs.pop('unique', False)
-        model._meta.indexes.append((columns, unique))
-        columns_ = []
-        for col in columns:
-            field = model._meta.fields.get(col)
-
-            if len(columns) == 1:
-                field.unique = unique
-                field.index = not unique
-
-            if isinstance(field, pw.ForeignKeyField):
-                col = col + '_id'
-
-            columns_.append(col)
-        self.ops.append(self.migrator.add_index(model._meta.table_name, columns_, unique=unique))
+        self.migration.append(AddIndex(model, *columns, **kwargs))
         return model
 
     @get_model
