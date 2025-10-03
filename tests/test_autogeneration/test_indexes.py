@@ -1,5 +1,6 @@
 import os.path as path
 import datetime as dt
+from typing import Any
 
 import peewee as pw
 import pytest
@@ -15,69 +16,97 @@ from playhouse.db_url import connect
 def migrator() -> Migrator:
     return Migrator(connect('sqlite:///:memory:'))
 
-def test_add_index(migrator: Migrator) -> None:
+
+@pytest.mark.parametrize(
+    ("before_params", "after_params", "changes"),
+    [
+        # Adding index
+        (
+            {}, 
+            {"index": True, "unique": True}, 
+            [
+                "migrator.add_index('test', 'first_name', unique=True)"
+            ]
+        ),
+        (
+            {}, 
+            {"index": False, "unique": True}, 
+            [
+                "migrator.add_index('test', 'first_name', unique=True)"
+            ]
+        ),
+        (
+            {}, 
+            {"index": True, "unique": False}, 
+            [
+                "migrator.add_index('test', 'first_name', unique=False)"
+            ]
+        ),
+        # Changing index
+        (
+            {"index": True, "unique": False}, 
+            {"index": True, "unique": True}, 
+            [
+                "migrator.drop_index('test', 'first_name')", 
+                "migrator.add_index('test', 'first_name', unique=True)"
+            ]
+        ),
+        (
+            {"index": True, "unique": True}, 
+            {"index": True, "unique": False}, 
+            [
+                "migrator.drop_index('test', 'first_name')", 
+                "migrator.add_index('test', 'first_name', unique=False)"
+            ]
+        ),
+        (
+            {"index": False, "unique": True}, 
+            {"index": True, "unique": False}, 
+            [
+                "migrator.drop_index('test', 'first_name')", 
+                "migrator.add_index('test', 'first_name', unique=False)"
+            ]
+        ),
+
+        # Dropping index
+
+        (
+            {"index": True, "unique": True}, 
+            {},
+            ["migrator.drop_index('test', 'first_name')"]
+        ),
+        (
+            {"index": False, "unique": True}, 
+            {"index": False, "unique": False},
+            ["migrator.drop_index('test', 'first_name')"]
+        ),
+        (
+            {"index": True, "unique": False}, 
+            {},
+            ["migrator.drop_index('test', 'first_name')"]
+        ),
+
+        # do nothing
+        (
+            {"index": False, "unique": False},
+            {},
+            []
+        ),
+    ],
+)
+def test_field_index_change(
+    before_params: dict[str, Any],
+    after_params: dict[str, Any],
+    changes: list[str],
+    migrator: Migrator) -> None:
 
     class _Test(pw.Model):
-        first_name = pw.CharField()
+        first_name = pw.CharField(**before_params)
 
     class Test(pw.Model):
-        first_name = pw.CharField(index=True)
+        first_name = pw.CharField(**after_params)
 
-    assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.add_index('test', 'first_name', unique=False)"
-
-
-def test_add_unique_index(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField()
-
-    class Test(pw.Model):
-        first_name = pw.CharField(index=True, unique=True)
-
-    assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.add_index('test', 'first_name', unique=True)"
-
-
-def test_change_to_unqiue_index(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField(index=True)
-
-    class Test(pw.Model):
-        first_name = pw.CharField(index=True, unique=True)
-
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=True)"]
-
-def test_change_to_non_unqiue_index(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField(index=True, unique=True)
-
-    class Test(pw.Model):
-        first_name = pw.CharField(index=True)
-
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=False)"]
-
-
-def test_drop_index(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField(index=True)
-
-    class Test(pw.Model):
-        first_name = pw.CharField()
-
-    assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.drop_index('test', 'first_name')"
-
-
-def test_unique_index__dropped(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField(index=True, unique=True)
-
-    class Test(pw.Model):
-        first_name = pw.CharField()
-
-    assert diff_one(Test, _Test, migrator=migrator)[0] == "migrator.drop_index('test', 'first_name')"
+    assert diff_one(Test, _Test, migrator=migrator) == changes
 
 
 def test_index__from_meta(migrator: Migrator) -> None:
