@@ -109,7 +109,7 @@ def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str]
             add_index(index.model, *index.columns, unique=index.unique)
         )
     for index in set(prev_indexes) - set(current_indexes):
-        create_changes.append(
+        drop_changes.append(
             drop_index(index.model, *index.columns)
         )
     return create_changes, drop_changes

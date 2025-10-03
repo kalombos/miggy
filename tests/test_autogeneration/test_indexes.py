@@ -94,7 +94,7 @@ def migrator() -> Migrator:
         ),
     ],
 )
-def test_field_index_change(
+def test_field_index(
     before_params: dict[str, Any],
     after_params: dict[str, Any],
     changes: list[str],
@@ -109,99 +109,91 @@ def test_field_index_change(
     assert diff_one(Test, _Test, migrator=migrator) == changes
 
 
-def test_index__from_meta(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-
-    class Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = (
+@pytest.mark.parametrize(
+    ("indexes_before", "indexes_after", "changes"),
+    [
+        # Adding indexes
+        (
+            [], 
+            [
                 (('first_name', ), False),
-            )
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', unique=False)"]
-
-
-def test_composite_index__added(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-
-    class Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = (
+            ],
+            ["migrator.add_index('test', 'first_name', unique=False)"]
+        ),
+        (
+            [], 
+            [
+                (('first_name', ), True),
+            ],
+            ["migrator.add_index('test', 'first_name', unique=True)"]
+        ),
+        (
+            [], 
+            [
                 (('first_name', "last_name"), False),
-            )
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', 'last_name', unique=False)"]
-
-
-def test_composite_unique_index__added(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-
-    class Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = (
+            ],
+            ["migrator.add_index('test', 'first_name', 'last_name', unique=False)"]
+        ),
+        (
+            [], 
+            [
                 (('first_name', "last_name"), True),
-            )
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', 'last_name', unique=True)"]
-
-
-
-def test_composite_index__droped(migrator: Migrator) -> None:
-
-    class _Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = (
+            ],
+            ["migrator.add_index('test', 'first_name', 'last_name', unique=True)"]
+        ),
+        # Dropping indexes
+        (
+            [
+                (('first_name', "last_name"), True),
+            ],
+            [],
+            ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+        ),
+        (
+            [
                 (('first_name', "last_name"), False),
-            )
-
-
-    class Test(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('_test', 'first_name', 'last_name')"]
-
-
-def test_composite_unique_index__droped(migrator: Migrator) -> None:
+            ],
+            [],
+            ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+        ),
+        # # Changing indexes
+        (
+            [
+                (('first_name', "last_name"), False),
+            ],
+            [
+                (('first_name', "last_name"), True),
+            ],
+            [
+                "migrator.drop_index('_test', 'first_name', 'last_name')",
+                "migrator.add_index('test', 'first_name', 'last_name', unique=True)"
+            ]
+        ),
+    ],
+)
+def test_tuple_indexes__from_meta(
+    indexes_before: list[Any], 
+    indexes_after: list[Any], 
+    migrator: Migrator,
+    changes: list[str]
+) -> None:
 
     class _Test(pw.Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 
         class Meta:
-            indexes = (
-                (('first_name', "last_name"), True),
-            )
+            indexes = indexes_before
 
 
     class Test(pw.Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 
-        
-    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+        class Meta:
+            indexes = indexes_after
+
+    assert diff_one(Test, _Test, migrator=migrator) == changes
 
 
 def test_composite_unique_index__create_model():
