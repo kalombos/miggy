@@ -134,6 +134,47 @@ def test_composite_unique_index__added(migrator: Migrator) -> None:
     assert diff_one(Test, _Test, migrator=migrator) == ["migrator.add_index('test', 'first_name', 'last_name', unique=True)"]
 
 
+
+def test_composite_index__droped(migrator: Migrator) -> None:
+
+    class _Test(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        class Meta:
+            indexes = (
+                (('first_name', "last_name"), False),
+            )
+
+
+    class Test(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        
+    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+
+
+def test_composite_unique_index__droped(migrator: Migrator) -> None:
+
+    class _Test(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        class Meta:
+            indexes = (
+                (('first_name', "last_name"), True),
+            )
+
+
+    class Test(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        
+    assert diff_one(Test, _Test, migrator=migrator) == ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+
+
 def test_composite_unique_index__create_model():
 
     class Object(pw.Model):

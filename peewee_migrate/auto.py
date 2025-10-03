@@ -108,6 +108,10 @@ def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str]
         create_changes.append(
             add_index(index.model, *index.columns, unique=index.unique)
         )
+    for index in set(prev_indexes) - set(current_indexes):
+        create_changes.append(
+            drop_index(index.model, *index.columns)
+        )
     return create_changes, drop_changes
 
 
@@ -133,9 +137,6 @@ def diff_one(model1: pw.Model, model2: pw.Model, **kwargs) -> list[str]:
     names2 = set(fields2) - set(fields1)
     if names2:
         changes.append(drop_fields(model1, *names2))
-
-    # Create non-field indexes after dropping and creating fields
-    changes.extend(create_index_changes)
 
     # Change fields
     fields_ = []
@@ -169,6 +170,9 @@ def diff_one(model1: pw.Model, model2: pw.Model, **kwargs) -> list[str]:
             changes.append(add_index(model1, name, unique=unique))
         else:
             changes.append(drop_index(model1, name))
+
+    # Create non-field indexes after dropping and creating fields
+    changes.extend(create_index_changes)
 
     return changes
 
@@ -289,12 +293,12 @@ def change_not_null(Model, name, null):
     return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
 
 
-def add_index(Model, *columns, unique):
+def add_index(Model, *columns: str, unique: bool):
     operation = 'add_index'
     return "migrator.%s('%s', %s, unique=%s)" %\
         (operation, Model._meta.table_name, ', '.join(map(repr, columns)), unique)
 
 
-def drop_index(Model, name):
+def drop_index(Model, *columns: str):
     operation = 'drop_index'
-    return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
+    return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, ', '.join(map(repr, columns)))

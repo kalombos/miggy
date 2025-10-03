@@ -1,5 +1,4 @@
-from ast import Call
-from typing import Callable
+from typing import Any, Callable
 import peewee as pw
 from functools import wraps
 from playhouse.migrate import (
@@ -53,7 +52,7 @@ class CreateTable(MigrateOperation):
 
 
 class AddIndex(MigrateOperation):
-    def __init__(self, model: pw.Model, *columns, **kwargs) -> None:
+    def __init__(self, model: pw.Model, *columns: str, **kwargs: Any) -> None:
         self.model = model
         self.columns = columns
         self.unique = kwargs.pop('unique', False)
@@ -76,6 +75,31 @@ class AddIndex(MigrateOperation):
 
             columns_.append(col)
         return self.schema_migrator.add_index(self.model._meta.table_name, columns_, unique=self.unique)
+    
+
+class DropIndex(MigrateOperation):
+    def __init__(self, model: pw.Model, *columns: str) -> None:
+        self.model = model
+        self.columns = columns
+
+    def state_forwards(self) -> None:
+        if len(self.columns) == 1:
+            field = self.model._meta.fields.get(self.columns[0])
+            field.unique = field.index = False
+        else:
+            self.model._meta.indexes = [(cols, _) for (cols, _) in self.model._meta.indexes if self.columns != cols]
+
+    def database_forwards(self) -> Operation:
+        columns = self.columns
+        columns_ = []
+        for col in columns:
+            field = self.model._meta.fields.get(col)
+            if isinstance(field, pw.ForeignKeyField):
+                col = col + '_id'
+            columns_.append(col)
+        index_name = make_index_name(self.model._meta.table_name, columns_)
+        return self.schema_migrator.drop_index(self.model._meta.table_name, index_name)
+
 
 
 class Migration:
@@ -404,21 +428,7 @@ class Migrator(object):
     @get_model
     def drop_index(self, model, *columns):
         """Drop indexes."""
-        columns_ = []
-        for col in columns:
-            field = model._meta.fields.get(col)
-            if not field:
-                continue
-
-            if len(columns) == 1:
-                field.unique = field.index = False
-
-            if isinstance(field, pw.ForeignKeyField):
-                col = col + '_id'
-            columns_.append(col)
-        index_name = make_index_name(model._meta.table_name, columns_)
-        model._meta.indexes = [(cols, _) for (cols, _) in model._meta.indexes if columns != cols]
-        self.ops.append(self.migrator.drop_index(model._meta.table_name, index_name))
+        self.migration.append(DropIndex(model, *columns))
         return model
 
     @get_model
@@ -446,5 +456,3 @@ class Migrator(object):
         model._meta.defaults[field] = field.default = default
         self.ops.append(self.migrator.apply_default(model._meta.table_name, name, field))
         return model
-
-#  pylama:ignore=W0223,W0212,R
