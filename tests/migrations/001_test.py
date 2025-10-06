@@ -27,6 +27,7 @@ def migrate(migrator, database, **kwargs):
     > migrator.add_default(Model, field_name, default)
 
     """
+
     @migrator.create_model
     class Tag(pw.Model):
         tag = pw.CharField()

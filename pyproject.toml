@@ -44,7 +44,8 @@ dev = [
     "psycopg2-binary>=2.8.1",
     "build",
     "twine",
-    "ruff"
+    "ruff==0.13.3",
+    "poethepoet==0.37.0"
 ]
 
 
@@ -67,3 +68,31 @@ select = [
     'E',
     'I'
 ]
+
+[tool.poe.tasks.lint]
+help = "Run the type checker"
+cmd  = "ruff check"
+
+[tool.poe.tasks.check_format]
+help = "Run the format checker"
+cmd  = "ruff format --check"
+
+[tool.poe.tasks.format_by_checker]
+help = "Run the check formater"
+cmd  = "ruff check --fix-only -e"
+
+[tool.poe.tasks.format_by_formatter]
+help = "Run the ruff formatter"
+cmd  = "ruff format"
+
+[tool.poe.tasks.format]
+help = "Run ruff check and ruff format formatters"
+sequence  = ["format_by_checker", "format_by_formatter"]
+
+[tool.poe.tasks.test]
+help = "Run tests"
+cmd  = "pytest -vv -x"
+
+[tool.poe.tasks.check]
+help = "Run all checks on the code base"
+sequence = ["lint", "check_format", "test"]

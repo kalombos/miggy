@@ -10,92 +10,47 @@ from peewee_migrate.migrator import Migrator
 
 @pytest.fixture
 def migrator() -> Migrator:
-    return Migrator(connect('sqlite:///:memory:'))
+    return Migrator(connect("sqlite:///:memory:"))
 
 
 @pytest.mark.parametrize(
     ("before_params", "after_params", "changes"),
     [
         # Adding index
-        (
-            {}, 
-            {"index": True, "unique": True}, 
-            [
-                "migrator.add_index('test', 'first_name', unique=True)"
-            ]
-        ),
-        (
-            {}, 
-            {"index": False, "unique": True}, 
-            [
-                "migrator.add_index('test', 'first_name', unique=True)"
-            ]
-        ),
-        (
-            {}, 
-            {"index": True, "unique": False}, 
-            [
-                "migrator.add_index('test', 'first_name', unique=False)"
-            ]
-        ),
+        ({}, {"index": True, "unique": True}, ["migrator.add_index('test', 'first_name', unique=True)"]),
+        ({}, {"index": False, "unique": True}, ["migrator.add_index('test', 'first_name', unique=True)"]),
+        ({}, {"index": True, "unique": False}, ["migrator.add_index('test', 'first_name', unique=False)"]),
         # Changing index
         (
-            {"index": True, "unique": False}, 
-            {"index": True, "unique": True}, 
-            [
-                "migrator.drop_index('test', 'first_name')", 
-                "migrator.add_index('test', 'first_name', unique=True)"
-            ]
+            {"index": True, "unique": False},
+            {"index": True, "unique": True},
+            ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=True)"],
         ),
         (
-            {"index": True, "unique": True}, 
-            {"index": True, "unique": False}, 
-            [
-                "migrator.drop_index('test', 'first_name')", 
-                "migrator.add_index('test', 'first_name', unique=False)"
-            ]
+            {"index": True, "unique": True},
+            {"index": True, "unique": False},
+            ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=False)"],
         ),
         (
-            {"index": False, "unique": True}, 
-            {"index": True, "unique": False}, 
-            [
-                "migrator.drop_index('test', 'first_name')", 
-                "migrator.add_index('test', 'first_name', unique=False)"
-            ]
+            {"index": False, "unique": True},
+            {"index": True, "unique": False},
+            ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=False)"],
         ),
-
         # Dropping index
-
+        ({"index": True, "unique": True}, {}, ["migrator.drop_index('test', 'first_name')"]),
         (
-            {"index": True, "unique": True}, 
-            {},
-            ["migrator.drop_index('test', 'first_name')"]
-        ),
-        (
-            {"index": False, "unique": True}, 
+            {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.drop_index('test', 'first_name')"]
+            ["migrator.drop_index('test', 'first_name')"],
         ),
-        (
-            {"index": True, "unique": False}, 
-            {},
-            ["migrator.drop_index('test', 'first_name')"]
-        ),
-
+        ({"index": True, "unique": False}, {}, ["migrator.drop_index('test', 'first_name')"]),
         # do nothing
-        (
-            {"index": False, "unique": False},
-            {},
-            []
-        ),
+        ({"index": False, "unique": False}, {}, []),
     ],
 )
 def test_field_index(
-    before_params: dict[str, Any],
-    after_params: dict[str, Any],
-    changes: list[str],
-    migrator: Migrator) -> None:
-
+    before_params: dict[str, Any], after_params: dict[str, Any], changes: list[str], migrator: Migrator
+) -> None:
     class _Test(pw.Model):
         first_name = pw.CharField(**before_params)
 
@@ -110,80 +65,76 @@ def test_field_index(
     [
         # Adding indexes
         (
-            [], 
+            [],
             [
-                (('first_name', ), False),
+                (("first_name",), False),
             ],
-            ["migrator.add_index('test', 'first_name', unique=False)"]
+            ["migrator.add_index('test', 'first_name', unique=False)"],
         ),
         (
-            [], 
+            [],
             [
-                (('first_name', ), True),
+                (("first_name",), True),
             ],
-            ["migrator.add_index('test', 'first_name', unique=True)"]
+            ["migrator.add_index('test', 'first_name', unique=True)"],
         ),
         (
-            [], 
+            [],
             [
-                (('first_name', "last_name"), False),
+                (("first_name", "last_name"), False),
             ],
-            ["migrator.add_index('test', 'first_name', 'last_name', unique=False)"]
+            ["migrator.add_index('test', 'first_name', 'last_name', unique=False)"],
         ),
         (
-            [], 
+            [],
             [
-                (('first_name', "last_name"), True),
+                (("first_name", "last_name"), True),
             ],
-            ["migrator.add_index('test', 'first_name', 'last_name', unique=True)"]
+            ["migrator.add_index('test', 'first_name', 'last_name', unique=True)"],
         ),
         # Dropping indexes
         (
             [
-                (('first_name', "last_name"), True),
+                (("first_name", "last_name"), True),
             ],
             [],
-            ["migrator.drop_index('test', 'first_name', 'last_name')"]
+            ["migrator.drop_index('test', 'first_name', 'last_name')"],
         ),
         (
             [
-                (('first_name', "last_name"), False),
+                (("first_name", "last_name"), False),
             ],
             [],
-            ["migrator.drop_index('test', 'first_name', 'last_name')"]
+            ["migrator.drop_index('test', 'first_name', 'last_name')"],
         ),
         # Changing indexes
         (
             [
-                (('first_name', "last_name"), False),
+                (("first_name", "last_name"), False),
             ],
             [
-                (('first_name', "last_name"), True),
+                (("first_name", "last_name"), True),
             ],
             [
                 "migrator.drop_index('test', 'first_name', 'last_name')",
-                "migrator.add_index('test', 'first_name', 'last_name', unique=True)"
-            ]
+                "migrator.add_index('test', 'first_name', 'last_name', unique=True)",
+            ],
         ),
         # Changing indexes
         (
             [
-                (('first_name', "last_name"), False),
+                (("first_name", "last_name"), False),
             ],
             [
-                (['first_name', "last_name"], False),
+                (["first_name", "last_name"], False),
             ],
-            []
+            [],
         ),
     ],
 )
 def test_tuple_indexes__from_meta(
-    indexes_before: list[Any], 
-    indexes_after: list[Any], 
-    migrator: Migrator,
-    changes: list[str]
+    indexes_before: list[Any], indexes_after: list[Any], migrator: Migrator, changes: list[str]
 ) -> None:
-
     class _Test(pw.Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
@@ -191,7 +142,6 @@ def test_tuple_indexes__from_meta(
         class Meta:
             table_name = "test"
             indexes = indexes_before
-
 
     class Test(pw.Model):
         first_name = pw.CharField()
@@ -205,15 +155,12 @@ def test_tuple_indexes__from_meta(
 
 
 def test_composite_unique_index__create_model():
-
     class Object(pw.Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 
         class Meta:
-            indexes = (
-                (('first_name', 'last_name'), True),
-            )
+            indexes = ((("first_name", "last_name"), True),)
 
     code = model_to_code(Object)
     assert code

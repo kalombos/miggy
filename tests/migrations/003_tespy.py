@@ -1,7 +1,6 @@
 """Peewee migrations."""
 
 
-
 def migrate(migrator, database, **kwargs):
     """Write your migrations here.
 
@@ -24,8 +23,8 @@ def migrate(migrator, database, **kwargs):
     > migrator.add_default(Model, field_name, default)
 
     """
-    migrator.rename_field('tag', 'created_at', 'updated_at')
+    migrator.rename_field("tag", "created_at", "updated_at")
 
 
 def rollback(migrator, database, **kwargs):
-    migrator.rename_field('tag', 'updated_at', 'created_at')
+    migrator.rename_field("tag", "updated_at", "created_at")
