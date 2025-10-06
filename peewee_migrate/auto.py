@@ -1,8 +1,8 @@
-import peewee as pw
 import collections
-from playhouse.reflection import Column as VanilaColumn
-from collections.abc import Sequence
+from typing import NamedTuple
 
+import peewee as pw
+from playhouse.reflection import Column as VanilaColumn
 
 INDENT = '    '
 NEWLINE = '\n' + INDENT
@@ -73,29 +73,23 @@ class Column(VanilaColumn):
         name, _, field = [s and s.strip() for s in field.partition('=')]
         return '{name}{space}={space}{module}.{field}'.format(
             name=name, field=field, space=space, module=module)
-    
-class IndexMetaData:
-    def __init__(self, model: pw.Model, columns: Sequence[str], unique: bool):
-        self.model = model
-        self.columns = columns
-        self.unique = unique
 
-    def __hash__(self) -> int:
-        return hash(f"{self.model._meta.table_name}__{self.columns}_{self.unique}")
-    
-    def __eq__(self, value: "IndexMetaData") -> bool:
-        return all(
-            self.model._meta.table_name == value.model._meta.table_name,
-            self.columns == value.columns,
-            self.unique == value.unique
-        )
 
-def extract_index_meta_data(model) -> list[IndexMetaData]:
+
+
+
+class IndexMeta(NamedTuple):
+    table_name: str
+    columns: tuple[str, ...]
+    unique: bool = False
+
+
+def extract_index_meta_data(model) -> list[IndexMeta]:
     indexes = []
     for index_obj in model._meta.indexes:
         if isinstance(index_obj, (list, tuple)):
             columns, unique = index_obj
-            indexes.append(IndexMetaData(model, columns, unique=unique))
+            indexes.append(IndexMeta(model._meta.table_name, tuple(columns), unique=unique))
 
     return indexes
 
@@ -108,11 +102,11 @@ def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str]
 
     for index in set(current_indexes) - set(prev_indexes):
         create_changes.append(
-            add_index(index.model, *index.columns, unique=index.unique)
+            add_index(index.table_name, *index.columns, unique=index.unique)
         )
     for index in set(prev_indexes) - set(current_indexes):
         drop_changes.append(
-            drop_index(index.model, *index.columns)
+            drop_index(index.table_name, *index.columns)
         )
     return create_changes, drop_changes
 
@@ -168,10 +162,10 @@ def diff_one(model1: pw.Model, model2: pw.Model, **kwargs) -> list[str]:
     for name, index, unique in indexes_:
         if index is True or unique is True:
             if fields2[name].unique or fields2[name].index:
-                changes.append(drop_index(model1, name))
-            changes.append(add_index(model1, name, unique=unique))
+                changes.append(drop_index(model1._meta.table_name, name))
+            changes.append(add_index(model1._meta.table_name, name, unique=unique))
         else:
-            changes.append(drop_index(model1, name))
+            changes.append(drop_index(model1._meta.table_name, name))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
@@ -295,12 +289,12 @@ def change_not_null(Model, name, null):
     return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
 
 
-def add_index(Model, *columns: str, unique: bool):
+def add_index(table_name: str, *columns: str, unique: bool):
     operation = 'add_index'
     return "migrator.%s('%s', %s, unique=%s)" %\
-        (operation, Model._meta.table_name, ', '.join(map(repr, columns)), unique)
+        (operation, table_name, ', '.join(map(repr, columns)), unique)
 
 
-def drop_index(Model, *columns: str):
+def drop_index(table_name: str, *columns: str):
     operation = 'drop_index'
-    return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, ', '.join(map(repr, columns)))
+    return "migrator.%s('%s', %s)" % (operation, table_name, ', '.join(map(repr, columns)))

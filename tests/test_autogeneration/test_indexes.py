@@ -2,12 +2,10 @@ from typing import Any
 
 import peewee as pw
 import pytest
-from peewee_migrate.auto import diff_one, model_to_code
-
-
-from peewee_migrate.migrator import Migrator
 from playhouse.db_url import connect
 
+from peewee_migrate.auto import diff_one, model_to_code
+from peewee_migrate.migrator import Migrator
 
 
 @pytest.fixture
@@ -145,16 +143,16 @@ def test_field_index(
                 (('first_name', "last_name"), True),
             ],
             [],
-            ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+            ["migrator.drop_index('test', 'first_name', 'last_name')"]
         ),
         (
             [
                 (('first_name', "last_name"), False),
             ],
             [],
-            ["migrator.drop_index('_test', 'first_name', 'last_name')"]
+            ["migrator.drop_index('test', 'first_name', 'last_name')"]
         ),
-        # # Changing indexes
+        # Changing indexes
         (
             [
                 (('first_name', "last_name"), False),
@@ -163,9 +161,19 @@ def test_field_index(
                 (('first_name', "last_name"), True),
             ],
             [
-                "migrator.drop_index('_test', 'first_name', 'last_name')",
+                "migrator.drop_index('test', 'first_name', 'last_name')",
                 "migrator.add_index('test', 'first_name', 'last_name', unique=True)"
             ]
+        ),
+        # Changing indexes
+        (
+            [
+                (('first_name', "last_name"), False),
+            ],
+            [
+                (['first_name', "last_name"], False),
+            ],
+            []
         ),
     ],
 )
@@ -181,6 +189,7 @@ def test_tuple_indexes__from_meta(
         last_name = pw.CharField()
 
         class Meta:
+            table_name = "test"
             indexes = indexes_before
 
 
@@ -189,6 +198,7 @@ def test_tuple_indexes__from_meta(
         last_name = pw.CharField()
 
         class Meta:
+            table_name = "test"
             indexes = indexes_after
 
     assert diff_one(Test, _Test, migrator=migrator) == changes
