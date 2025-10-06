@@ -80,12 +80,16 @@ class IndexMetaData:
         self.columns = columns
         self.unique = unique
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(f"{self.model._meta.table_name}__{self.columns}_{self.unique}")
     
     def __eq__(self, value: "IndexMetaData") -> bool:
-        return self.__hash__() == value.__hash__()
-    
+        return all(
+            self.model._meta.table_name == value.model._meta.table_name,
+            self.columns == value.columns,
+            self.unique == value.unique
+        )
+
 
 
 def extract_index_meta_data(model) -> list[IndexMetaData]:
