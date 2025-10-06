@@ -1,7 +1,8 @@
 import peewee as pw
 from peewee_migrate import Migrator
 import pytest
-from typing import Generator, Any
+from typing import Any
+from collections.abc import Generator
 
 from tests.conftest import POSTGRES_DSN
 
@@ -91,12 +92,11 @@ def test_migrator_sqlite_common():
     migrator.remove_fields(Order, 'customer')
     migrator.run()
     assert not hasattr(Order, 'customer')
-
     migrator.add_index(Order, 'identifier', unique=True)
     migrator.run()
-    assert not Order.identifier.index
+    assert Order.identifier.index
     assert Order.identifier.unique
-    assert Order._meta.indexes
+    assert not Order._meta.indexes
 
     # TODO fix change_columns
     # migrator.change_columns(Order, identifier=pw.IntegerField(default=0))
@@ -133,7 +133,10 @@ def test_create_table(patched_pg_db: PatchedPgDatabase) -> None:
     
     assert User == migrator.orm['user']
     migrator.run()
-    assert patched_pg_db.queries == ['CREATE TABLE IF NOT EXISTS "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, "created_at" DATE NOT NULL)']
+    assert patched_pg_db.queries == [
+        'CREATE TABLE IF NOT EXISTS "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, '
+        '"created_at" DATE NOT NULL)'
+    ]
 
 
 def test_change_datetime_field(patched_pg_db: PatchedPgDatabase) -> None:

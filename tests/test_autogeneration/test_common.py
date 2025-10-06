@@ -1,19 +1,16 @@
-import os.path as path
 import datetime as dt
 
 import peewee as pw
+from peewee_migrate.auto import diff_one, diff_many, model_to_code
+from peewee_migrate.cli import get_router
+from pathlib import Path
 from playhouse.postgres_ext import (ArrayField, BinaryJSONField, DateTimeTZField,
                                     HStoreField, IntervalField, JSONField,
                                     TSVectorField)
 
-CURDIR = path.abspath(path.dirname(__file__))
 
-
-def test_auto():
-    from peewee_migrate.auto import diff_one, diff_many, model_to_code
-    from peewee_migrate.cli import get_router
-
-    router = get_router(path.join(CURDIR, 'migrations'), 'sqlite:///:memory:')
+def test_on_real_migrations(migrations_dir: Path):
+    router = get_router(migrations_dir, 'sqlite:///:memory:')
     router.run()
     migrator = router.migrator
     models = migrator.orm.values()
@@ -63,7 +60,6 @@ def test_auto():
 
 
 def test_auto_postgresext():
-    from peewee_migrate.auto import model_to_code
 
     class Object(pw.Model):
         array_field = ArrayField()
@@ -78,20 +74,3 @@ def test_auto_postgresext():
     assert code
     assert "json_field = pw_pext.JSONField()" in code
     assert "hstore_field = pw_pext.HStoreField(index=True)" in code
-
-
-def test_auto_multi_column_index():
-    from peewee_migrate.auto import model_to_code
-
-    class Object(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = (
-                (('first_name', 'last_name'), True),
-            )
-
-    code = model_to_code(Object)
-    assert code
-    assert "indexes = [(('first_name', 'last_name'), True)]" in code

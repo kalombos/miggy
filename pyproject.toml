@@ -43,7 +43,8 @@ dev = [
     "pytest==8.3.5",
     "psycopg2-binary>=2.8.1",
     "build",
-    "twine"
+    "twine",
+    "ruff"
 ]
 
 
@@ -55,3 +56,13 @@ Issues = "https://github.com/kalombos/peewee_migrate2/issues"
 
 [project.scripts]
 pw_migrate = "peewee_migrate.cli:cli"
+
+
+[tool.ruff]
+line-length = 120
+[tool.ruff.lint]
+select = [
+    'UP035',
+    'F',
+    'E'
+]
