@@ -1,5 +1,5 @@
-from click.testing import CliRunner
 import pytest
+from click.testing import CliRunner
 
 from peewee_migrate.cli import cli, get_router
 

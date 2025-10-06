@@ -1,9 +1,8 @@
 import pathlib
 
+import peewee as pw
 import playhouse.db_url
 import pytest
-import peewee as pw
-
 
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 

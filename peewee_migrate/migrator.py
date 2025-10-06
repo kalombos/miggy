@@ -1,18 +1,23 @@
-from typing import Any
 from collections.abc import Callable
-import peewee as pw
 from functools import wraps
+from typing import Any
+
+import peewee as pw
 from playhouse.migrate import (
-    MySQLMigrator as MqM,
-    PostgresqlMigrator as PgM,
-    SchemaMigrator as ScM,
-    SqliteMigrator as SqM,
-    Operation, SQL, PostgresqlDatabase, operation, SqliteDatabase, MySQLDatabase,
-    make_index_name
+    SQL,
+    MySQLDatabase,
+    Operation,
+    PostgresqlDatabase,
+    SqliteDatabase,
+    make_index_name,
+    operation,
 )
+from playhouse.migrate import MySQLMigrator as MqM
+from playhouse.migrate import PostgresqlMigrator as PgM
+from playhouse.migrate import SchemaMigrator as ScM
+from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
-
 
 
 class MigrateOperation:

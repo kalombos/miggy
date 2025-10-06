@@ -1,12 +1,19 @@
 import datetime as dt
+from pathlib import Path
 
 import peewee as pw
-from peewee_migrate.auto import diff_one, diff_many, model_to_code
+from playhouse.postgres_ext import (
+    ArrayField,
+    BinaryJSONField,
+    DateTimeTZField,
+    HStoreField,
+    IntervalField,
+    JSONField,
+    TSVectorField,
+)
+
+from peewee_migrate.auto import diff_many, diff_one, model_to_code
 from peewee_migrate.cli import get_router
-from pathlib import Path
-from playhouse.postgres_ext import (ArrayField, BinaryJSONField, DateTimeTZField,
-                                    HStoreField, IntervalField, JSONField,
-                                    TSVectorField)
 
 
 def test_on_real_migrations(migrations_dir: Path):

@@ -7,15 +7,14 @@ import sys
 import click
 from playhouse.db_url import connect
 
-
 VERBOSE = ['WARNING', 'INFO', 'DEBUG', 'NOTSET']
 CLEAN_RE = re.compile(r'\s+$', re.M)
 
 
 def get_router(directory, database, schema=None, verbose=0):
     from peewee_migrate import LOGGER
-    from peewee_migrate.utils import exec_in
     from peewee_migrate.router import Router
+    from peewee_migrate.utils import exec_in
 
     logging_level = VERBOSE[verbose]
     config = {}

@@ -1,10 +1,12 @@
-import peewee as pw
-from peewee_migrate import Migrator
-import pytest
-from typing import Any
 from collections.abc import Generator
+from typing import Any
 
+import peewee as pw
+import pytest
+
+from peewee_migrate import Migrator
 from tests.conftest import POSTGRES_DSN
+
 
 class PatchedPgDatabase(pw.PostgresqlDatabase):
     queries = []
@@ -20,6 +22,7 @@ class PatchedPgDatabase(pw.PostgresqlDatabase):
 def test_migrator_sqlite_common():
     
     from playhouse.db_url import connect
+
     from peewee_migrate import Migrator
 
     database = connect('sqlite:///:memory:')
