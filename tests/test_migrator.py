@@ -1,7 +1,8 @@
 import peewee as pw
 from peewee_migrate import Migrator
 import pytest
-from typing import Generator, Any
+from typing import Any
+from collections.abc import Generator
 
 from tests.conftest import POSTGRES_DSN
 
@@ -132,7 +133,10 @@ def test_create_table(patched_pg_db: PatchedPgDatabase) -> None:
     
     assert User == migrator.orm['user']
     migrator.run()
-    assert patched_pg_db.queries == ['CREATE TABLE IF NOT EXISTS "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, "created_at" DATE NOT NULL)']
+    assert patched_pg_db.queries == [
+        'CREATE TABLE IF NOT EXISTS "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, '
+        '"created_at" DATE NOT NULL)'
+    ]
 
 
 def test_change_datetime_field(patched_pg_db: PatchedPgDatabase) -> None:

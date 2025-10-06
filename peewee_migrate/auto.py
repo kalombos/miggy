@@ -1,7 +1,7 @@
 import peewee as pw
 import collections
 from playhouse.reflection import Column as VanilaColumn
-from typing import Sequence
+from collections.abc import Sequence
 
 
 INDENT = '    '
@@ -89,8 +89,6 @@ class IndexMetaData:
             self.columns == value.columns,
             self.unique == value.unique
         )
-
-
 
 def extract_index_meta_data(model) -> list[IndexMetaData]:
     indexes = []

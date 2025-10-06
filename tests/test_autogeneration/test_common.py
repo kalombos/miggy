@@ -1,4 +1,3 @@
-import os.path as path
 import datetime as dt
 
 import peewee as pw

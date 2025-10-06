@@ -1,6 +1,5 @@
 """Peewee migrations."""
 
-import datetime as dt
 import peewee as pw
 
 
