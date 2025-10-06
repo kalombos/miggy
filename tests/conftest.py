@@ -6,16 +6,17 @@ import pytest
 
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 
+
 @pytest.fixture()
 def migrations_dir():
     """Migrations dir"""
-    return pathlib.Path(__file__).with_name('migrations')
+    return pathlib.Path(__file__).with_name("migrations")
 
 
-@pytest.fixture(params=['sqlite', 'postgresql'])
+@pytest.fixture(params=["sqlite", "postgresql"])
 def database(request):
-    if request.param == 'sqlite':
-        db = playhouse.db_url.connect('sqlite:///:memory:')
+    if request.param == "sqlite":
+        db = playhouse.db_url.connect("sqlite:///:memory:")
     else:
         db = playhouse.db_url.connect(POSTGRES_DSN)
 
@@ -27,6 +28,7 @@ def database(request):
 @pytest.fixture()
 def router(migrations_dir, database):
     from peewee_migrate.cli import get_router
+
     router = get_router(migrations_dir, database)
 
     assert router.database is database

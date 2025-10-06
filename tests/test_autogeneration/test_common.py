@@ -17,12 +17,12 @@ from peewee_migrate.cli import get_router
 
 
 def test_on_real_migrations(migrations_dir: Path):
-    router = get_router(migrations_dir, 'sqlite:///:memory:')
+    router = get_router(migrations_dir, "sqlite:///:memory:")
     router.run()
     migrator = router.migrator
     models = migrator.orm.values()
-    Person_ = migrator.orm['person']
-    Tag_ = migrator.orm['tag']
+    Person_ = migrator.orm["person"]
+    Tag_ = migrator.orm["tag"]
 
     code = model_to_code(Person_)
     assert code
@@ -34,7 +34,7 @@ def test_on_real_migrations(migrations_dir: Path):
     class Person(pw.Model):
         first_name = pw.IntegerField()
         last_name = pw.CharField(max_length=1024, null=True, unique=True)
-        tag = pw.ForeignKeyField(Tag_, on_delete='CASCADE', backref='persons')
+        tag = pw.ForeignKeyField(Tag_, on_delete="CASCADE", backref="persons")
         email = pw.CharField(index=True, unique=True)
 
     changes = diff_one(Person, Person_, migrator=migrator)
@@ -45,8 +45,8 @@ def test_on_real_migrations(migrations_dir: Path):
     assert changes[-2] == "migrator.drop_index('person', 'last_name')"
     assert changes[-1] == "migrator.add_index('person', 'last_name', unique=True)"
 
-    migrator.drop_index('person', 'email')
-    migrator.add_index('person', 'email', unique=True)
+    migrator.drop_index("person", "email")
+    migrator.add_index("person", "email", unique=True)
 
     class Person(pw.Model):
         first_name = pw.CharField(unique=True)
@@ -60,14 +60,13 @@ def test_on_real_migrations(migrations_dir: Path):
 
     class Color(pw.Model):
         id = pw.AutoField()
-        name = pw.CharField(default='red')
+        name = pw.CharField(default="red")
 
     code = model_to_code(Color)
     assert "DEFAULT 'red'" in code
 
 
 def test_auto_postgresext():
-
     class Object(pw.Model):
         array_field = ArrayField()
         binary_json_field = BinaryJSONField()

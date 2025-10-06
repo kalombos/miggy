@@ -4,52 +4,60 @@ from typing import NamedTuple
 import peewee as pw
 from playhouse.reflection import Column as VanilaColumn
 
-INDENT = '    '
-NEWLINE = '\n' + INDENT
+INDENT = "    "
+NEWLINE = "\n" + INDENT
 FIELD_MODULES_MAP = {
-    'ArrayField': 'pw_pext',
-    'BinaryJSONField': 'pw_pext',
-    'DateTimeTZField': 'pw_pext',
-    'HStoreField': 'pw_pext',
-    'IntervalField': 'pw_pext',
-    'JSONField': 'pw_pext',
-    'TSVectorField': 'pw_pext',
+    "ArrayField": "pw_pext",
+    "BinaryJSONField": "pw_pext",
+    "DateTimeTZField": "pw_pext",
+    "HStoreField": "pw_pext",
+    "IntervalField": "pw_pext",
+    "JSONField": "pw_pext",
+    "TSVectorField": "pw_pext",
 }
 
 
 def fk_to_params(field):
     params = {}
     if field.on_delete is not None:
-        params['on_delete'] = "'%s'" % field.on_delete
+        params["on_delete"] = "'%s'" % field.on_delete
     if field.on_update is not None:
-        params['on_update'] = "'%s'" % field.on_update
+        params["on_update"] = "'%s'" % field.on_update
     return params
 
 
 def dtf_to_params(field):
     params = {}
     if not isinstance(field.formats, list):
-        params['formats'] = field.formats
+        params["formats"] = field.formats
     return params
 
 
 FIELD_TO_PARAMS = {
-    pw.CharField: lambda f: {'max_length': f.max_length},
+    pw.CharField: lambda f: {"max_length": f.max_length},
     pw.DecimalField: lambda f: {
-        'max_digits': f.max_digits, 'decimal_places': f.decimal_places,
-        'auto_round': f.auto_round, 'rounding': f.rounding},
+        "max_digits": f.max_digits,
+        "decimal_places": f.decimal_places,
+        "auto_round": f.auto_round,
+        "rounding": f.rounding,
+    },
     pw.ForeignKeyField: fk_to_params,
     pw.DateTimeField: dtf_to_params,
 }
 
 
 class Column(VanilaColumn):
-
     def __init__(self, field, migrator=None):  # noqa
         super(Column, self).__init__(
-            field.name, type(field), field.field_type, field.null,
-            primary_key=field.primary_key, column_name=field.column_name, index=field.index,
-            unique=field.unique, extra_parameters={}
+            field.name,
+            type(field),
+            field.field_type,
+            field.null,
+            primary_key=field.primary_key,
+            column_name=field.column_name,
+            index=field.index,
+            unique=field.unique,
+            extra_parameters={},
         )
         if field.default is not None and not callable(field.default):
             self.default = repr(field.default)
@@ -66,16 +74,12 @@ class Column(VanilaColumn):
             self.related_name = field.backref
             self.rel_model = "migrator.orm['%s']" % field.rel_model._meta.table_name
 
-    def get_field(self, space=' '):
+    def get_field(self, space=" "):
         # Generate the field definition for this column.
         field = super(Column, self).get_field()
-        module = FIELD_MODULES_MAP.get(self.field_class.__name__, 'pw')
-        name, _, field = [s and s.strip() for s in field.partition('=')]
-        return '{name}{space}={space}{module}.{field}'.format(
-            name=name, field=field, space=space, module=module)
-
-
-
+        module = FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
+        name, _, field = [s and s.strip() for s in field.partition("=")]
+        return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
 
 
 class IndexMeta(NamedTuple):
@@ -101,13 +105,9 @@ def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str]
     prev_indexes = extract_index_meta_data(prev)
 
     for index in set(current_indexes) - set(prev_indexes):
-        create_changes.append(
-            add_index(index.table_name, *index.columns, unique=index.unique)
-        )
+        create_changes.append(add_index(index.table_name, *index.columns, unique=index.unique))
     for index in set(prev_indexes) - set(current_indexes):
-        drop_changes.append(
-            drop_index(index.table_name, *index.columns)
-        )
+        drop_changes.append(drop_index(index.table_name, *index.columns))
     return create_changes, drop_changes
 
 
@@ -141,8 +141,8 @@ def diff_one(model1: pw.Model, model2: pw.Model, **kwargs) -> list[str]:
     for name in set(fields1) - names1 - names2:
         field1, field2 = fields1[name], fields2[name]
         diff = compare_fields(field1, field2)
-        null = diff.pop('null', None)
-        index = diff.pop('index', None)
+        null = diff.pop("null", None)
+        index = diff.pop("index", None)
 
         if diff:
             fields_.append(field1)
@@ -209,24 +209,33 @@ def model_to_code(Model, **kwargs):
 
 {meta}
 """
-    fields = INDENT + NEWLINE.join([
-        field_to_code(field, **kwargs) for field in Model._meta.sorted_fields
-        if not (isinstance(field, pw.PrimaryKeyField) and field.name == 'id')
-    ])
-    meta = INDENT + NEWLINE.join(filter(None, [
-        'class Meta:',
-        INDENT + 'table_name = "%s"' % Model._meta.table_name,
-        (INDENT + 'schema = "%s"' % Model._meta.schema) if Model._meta.schema else '',
-        (INDENT + 'primary_key = pw.CompositeKey{0}'.format(Model._meta.primary_key.field_names))
-        if isinstance(Model._meta.primary_key, pw.CompositeKey) else '',
-        (INDENT + 'indexes = %s' % Model._meta.indexes) if Model._meta.indexes else '',
-    ]))
+    fields = INDENT + NEWLINE.join(
+        [
+            field_to_code(field, **kwargs)
+            for field in Model._meta.sorted_fields
+            if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
+        ]
+    )
+    meta = INDENT + NEWLINE.join(
+        filter(
+            None,
+            [
+                "class Meta:",
+                INDENT + 'table_name = "%s"' % Model._meta.table_name,
+                (INDENT + 'schema = "%s"' % Model._meta.schema) if Model._meta.schema else "",
+                (INDENT + "primary_key = pw.CompositeKey{0}".format(Model._meta.primary_key.field_names))
+                if isinstance(Model._meta.primary_key, pw.CompositeKey)
+                else "",
+                (INDENT + "indexes = %s" % Model._meta.indexes) if Model._meta.indexes else "",
+            ],
+        )
+    )
 
     return template.format(classname=Model.__name__, fields=fields, meta=meta)
 
 
 def create_model(Model, **kwargs):
-    return '@migrator.create_model\n' + model_to_code(Model, **kwargs)
+    return "@migrator.create_model\n" + model_to_code(Model, **kwargs)
 
 
 def remove_model(Model, **kwargs):
@@ -237,64 +246,64 @@ def create_fields(Model, *fields, **kwargs):
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         Model._meta.table_name,
-        NEWLINE + (',' + NEWLINE).join([field_to_code(field, False, **kwargs) for field in fields])
+        NEWLINE + ("," + NEWLINE).join([field_to_code(field, False, **kwargs) for field in fields]),
     )
 
 
 def drop_fields(Model, *fields, **kwargs):
-    return "migrator.remove_fields('%s', %s)" % (
-        Model._meta.table_name, ', '.join(map(repr, fields))
-    )
+    return "migrator.remove_fields('%s', %s)" % (Model._meta.table_name, ", ".join(map(repr, fields)))
 
 
 def field_to_code(field, space=True, **kwargs):
     col = Column(field, **kwargs)
-    return col.get_field(' ' if space else '')
+    return col.get_field(" " if space else "")
 
 
 def compare_fields(field1, field2, **kwargs):
     field_cls1, field_cls2 = type(field1), type(field2)
     if field_cls1 != field_cls2:  # noqa
-        return {'cls': True}
+        return {"cls": True}
 
     params1 = field_to_params(field1)
-    params1['null'] = field1.null
+    params1["null"] = field1.null
     params2 = field_to_params(field2)
-    params2['null'] = field2.null
+    params2["null"] = field2.null
 
     return dict(set(params1.items()) - set(params2.items()))
 
 
 def field_to_params(field, **kwargs):
     params = FIELD_TO_PARAMS.get(type(field), lambda f: {})(field)
-    if field.default is not None and \
-            not callable(field.default) \
-            and isinstance(field.default, collections.abc.Hashable):
-        params['default'] = field.default
+    if (
+        field.default is not None
+        and not callable(field.default)
+        and isinstance(field.default, collections.abc.Hashable)
+    ):
+        params["default"] = field.default
 
-    params['index'] = field.index and not field.unique, field.unique
+    params["index"] = field.index and not field.unique, field.unique
 
-    params.pop('backref', None)  # Ignore backref
+    params.pop("backref", None)  # Ignore backref
     return params
 
 
 def change_fields(Model, *fields, **kwargs):
     return "migrator.change_fields('%s', %s)" % (
-        Model._meta.table_name, (',' + NEWLINE).join([field_to_code(f, False) for f in fields])
+        Model._meta.table_name,
+        ("," + NEWLINE).join([field_to_code(f, False) for f in fields]),
     )
 
 
 def change_not_null(Model, name, null):
-    operation = 'drop_not_null' if null else 'add_not_null'
+    operation = "drop_not_null" if null else "add_not_null"
     return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
 
 
 def add_index(table_name: str, *columns: str, unique: bool):
-    operation = 'add_index'
-    return "migrator.%s('%s', %s, unique=%s)" %\
-        (operation, table_name, ', '.join(map(repr, columns)), unique)
+    operation = "add_index"
+    return "migrator.%s('%s', %s, unique=%s)" % (operation, table_name, ", ".join(map(repr, columns)), unique)
 
 
 def drop_index(table_name: str, *columns: str):
-    operation = 'drop_index'
-    return "migrator.%s('%s', %s)" % (operation, table_name, ', '.join(map(repr, columns)))
+    operation = "drop_index"
+    return "migrator.%s('%s', %s)" % (operation, table_name, ", ".join(map(repr, columns)))

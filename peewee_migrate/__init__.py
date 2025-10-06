@@ -1,7 +1,8 @@
 """
-    The package description.
+The package description.
 
 """
+
 import datetime as dt
 import logging
 
@@ -22,7 +23,6 @@ LOGGER.setLevel(logging.INFO)
 
 
 class MigrateHistory(pw.Model):
-
     """Presents the migrations in database."""
 
     name = pw.CharField()
@@ -32,4 +32,5 @@ class MigrateHistory(pw.Model):
         """String representation."""
         return self.name
 
-from .router import Migrator, Router # noqa
+
+from .router import Migrator, Router  # noqa
