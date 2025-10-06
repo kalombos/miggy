@@ -1,6 +1,5 @@
 """ Tests for `peewee_migrate` module. """
 import os
-
 from unittest import mock
 
 

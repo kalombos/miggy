@@ -64,5 +64,6 @@ line-length = 120
 select = [
     'UP035',
     'F',
-    'E'
+    'E',
+    'I'
 ]

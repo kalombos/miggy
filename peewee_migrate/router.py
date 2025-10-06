@@ -1,19 +1,18 @@
 import os
+import pkgutil
 import re
 import sys
 import typing
-from importlib import import_module
-
-import pkgutil
-from unittest import mock
-import peewee as pw
 from functools import cached_property
+from importlib import import_module
+from unittest import mock
+
+import peewee as pw
 
 from peewee_migrate import LOGGER, MigrateHistory
-from peewee_migrate.auto import diff_many, NEWLINE
-from peewee_migrate.utils import exec_in
+from peewee_migrate.auto import NEWLINE, diff_many
 from peewee_migrate.migrator import Migrator
-
+from peewee_migrate.utils import exec_in
 
 CLEAN_RE = re.compile(r'\s+$', re.M)
 CURDIR = os.getcwd()
