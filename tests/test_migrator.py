@@ -9,7 +9,7 @@ from tests.conftest import POSTGRES_DSN
 
 
 class PatchedPgDatabase(pw.PostgresqlDatabase):
-    queries = []
+    queries: list[str] = []
 
     def clear_queries(self):
         self.queries = []

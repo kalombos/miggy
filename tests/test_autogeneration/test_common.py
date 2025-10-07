@@ -14,6 +14,7 @@ from playhouse.postgres_ext import (
 
 from peewee_migrate.auto import diff_many, diff_one, model_to_code
 from peewee_migrate.cli import get_router
+from peewee_migrate.utils import Model
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -31,13 +32,16 @@ def test_on_real_migrations(migrations_dir: Path):
     changes = diff_many(models, [], migrator=migrator)
     assert len(changes) == 2
 
-    class Person(pw.Model):
+    class Person1(Model):
         first_name = pw.IntegerField()
         last_name = pw.CharField(max_length=1024, null=True, unique=True)
         tag = pw.ForeignKeyField(Tag_, on_delete="CASCADE", backref="persons")
         email = pw.CharField(index=True, unique=True)
 
-    changes = diff_one(Person, Person_, migrator=migrator)
+        class Meta:
+            table_name = "person"
+
+    changes = diff_one(Person1, Person_, migrator=migrator)
     assert len(changes) == 6
     assert "on_delete='CASCADE'" in changes[0]
     assert "backref='persons'" in changes[0]
@@ -48,14 +52,17 @@ def test_on_real_migrations(migrations_dir: Path):
     migrator.drop_index("person", "email")
     migrator.add_index("person", "email", unique=True)
 
-    class Person(pw.Model):
+    class Person2(Model):
         first_name = pw.CharField(unique=True)
         last_name = pw.CharField(max_length=255, index=True)
         dob = pw.DateField(null=True)
         birthday = pw.DateField(default=dt.datetime.now)
         email = pw.CharField(index=True, unique=True)
 
-    changes = diff_one(Person_, Person, migrator=migrator)
+        class Meta:
+            table_name = "person"
+
+    changes = diff_one(Person_, Person2, migrator=migrator)
     assert not changes
 
     class Color(pw.Model):
