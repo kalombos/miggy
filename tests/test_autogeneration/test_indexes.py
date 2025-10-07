@@ -6,6 +6,7 @@ from playhouse.db_url import connect
 
 from peewee_migrate.auto import diff_one, model_to_code
 from peewee_migrate.migrator import Migrator
+from peewee_migrate.utils import Model
 
 
 @pytest.fixture
@@ -51,10 +52,10 @@ def migrator() -> Migrator:
 def test_field_index(
     before_params: dict[str, Any], after_params: dict[str, Any], changes: list[str], migrator: Migrator
 ) -> None:
-    class _Test(pw.Model):
+    class _Test(Model):
         first_name = pw.CharField(**before_params)
 
-    class Test(pw.Model):
+    class Test(Model):
         first_name = pw.CharField(**after_params)
 
     assert diff_one(Test, _Test, migrator=migrator) == changes
@@ -135,7 +136,7 @@ def test_field_index(
 def test_tuple_indexes__from_meta(
     indexes_before: list[Any], indexes_after: list[Any], migrator: Migrator, changes: list[str]
 ) -> None:
-    class _Test(pw.Model):
+    class _Test(Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 
@@ -143,7 +144,7 @@ def test_tuple_indexes__from_meta(
             table_name = "test"
             indexes = indexes_before
 
-    class Test(pw.Model):
+    class Test(Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 
@@ -155,7 +156,7 @@ def test_tuple_indexes__from_meta(
 
 
 def test_composite_unique_index__create_model():
-    class Object(pw.Model):
+    class Object(Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 

@@ -18,6 +18,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
+from peewee_migrate.utils import ModelCls
 
 
 class MigrateOperation:
@@ -27,7 +28,7 @@ class MigrateOperation:
     def schema_migrator(self) -> "SchemaMigrator":
         return self.migrator.schema_migrator
 
-    def state_forwards(self, migrator: "Migrator") -> None:
+    def state_forwards(self) -> None:
         """
         Take the state from the previous migration, and mutate it
         so that it matches what this migration would perform.
@@ -44,7 +45,7 @@ class MigrateOperation:
 
 
 class CreateTable(MigrateOperation):
-    def __init__(self, model: pw.Model) -> None:
+    def __init__(self, model: ModelCls) -> None:
         self.model = model
 
     def state_forwards(self) -> None:
@@ -56,7 +57,7 @@ class CreateTable(MigrateOperation):
 
 
 class AddIndex(MigrateOperation):
-    def __init__(self, model: pw.Model, *columns: str, **kwargs: Any) -> None:
+    def __init__(self, model: ModelCls, *columns: str, **kwargs: Any) -> None:
         self.model = model
         self.columns = columns
         self.unique = kwargs.pop("unique", False)
@@ -82,7 +83,7 @@ class AddIndex(MigrateOperation):
 
 
 class DropIndex(MigrateOperation):
-    def __init__(self, model: pw.Model, *columns: str) -> None:
+    def __init__(self, model: ModelCls, *columns: str) -> None:
         self.model = model
         self.columns = columns
 
@@ -103,6 +104,22 @@ class DropIndex(MigrateOperation):
             columns_.append(col)
         index_name = make_index_name(self.model._meta.table_name, columns_)
         return self.schema_migrator.drop_index(self.model._meta.table_name, index_name)
+
+
+class RenameTable(MigrateOperation):
+    def __init__(self, model: ModelCls, new_name: str) -> None:
+        self.model = model
+        self.old_name = model._meta.table_name
+        self.new_name = new_name
+
+    def state_forwards(self) -> None:
+        del self.migrator.orm[self.old_name]
+        self.model._meta.table_name = self.new_name
+        self.migrator.orm[self.new_name] = self.model
+
+    def database_forwards(self) -> Callable:
+        """Rename table in database."""
+        return self.schema_migrator.rename_table(self.old_name, self.new_name)
 
 
 class Migration:
@@ -406,14 +423,8 @@ class Migrator(object):
     rename_field = rename_column
 
     @get_model
-    def rename_table(self, model, new_name):
-        """Rename table in database."""
-        old_name = model._meta.table_name
-        del self.orm[model._meta.table_name]
-        model._meta.table_name = new_name
-        self.orm[model._meta.table_name] = model
-        self.ops.append(self.migrator.rename_table(old_name, new_name))
-        return model
+    def rename_table(self, model: ModelCls, new_name: str) -> Operation:
+        return self.migration.append(RenameTable(model, new_name))
 
     @get_model
     def add_index(self, model, *columns, **kwargs):

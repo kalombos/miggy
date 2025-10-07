@@ -59,6 +59,9 @@ Issues = "https://github.com/kalombos/peewee_migrate2/issues"
 pw_migrate = "peewee_migrate.cli:cli"
 
 
+[tool.mypy]
+exclude = "(venv|migrations)"
+
 [tool.ruff]
 line-length = 120
 [tool.ruff.lint]
@@ -66,12 +69,17 @@ select = [
     'UP035',
     'F',
     'E',
-    'I'
+    'I',
+    'TC'
 ]
 
 [tool.poe.tasks.lint]
 help = "Run the type checker"
 cmd  = "ruff check"
+
+[tool.poe.tasks.types]
+help = "Run the type checker"
+cmd  = "mypy ."
 
 [tool.poe.tasks.check_format]
 help = "Run the format checker"
@@ -95,4 +103,4 @@ cmd  = "pytest -vv -x"
 
 [tool.poe.tasks.check]
 help = "Run all checks on the code base"
-sequence = ["lint", "check_format", "test"]
+sequence = ["lint", "check_format", "types", "test"]

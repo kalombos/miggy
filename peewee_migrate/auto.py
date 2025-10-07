@@ -4,6 +4,8 @@ from typing import NamedTuple
 import peewee as pw
 from playhouse.reflection import Column as VanilaColumn
 
+from peewee_migrate.utils import ModelCls
+
 INDENT = "    "
 NEWLINE = "\n" + INDENT
 FIELD_MODULES_MAP = {
@@ -88,7 +90,7 @@ class IndexMeta(NamedTuple):
     unique: bool = False
 
 
-def extract_index_meta_data(model) -> list[IndexMeta]:
+def extract_index_meta_data(model: ModelCls) -> list[IndexMeta]:
     indexes = []
     for index_obj in model._meta.indexes:
         if isinstance(index_obj, (list, tuple)):
@@ -98,7 +100,7 @@ def extract_index_meta_data(model) -> list[IndexMeta]:
     return indexes
 
 
-def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str], list[str]]:
+def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str], list[str]]:
     create_changes = []
     drop_changes = []
     current_indexes = extract_index_meta_data(current)
@@ -111,7 +113,7 @@ def diff_indexes_from_meta(current: pw.Model, prev: pw.Model) -> tuple[list[str]
     return create_changes, drop_changes
 
 
-def diff_one(model1: pw.Model, model2: pw.Model, **kwargs) -> list[str]:
+def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
     """Find difference between given peewee models."""
     changes = []
 
