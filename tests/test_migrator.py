@@ -148,19 +148,19 @@ def test_create_table(patched_pg_db: PatchedPgDatabase) -> None:
             ("name",),
             False,
             None,
-            'CREATE INDEX IF NOT EXISTS "user_name" ON "user" (name)',
+            'CREATE INDEX "user_name" ON "user" (name)',
         ),
         (
             ("name", "created_at"),
             True,
             None,
-            'CREATE UNIQUE INDEX IF NOT EXISTS "user_name_created_at" ON "user" (name, created_at)',
+            'CREATE UNIQUE INDEX "user_name_created_at" ON "user" (name, created_at)',
         ),
         (
             ("name",),
             False,
             pw.SQL("name = 'John'"),
-            """CREATE INDEX IF NOT EXISTS "user_name" ON "user" (name) WHERE name = 'John'""",
+            """CREATE INDEX "user_name" ON "user" (name) WHERE name = 'John'""",
         ),
     ],
 )

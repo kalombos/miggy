@@ -219,7 +219,7 @@ class SchemaMigrator(ScM):
         where=None,
     ):
         ctx = self.make_context()
-        index = pw.ModelIndex(model, columns, unique=unique, where=where)
+        index = pw.ModelIndex(model, columns, unique=unique, where=where, safe=False)
         return ctx.sql(index)
 
 
