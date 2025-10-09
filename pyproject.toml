@@ -45,7 +45,9 @@ dev = [
     "build",
     "twine",
     "ruff==0.13.3",
-    "poethepoet==0.37.0"
+    "poethepoet==0.37.0",
+    "mypy==1.18.2",
+    "types-peewee"
 ]
 
 
