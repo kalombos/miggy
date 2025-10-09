@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
 from functools import wraps
+from typing import Any
 
 import peewee as pw
 from playhouse.migrate import (
@@ -35,7 +36,7 @@ class MigrateOperation:
 
         raise NotImplementedError
 
-    def database_forwards(self) -> Operation | Callable:
+    def database_forwards(self) -> list[Operation] | list[Callable]:
         """
         Perform the mutation on the database schema in the normal
         (forwards) direction.
@@ -52,7 +53,7 @@ class CreateTable(MigrateOperation):
 
     def database_forwards(self) -> Callable:
         self.model._meta.database = self.migrator.database  # without it we can't run `model.create_table`
-        return lambda: self.model.create_table()
+        return [lambda: self.model.create_table()]
 
 
 class AddIndex(MigrateOperation):
@@ -81,7 +82,7 @@ class AddIndex(MigrateOperation):
                 col = col + "_id"
 
             columns_.append(col)
-        return self.schema_migrator.add_model_index(self.model, columns_, unique=self.unique, where=self.where)
+        return [self.schema_migrator.add_model_index(self.model, columns_, unique=self.unique, where=self.where)]
 
 
 class DropIndex(MigrateOperation):
@@ -101,7 +102,7 @@ class DropIndex(MigrateOperation):
                     _indexes.append(i)
             self.model._meta.indexes = _indexes
 
-    def database_forwards(self) -> Operation:
+    def database_forwards(self) -> list[Operation]:
         columns = self.columns
         columns_ = []
         for col in columns:
@@ -110,7 +111,7 @@ class DropIndex(MigrateOperation):
                 col = col + "_id"
             columns_.append(col)
         index_name = make_index_name(self.model._meta.table_name, columns_)
-        return self.schema_migrator.drop_index(self.model._meta.table_name, index_name)
+        return [self.schema_migrator.drop_index(self.model._meta.table_name, index_name)]
 
 
 class RenameTable(MigrateOperation):
@@ -124,9 +125,47 @@ class RenameTable(MigrateOperation):
         self.model._meta.table_name = self.new_name
         self.migrator.orm[self.new_name] = self.model
 
-    def database_forwards(self) -> Callable:
+    def database_forwards(self) -> list[Callable]:
         """Rename table in database."""
-        return self.schema_migrator.rename_table(self.old_name, self.new_name)
+        return [self.schema_migrator.rename_table(self.old_name, self.new_name)]
+    
+
+class AddColumns(MigrateOperation):
+    def __init__(self, model: ModelCls, **fields: Any) -> None:
+        self.model = model
+        self.fields = fields
+
+    def state_forwards(self) -> None:
+        for name, field in self.fields.items():
+            self.model._meta.add_field(name, field)
+
+    def database_forwards(self) -> list[Operation]:
+        ops = []
+        for field in self.fields.values():
+            ops.append(
+                self.schema_migrator.add_column(self.model._meta.table_name, field.column_name, field)
+            )
+        return ops
+    
+class ChangeNullable(MigrateOperation):
+    def __init__(self, model: ModelCls, *names: str, is_null: bool) -> None:
+        self.model = model
+        self.names = names
+        self.is_null = is_null
+
+    def state_forwards(self) -> None:
+        for name in self.names:
+            field = self.model._meta.fields[name]
+            field.null = self.is_null
+
+    def database_forwards(self) -> list[Operation]:
+        ops = []
+        for name in self.names:
+            field = self.model._meta.fields[name]
+            _operation = self.schema_migrator.drop_not_null if self.is_null else self.schema_migrator.add_not_null
+            ops.append(_operation(self.model._meta.table_name, field.column_name))
+        return ops
+
 
 
 class Migration:
@@ -138,7 +177,7 @@ class Migration:
         if isinstance(op, MigrateOperation):
             op.migrator = self.migrator
             op.state_forwards()
-            self.ops.append(op.database_forwards())
+            self.ops.extend(op.database_forwards())
         else:
             self.ops.append(op)
 
@@ -345,16 +384,9 @@ class Migrator(object):
     remove_model = drop_table
 
     @get_model
-    def add_columns(self, model, **fields):
+    def add_columns(self, model: ModelCls, **fields: Any):
         """Create new fields."""
-        for name, field in fields.items():
-            model._meta.add_field(name, field)
-            self.ops.append(self.schema_migrator.add_column(model._meta.table_name, field.column_name, field))
-            # TODO Why? add_column alredy add indexes https://github.com/coleifer/peewee/blob/master/playhouse/migrate.py#L347
-            # Seems this line should be removed and it will fix this bug https://github.com/kalombos/peewee_migrate2/issues/10
-            if field.unique:
-                self.ops.append(self.schema_migrator.add_model_index(model, (field.column_name,), unique=True))
-        return model
+        self.migration.append(AddColumns(model, **fields))
 
     add_fields = add_columns
 
@@ -459,31 +491,21 @@ class Migrator(object):
     def add_index(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None):
         """Create indexes."""
         self.migration.append(AddIndex(model, *columns, unique=unique, where=where))
-        return model
 
     @get_model
     def drop_index(self, model: ModelCls, *columns: str):
         """Drop indexes."""
         self.migration.append(DropIndex(model, *columns))
-        return model
 
     @get_model
     def add_not_null(self, model, *names):
         """Add not null."""
-        for name in names:
-            field = model._meta.fields[name]
-            field.null = False
-            self.ops.append(self.migrator.add_not_null(model._meta.table_name, field.column_name))
-        return model
+        self.migration.append(ChangeNullable(model, *names, is_null=False))
 
     @get_model
     def drop_not_null(self, model, *names):
         """Drop not null."""
-        for name in names:
-            field = model._meta.fields[name]
-            field.null = True
-            self.ops.append(self.migrator.drop_not_null(model._meta.table_name, field.column_name))
-        return model
+        self.migration.append(ChangeNullable(model, *names, is_null=True))
 
     @get_model
     def add_default(self, model, name, default):
