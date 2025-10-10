@@ -12,6 +12,7 @@ Development Lead
 ----------------
 
 * spumer
+* kalombos
 
 Contributors
 ------------
