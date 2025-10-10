@@ -44,16 +44,16 @@ class MigrateOperation:
         raise NotImplementedError
 
 
-class CreateTable(MigrateOperation):
+class CreateModel(MigrateOperation):
     def __init__(self, model: ModelCls) -> None:
         self.model = model
 
     def state_forwards(self) -> None:
         self.migrator.orm[self.model._meta.table_name] = self.model
 
-    def database_forwards(self) -> Callable:
+    def database_forwards(self) -> list[Callable]:
         self.model._meta.database = self.migrator.database  # without it we can't run `model.create_table`
-        return [lambda: self.model.create_table()]
+        return [lambda: self.model.create_table(safe=False)]
 
 
 class AddIndex(MigrateOperation):
@@ -73,7 +73,7 @@ class AddIndex(MigrateOperation):
                 pw.ModelIndex(self.model, self.columns, unique=self.unique, where=self.where)
             )
 
-    def database_forwards(self) -> Operation:
+    def database_forwards(self) -> list[Operation]:
         columns = self.columns
         columns_ = []
         for col in columns:
@@ -114,7 +114,7 @@ class DropIndex(MigrateOperation):
         return [self.schema_migrator.drop_index(self.model._meta.table_name, index_name)]
 
 
-class RenameTable(MigrateOperation):
+class RenameModel(MigrateOperation):
     def __init__(self, model: ModelCls, new_name: str) -> None:
         self.model = model
         self.old_name = model._meta.table_name
@@ -128,9 +128,9 @@ class RenameTable(MigrateOperation):
     def database_forwards(self) -> list[Callable]:
         """Rename table in database."""
         return [self.schema_migrator.rename_table(self.old_name, self.new_name)]
-    
 
-class AddColumns(MigrateOperation):
+
+class AddFields(MigrateOperation):
     def __init__(self, model: ModelCls, **fields: Any) -> None:
         self.model = model
         self.fields = fields
@@ -142,11 +142,30 @@ class AddColumns(MigrateOperation):
     def database_forwards(self) -> list[Operation]:
         ops = []
         for field in self.fields.values():
+            ops.append(self.schema_migrator.add_column(self.model._meta.table_name, field.column_name, field))
+        return ops
+
+
+class RemoveFields(MigrateOperation):
+    def __init__(self, model: ModelCls, *names: str, cascade: bool = False) -> None:
+        self.model = model
+        self.cascade = cascade
+        self.fields = [self.model._meta.fields[name] for name in names]
+
+    def state_forwards(self) -> None:
+        for field in self.fields:
+            _delete_field(self.model, field)
+
+    def database_forwards(self) -> list[Operation]:
+        """Remove fields from model."""
+        ops = []
+        for field in self.fields:
             ops.append(
-                self.schema_migrator.add_column(self.model._meta.table_name, field.column_name, field)
+                self.schema_migrator.drop_column(self.model._meta.table_name, field.column_name, cascade=self.cascade)
             )
         return ops
-    
+
+
 class ChangeNullable(MigrateOperation):
     def __init__(self, model: ModelCls, *names: str, is_null: bool) -> None:
         self.model = model
@@ -166,6 +185,14 @@ class ChangeNullable(MigrateOperation):
             ops.append(_operation(self.model._meta.table_name, field.column_name))
         return ops
 
+
+def _delete_field(model: ModelCls, field: pw.Field) -> None:
+    """Delete field from model."""
+    model._meta.remove_field(field.name)
+    delattr(model, field.name)
+    if isinstance(field, pw.ForeignKeyField):
+        delattr(model, field.object_id_name)
+        delattr(field.rel_model, field.backref)
 
 
 class Migration:
@@ -362,15 +389,15 @@ class Migrator(object):
         """Clean the operations."""
         self.migration.clean()
 
-    def create_table(self, model):
+    def create_model(self, model):
         """Create model and table in database.
 
         >> migrator.create_table(model)
         """
-        self.migration.append(CreateTable(model))
+        self.migration.append(CreateModel(model))
         return model
 
-    create_model = create_table
+    create_table = create_model
 
     @get_model
     def drop_table(self, model, cascade=True):
@@ -384,11 +411,11 @@ class Migrator(object):
     remove_model = drop_table
 
     @get_model
-    def add_columns(self, model: ModelCls, **fields: Any):
+    def add_fields(self, model: ModelCls, **fields: Any):
         """Create new fields."""
-        self.migration.append(AddColumns(model, **fields))
+        self.migration.append(AddFields(model, **fields))
 
-    add_fields = add_columns
+    add_columns = add_fields
 
     @get_model
     def change_columns(self, model, **fields):
@@ -440,21 +467,11 @@ class Migrator(object):
     change_fields = change_columns
 
     @get_model
-    def drop_columns(self, model, *names, **kwargs):
+    def remove_fields(self, model, *names: str, cascade: bool = False) -> Any:
         """Remove fields from model."""
-        fields = [field for field in model._meta.fields.values() if field.name in names]
-        cascade = kwargs.pop("cascade", True)
-        for field in fields:
-            self.__del_field__(model, field)
-            if field.unique:
-                index_name = make_index_name(model._meta.table_name, [field.column_name])
-                self.ops.append(self.schema_migrator.drop_index(model._meta.table_name, index_name))
-            self.ops.append(
-                self.schema_migrator.drop_column(model._meta.table_name, field.column_name, cascade=cascade)
-            )
-        return model
+        self.ops.append(RemoveFields(model, *names, cascade=cascade))
 
-    remove_fields = drop_columns
+    drop_columns = remove_fields
 
     def __del_field__(self, model, field):
         """Delete field from model."""
@@ -484,8 +501,10 @@ class Migrator(object):
     rename_field = rename_column
 
     @get_model
-    def rename_table(self, model: ModelCls, new_name: str) -> Operation:
-        return self.migration.append(RenameTable(model, new_name))
+    def rename_model(self, model: ModelCls, new_name: str) -> Operation:
+        return self.migration.append(RenameModel(model, new_name))
+
+    rename_table = rename_model
 
     @get_model
     def add_index(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None):

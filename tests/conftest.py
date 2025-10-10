@@ -1,4 +1,6 @@
 import pathlib
+from collections.abc import Generator
+from typing import Any
 
 import peewee as pw
 import playhouse.db_url
@@ -35,3 +37,26 @@ def router(migrations_dir, database):
     assert isinstance(router.database, pw.Database)
 
     return router
+
+
+class PatchedPgDatabase(pw.PostgresqlDatabase):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.queries: list[str] = []
+
+    def clear_queries(self) -> None:
+        self.queries = []
+
+    def execute_sql(self, sql, params=None, commit=None) -> Any:
+        self.queries.append(sql)
+        return super().execute_sql(sql, params, commit)
+
+
+@pytest.fixture()
+def patched_pg_db() -> Generator[PatchedPgDatabase, Any, None]:
+    db = PatchedPgDatabase(POSTGRES_DSN)
+    with db.transaction() as transaction:
+        yield db
+        transaction.rollback()
+    db.close()
+    db.clear_queries()

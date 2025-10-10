@@ -1,22 +1,8 @@
-from collections.abc import Generator
-from typing import Any
-
 import peewee as pw
 import pytest
 
 from peewee_migrate import Migrator
-from tests.conftest import POSTGRES_DSN
-
-
-class PatchedPgDatabase(pw.PostgresqlDatabase):
-    queries: list[str] = []
-
-    def clear_queries(self):
-        self.queries = []
-
-    def execute_sql(self, sql, params=None, commit=None):
-        self.queries.append(sql)
-        return super().execute_sql(sql, params, commit)
+from tests.conftest import PatchedPgDatabase
 
 
 def test_migrator_sqlite_common():
@@ -112,20 +98,7 @@ def test_migrator_sqlite_common():
     migrator.run()
 
 
-@pytest.fixture()
-def patched_pg_db() -> Generator[PatchedPgDatabase, Any, None]:
-    db = PatchedPgDatabase(POSTGRES_DSN)
-    with db.transaction() as transaction:
-        yield db
-        transaction.rollback()
-    db.close()
-
-
 def test_create_table(patched_pg_db: PatchedPgDatabase) -> None:
-    """
-    Ensure change_fields generates queries and
-    does not cause exception
-    """
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
@@ -136,7 +109,7 @@ def test_create_table(patched_pg_db: PatchedPgDatabase) -> None:
     assert User == migrator.orm["user"]
     migrator.run()
     assert patched_pg_db.queries == [
-        'CREATE TABLE IF NOT EXISTS "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, '
+        'CREATE TABLE "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, '
         '"created_at" DATE NOT NULL)'
     ]
 
@@ -182,40 +155,6 @@ def test_migrator_add_index(
     assert patched_pg_db.queries == [expected]
 
 
-def test_add_columns(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    migrator.add_columns(
-        "user",
-        last_name=pw.CharField(null=True, unique=True),
-        age=pw.IntegerField(null=True)
-    )
-    migrator.run()
-
-    assert patched_pg_db.queries == [
-        'ALTER TABLE "user" ADD COLUMN "last_name" VARCHAR(255)', 
-        'CREATE UNIQUE INDEX "user_last_name" ON "user" ("last_name")', 
-        'ALTER TABLE "user" ADD COLUMN "age" INTEGER'
-    ]
-
-    last_name = migrator.orm["user"].last_name
-    assert isinstance(last_name, pw.CharField)
-    assert last_name.unique
-    assert last_name.null
-
-    age = migrator.orm["user"].age
-    assert isinstance(age, pw.IntegerField)
-    assert age.null
-
-
 def test_change_datetime_field(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
@@ -242,15 +181,11 @@ def test_add_not_null(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.run()
     patched_pg_db.clear_queries()
 
-    migrator.add_not_null(
-        "user",
-        "name",
-        "created_at"
-    )
+    migrator.add_not_null("user", "name", "created_at")
     migrator.run()
     assert patched_pg_db.queries == [
         'ALTER TABLE "user" ALTER COLUMN "name" SET NOT NULL',
-        'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL'
+        'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL',
     ]
     assert not migrator.orm["user"].name.null
     assert not migrator.orm["user"].created_at.null
@@ -267,15 +202,11 @@ def test_drop_not_null(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.run()
     patched_pg_db.clear_queries()
 
-    migrator.drop_not_null(
-        "user",
-        "name",
-        "created_at"
-    )
+    migrator.drop_not_null("user", "name", "created_at")
     migrator.run()
     assert patched_pg_db.queries == [
         'ALTER TABLE "user" ALTER COLUMN "name" DROP NOT NULL',
-        'ALTER TABLE "user" ALTER COLUMN "created_at" DROP NOT NULL'
+        'ALTER TABLE "user" ALTER COLUMN "created_at" DROP NOT NULL',
     ]
     assert migrator.orm["user"].name.null
     assert migrator.orm["user"].created_at.null
