@@ -1,6 +1,5 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Any
 
 import peewee as pw
 from playhouse.migrate import (
@@ -18,6 +17,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
+from peewee_migrate.types import ModelCls
 
 
 class MigrateOperation:
@@ -27,7 +27,7 @@ class MigrateOperation:
     def schema_migrator(self) -> "SchemaMigrator":
         return self.migrator.schema_migrator
 
-    def state_forwards(self, migrator: "Migrator") -> None:
+    def state_forwards(self) -> None:
         """
         Take the state from the previous migration, and mutate it
         so that it matches what this migration would perform.
@@ -44,7 +44,7 @@ class MigrateOperation:
 
 
 class CreateTable(MigrateOperation):
-    def __init__(self, model: pw.Model) -> None:
+    def __init__(self, model: ModelCls) -> None:
         self.model = model
 
     def state_forwards(self) -> None:
@@ -56,18 +56,21 @@ class CreateTable(MigrateOperation):
 
 
 class AddIndex(MigrateOperation):
-    def __init__(self, model: pw.Model, *columns: str, **kwargs: Any) -> None:
+    def __init__(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None) -> None:
         self.model = model
         self.columns = columns
-        self.unique = kwargs.pop("unique", False)
+        self.unique = unique
+        self.where = where
 
     def state_forwards(self) -> None:
-        if len(self.columns) == 1:
+        if len(self.columns) == 1 and self.where is None:
             field = self.model._meta.fields.get(self.columns[0])
             field.unique = self.unique
             field.index = True
         else:
-            self.model._meta.indexes.append((self.columns, self.unique))
+            self.model._meta.indexes.append(
+                pw.ModelIndex(self.model, self.columns, unique=self.unique, where=self.where)
+            )
 
     def database_forwards(self) -> Operation:
         columns = self.columns
@@ -78,11 +81,11 @@ class AddIndex(MigrateOperation):
                 col = col + "_id"
 
             columns_.append(col)
-        return self.schema_migrator.add_index(self.model._meta.table_name, columns_, unique=self.unique)
+        return self.schema_migrator.add_model_index(self.model, columns_, unique=self.unique, where=self.where)
 
 
 class DropIndex(MigrateOperation):
-    def __init__(self, model: pw.Model, *columns: str) -> None:
+    def __init__(self, model: ModelCls, *columns: str) -> None:
         self.model = model
         self.columns = columns
 
@@ -91,7 +94,12 @@ class DropIndex(MigrateOperation):
             field = self.model._meta.fields.get(self.columns[0])
             field.unique = field.index = False
         else:
-            self.model._meta.indexes = [(cols, _) for (cols, _) in self.model._meta.indexes if self.columns != cols]
+            _indexes = []
+            for i in self.model._meta.indexes:
+                cols = i._expressions if isinstance(i, pw.ModelIndex) else i[0]  # type: ignore
+                if self.columns != cols:
+                    _indexes.append(i)
+            self.model._meta.indexes = _indexes
 
     def database_forwards(self) -> Operation:
         columns = self.columns
@@ -103,6 +111,22 @@ class DropIndex(MigrateOperation):
             columns_.append(col)
         index_name = make_index_name(self.model._meta.table_name, columns_)
         return self.schema_migrator.drop_index(self.model._meta.table_name, index_name)
+
+
+class RenameTable(MigrateOperation):
+    def __init__(self, model: ModelCls, new_name: str) -> None:
+        self.model = model
+        self.old_name = model._meta.table_name
+        self.new_name = new_name
+
+    def state_forwards(self) -> None:
+        del self.migrator.orm[self.old_name]
+        self.model._meta.table_name = self.new_name
+        self.migrator.orm[self.new_name] = self.model
+
+    def database_forwards(self) -> Callable:
+        """Rename table in database."""
+        return self.schema_migrator.rename_table(self.old_name, self.new_name)
 
 
 class Migration:
@@ -180,6 +204,23 @@ class SchemaMigrator(ScM):
         if isinstance(field, pw.ForeignKeyField):
             field.name = name
         return op
+
+    # TODO add column shoud be overrided to use add_model_index instead of add_index.
+    # Because create_table and the library use only ModelIndex for creating
+    # def add_column(self, table, column_name, field, **kwargs):
+    #     pass
+
+    @operation
+    def add_model_index(
+        self,
+        model: ModelCls,
+        columns: Sequence[str],
+        unique=False,
+        where=None,
+    ):
+        ctx = self.make_context()
+        index = pw.ModelIndex(model, columns, unique=unique, where=where, safe=False)
+        return ctx.sql(index)
 
 
 class MySQLMigrator(SchemaMigrator, MqM):
@@ -308,9 +349,11 @@ class Migrator(object):
         """Create new fields."""
         for name, field in fields.items():
             model._meta.add_field(name, field)
-            self.ops.append(self.migrator.add_column(model._meta.table_name, field.column_name, field))
+            self.ops.append(self.schema_migrator.add_column(model._meta.table_name, field.column_name, field))
+            # TODO Why? add_column alredy add indexes https://github.com/coleifer/peewee/blob/master/playhouse/migrate.py#L347
+            # Seems this line should be removed and it will fix this bug https://github.com/kalombos/peewee_migrate2/issues/10
             if field.unique:
-                self.ops.append(self.migrator.add_index(model._meta.table_name, (field.column_name,), unique=True))
+                self.ops.append(self.schema_migrator.add_model_index(model, (field.column_name,), unique=True))
         return model
 
     add_fields = add_columns
@@ -352,11 +395,12 @@ class Migrator(object):
 
             if field.unique:
                 index = (field.column_name,), field.unique
-                self.ops.append(self.migrator.add_index(model._meta.table_name, *index))
+                self.ops.append(self.schema_migrator.add_model_index(model, *index))
                 model._meta.indexes.append(index)
             else:
                 index = (field.column_name,), old_field.unique
-                self.ops.append(self.migrator.drop_index(model._meta.table_name, *index))
+                # TODO It should be fixed to index_name instead of *index
+                self.ops.append(self.schema_migrator.drop_index(model._meta.table_name, *index))
                 model._meta.indexes.remove(index)
 
         return model
@@ -372,8 +416,10 @@ class Migrator(object):
             self.__del_field__(model, field)
             if field.unique:
                 index_name = make_index_name(model._meta.table_name, [field.column_name])
-                self.ops.append(self.migrator.drop_index(model._meta.table_name, index_name))
-            self.ops.append(self.migrator.drop_column(model._meta.table_name, field.column_name, cascade=cascade))
+                self.ops.append(self.schema_migrator.drop_index(model._meta.table_name, index_name))
+            self.ops.append(
+                self.schema_migrator.drop_column(model._meta.table_name, field.column_name, cascade=cascade)
+            )
         return model
 
     remove_fields = drop_columns
@@ -406,23 +452,17 @@ class Migrator(object):
     rename_field = rename_column
 
     @get_model
-    def rename_table(self, model, new_name):
-        """Rename table in database."""
-        old_name = model._meta.table_name
-        del self.orm[model._meta.table_name]
-        model._meta.table_name = new_name
-        self.orm[model._meta.table_name] = model
-        self.ops.append(self.migrator.rename_table(old_name, new_name))
-        return model
+    def rename_table(self, model: ModelCls, new_name: str) -> Operation:
+        return self.migration.append(RenameTable(model, new_name))
 
     @get_model
-    def add_index(self, model, *columns, **kwargs):
+    def add_index(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None):
         """Create indexes."""
-        self.migration.append(AddIndex(model, *columns, **kwargs))
+        self.migration.append(AddIndex(model, *columns, unique=unique, where=where))
         return model
 
     @get_model
-    def drop_index(self, model, *columns):
+    def drop_index(self, model: ModelCls, *columns: str):
         """Drop indexes."""
         self.migration.append(DropIndex(model, *columns))
         return model
