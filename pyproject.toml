@@ -44,7 +44,7 @@ dev = [
     "psycopg2-binary>=2.8.1",
     "build",
     "twine",
-    "ruff==0.13.3",
+    "ruff==0.14.0",
     "poethepoet==0.37.0",
     "mypy==1.18.2",
     "types-peewee"
