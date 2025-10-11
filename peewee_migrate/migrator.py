@@ -164,6 +164,26 @@ class RemoveFields(MigrateOperation):
                 self.schema_migrator.drop_column(self.model._meta.table_name, field.column_name, cascade=self.cascade)
             )
         return ops
+    
+class RenameField(MigrateOperation):
+    # TODO
+    def __init__(self, model: ModelCls, old_name: str, new_name: str) -> None:
+        self.model = model
+        self.old_name = old_name
+        self.new_name = new_name
+
+    def state_forwards(self) -> None:
+        field = self.model._meta.fields[self.old_name]
+        _delete_field(self.model, field)
+        self.model._meta.add_field(self.new_name, field)
+
+    def database_forwards(self) -> list[Operation]:
+        old_name = self.old_name
+        new_name = self.new_name
+        field = self.model._meta.fields[old_name]
+        if isinstance(field, pw.ForeignKeyField):
+            old_name = field.column_name
+        return [self.schema_migrator.rename_column(self.model._meta.table_name, old_name, new_name)]
 
 
 class ChangeNullable(MigrateOperation):
@@ -485,12 +505,12 @@ class Migrator(object):
             delattr(field.rel_model, field.backref)
 
     @get_model
-    def rename_column(self, model, old_name, new_name):
+    def rename_field(self, model: ModelCls, old_name: str, new_name: str):
         """Rename field in model."""
         field = model._meta.fields[old_name]
         if isinstance(field, pw.ForeignKeyField):
             old_name = field.column_name
-        self.__del_field__(model, field)
+        _delete_field(model, field)
         field.name = field.column_name = new_name
         model._meta.add_field(new_name, field)
         if isinstance(field, pw.ForeignKeyField):
@@ -498,7 +518,7 @@ class Migrator(object):
         self.ops.append(self.migrator.rename_column(model._meta.table_name, old_name, new_name))
         return model
 
-    rename_field = rename_column
+    rename_column = rename_field
 
     @get_model
     def rename_model(self, model: ModelCls, new_name: str) -> Operation:
@@ -517,12 +537,12 @@ class Migrator(object):
         self.migration.append(DropIndex(model, *columns))
 
     @get_model
-    def add_not_null(self, model, *names):
+    def add_not_null(self, model: ModelCls, *names: str):
         """Add not null."""
         self.migration.append(ChangeNullable(model, *names, is_null=False))
 
     @get_model
-    def drop_not_null(self, model, *names):
+    def drop_not_null(self, model: ModelCls, *names: str):
         """Drop not null."""
         self.migration.append(ChangeNullable(model, *names, is_null=True))
 
