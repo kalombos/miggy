@@ -5,12 +5,29 @@ from peewee_migrate import Migrator
 from tests.conftest import PatchedPgDatabase
 
 
-def test_rename_field(patched_pg_db: PatchedPgDatabase) -> None:
+@pytest.mark.parametrize(
+    ("column_name", "expected"),
+    [
+        (
+            None,
+            ['ALTER TABLE "user" RENAME COLUMN "name" TO "new_name"'],
+        ),
+        (
+            "some_other_name",
+            [], # We shouldn't run alter query if don't know calculate the name of the new column
+        ),
+    ],
+)
+def test_rename_field(
+    column_name: str | None,
+    expected: list[str],
+    patched_pg_db: PatchedPgDatabase
+) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
     class User(pw.Model):
-        name = pw.CharField()
+        name = pw.CharField(column_name=column_name)
         created_at = pw.DateField()
 
     migrator.run()
@@ -19,7 +36,7 @@ def test_rename_field(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.rename_field("user", "name", "new_name")
     migrator.run()
 
-    assert patched_pg_db.queries == ['ALTER TABLE "user" RENAME COLUMN "name" TO "new_name"']
+    assert patched_pg_db.queries == expected
     assert not hasattr(migrator.orm["user"], "name")
     assert isinstance(migrator.orm["user"].new_name, pw.CharField)
 
@@ -53,23 +70,6 @@ def test_rename_fk_field(patched_pg_db: PatchedPgDatabase, object_id_name: str |
 
 
 
-@pytest.mark.xfail
-def test_rename_field_w(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
 
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField(column_name="some_other_name")
-        created_at = pw.DateField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    migrator.rename_field("user", "name", "new_name")
-    migrator.run()
-
-    assert patched_pg_db.queries == []
-    assert not hasattr(migrator.orm["user"], "name")
-    assert isinstance(migrator.orm["user"].new_name, pw.CharField)
 
 # TODO add test for fk with different column name

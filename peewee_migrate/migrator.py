@@ -166,25 +166,35 @@ class RemoveFields(MigrateOperation):
         return ops
     
 class RenameField(MigrateOperation):
-    # TODO
     def __init__(self, model: ModelCls, old_name: str, new_name: str) -> None:
         self.model = model
         self.old_name = old_name
         self.new_name = new_name
+        self.field = self.model._meta.fields[self.old_name]
 
     def state_forwards(self) -> None:
-        field = self.model._meta.fields[self.old_name]
-        _delete_field(self.model, field)
-        self.model._meta.add_field(self.new_name, field)
+        _delete_field(self.model, self.field)
+        if isinstance(self.field, pw.ForeignKeyField):
+            self.field.column_name = self.new_name + "_id"
+        self.model._meta.add_field(self.new_name, self.field)
+
+    def resolve_new_name(self) -> str:
+        print(self.field.name)
+        print(self.field.column_name)
+        #column_name = name if name.endswith('_id') else name + '_id'
+        if self.field.column_name is None:
+            return self.new_name
+        return None
 
     def database_forwards(self) -> list[Operation]:
         old_name = self.old_name
         new_name = self.new_name
-        field = self.model._meta.fields[old_name]
-        if isinstance(field, pw.ForeignKeyField):
-            old_name = field.column_name
-        return [self.schema_migrator.rename_column(self.model._meta.table_name, old_name, new_name)]
+        if isinstance(self.field, pw.ForeignKeyField):
+            pass
 
+        if new_name := self.resolve_new_name() is not None:
+            return [self.schema_migrator.rename_column(self.model._meta.table_name, old_name, new_name)]
+        return []
 
 class ChangeNullable(MigrateOperation):
     def __init__(self, model: ModelCls, *names: str, is_null: bool) -> None:
@@ -399,11 +409,11 @@ class Migrator(object):
 
     def python(self, func, *args, **kwargs):
         """Run python code."""
-        self.ops.append(lambda: func(*args, **kwargs))
+        self.migration.append(lambda: func(*args, **kwargs))
 
     def sql(self, sql, *params):
         """Execure raw SQL."""
-        self.ops.append(self.migrator.sql(sql, *params))
+        self.migration.append(self.migrator.sql(sql, *params))
 
     def clean(self):
         """Clean the operations."""
@@ -426,7 +436,7 @@ class Migrator(object):
         >> migrator.drop_table(model, cascade=True)
         """
         del self.orm[model._meta.table_name]
-        self.ops.append(self.migrator.drop_table(model, cascade))
+        self.migration.append(self.migrator.drop_table(model, cascade))
 
     remove_model = drop_table
 
@@ -489,34 +499,15 @@ class Migrator(object):
     @get_model
     def remove_fields(self, model, *names: str, cascade: bool = False) -> Any:
         """Remove fields from model."""
-        self.ops.append(RemoveFields(model, *names, cascade=cascade))
+        self.migration.append(RemoveFields(model, *names, cascade=cascade))
 
     drop_columns = remove_fields
-
-    def __del_field__(self, model, field):
-        """Delete field from model."""
-        model._meta.remove_field(field.name)
-        delattr(model, field.name)
-        if isinstance(field, pw.ForeignKeyField):
-            obj_id_name = field.column_name
-            if field.column_name == field.name:
-                obj_id_name += "_id"
-            delattr(model, obj_id_name)
-            delattr(field.rel_model, field.backref)
 
     @get_model
     def rename_field(self, model: ModelCls, old_name: str, new_name: str):
         """Rename field in model."""
-        field = model._meta.fields[old_name]
-        if isinstance(field, pw.ForeignKeyField):
-            old_name = field.column_name
-        _delete_field(model, field)
-        field.name = field.column_name = new_name
-        model._meta.add_field(new_name, field)
-        if isinstance(field, pw.ForeignKeyField):
-            field.column_name = new_name = field.column_name + "_id"
-        self.ops.append(self.migrator.rename_column(model._meta.table_name, old_name, new_name))
-        return model
+
+        self.migration.append(RenameField(model, old_name, new_name))
 
     rename_column = rename_field
 
@@ -551,5 +542,5 @@ class Migrator(object):
         """Add default."""
         field = model._meta.fields[name]
         model._meta.defaults[field] = field.default = default
-        self.ops.append(self.migrator.apply_default(model._meta.table_name, name, field))
+        self.migration.append(self.migrator.apply_default(model._meta.table_name, name, field))
         return model
