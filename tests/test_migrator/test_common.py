@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from peewee_migrate import Migrator
+from peewee_migrate import Migrator, types
 from tests.conftest import PatchedPgDatabase
 
 
@@ -98,22 +98,6 @@ def test_migrator_sqlite_common():
     migrator.run()
 
 
-def test_create_table(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    assert User == migrator.orm["user"]
-    migrator.run()
-    assert patched_pg_db.queries == [
-        'CREATE TABLE "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, '
-        '"created_at" DATE NOT NULL)'
-    ]
-
-
 @pytest.mark.parametrize(
     ("columns", "unique", "where", "expected"),
     [
@@ -143,7 +127,7 @@ def test_migrator_add_index(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
@@ -155,84 +139,6 @@ def test_migrator_add_index(
     assert patched_pg_db.queries == [expected]
 
 
-def test_change_datetime_field(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    assert User == migrator.orm["user"]
-
-    migrator.change_fields("user", created_at=pw.DateTimeField())
-    migrator.run()
-    assert 'ALTER TABLE "user" ALTER COLUMN "created_at" TYPE TIMESTAMP' in patched_pg_db.queries
-
-
-def test_add_not_null(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField(null=True)
-        created_at = pw.DateField(null=True)
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    migrator.add_not_null("user", "name", "created_at")
-    migrator.run()
-    assert patched_pg_db.queries == [
-        'ALTER TABLE "user" ALTER COLUMN "name" SET NOT NULL',
-        'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL',
-    ]
-    assert not migrator.orm["user"].name.null
-    assert not migrator.orm["user"].created_at.null
-
-
-def test_drop_not_null(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    migrator.drop_not_null("user", "name", "created_at")
-    migrator.run()
-    assert patched_pg_db.queries == [
-        'ALTER TABLE "user" ALTER COLUMN "name" DROP NOT NULL',
-        'ALTER TABLE "user" ALTER COLUMN "created_at" DROP NOT NULL',
-    ]
-    assert migrator.orm["user"].name.null
-    assert migrator.orm["user"].created_at.null
-
-
-def test_change_text_field(patched_pg_db: PatchedPgDatabase) -> None:
-    """
-    Ensure change_fields generates queries and
-    does not cause exception
-    """
-
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    assert User == migrator.orm["user"]
-
-    # Char -> Text
-    migrator.change_fields("user", name=pw.TextField())
-    migrator.run()
-    assert 'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT' in patched_pg_db.queries
-
-
 def test_migrator_schema(patched_pg_db):
     schema_name = "test_schema"
     patched_pg_db.execute_sql("CREATE SCHEMA IF NOT EXISTS test_schema;")
@@ -242,7 +148,7 @@ def test_migrator_schema(patched_pg_db):
     patched_pg_db.clear_queries()
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 

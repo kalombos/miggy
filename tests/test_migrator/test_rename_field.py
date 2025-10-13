@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from peewee_migrate import Migrator
+from peewee_migrate import Migrator, types
 from tests.conftest import PatchedPgDatabase
 
 
@@ -23,7 +23,7 @@ def test_rename_field(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField(column_name=column_name)
         created_at = pw.DateField()
 
@@ -58,12 +58,12 @@ def test_rename_fk_field(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
     @migrator.create_table
-    class Book(pw.Model):
+    class Book(types.Model):
         name = pw.CharField()
         author = pw.ForeignKeyField(User, column_name=column_name)
 
@@ -84,12 +84,12 @@ def test_rename_fk_field__object_id_name(patched_pg_db: PatchedPgDatabase, objec
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
     @migrator.create_table
-    class Book(pw.Model):
+    class Book(types.Model):
         name = pw.CharField()
         author = pw.ForeignKeyField(User, backref="books", object_id_name=object_id_name)
 

@@ -109,7 +109,7 @@ class IndexMetaExtractor:
                 raise NotImplementedError
         return tuple(_columns)
 
-    def resolve_where(self, where: Any) -> None | str:
+    def resolve_where(self, where: pw.Node | None) -> None | str:
         if isinstance(where, pw.SQL):
             if where.params is not None:
                 raise NotImplementedError(
@@ -213,7 +213,7 @@ def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
         changes.append(change_not_null(model1, name, null))
 
     # Single-column indexes
-    # https://docs.peewee-orm.com/en/latest/peewee/models.html#advanced-index-creation
+    # https://docs.peewee-orm.com/en/latest/peewee/models.html#single-column-indexes-and-constraints
     for name, index, unique in indexes_:
         if index is True or unique is True:
             if fields2[name].unique or fields2[name].index:

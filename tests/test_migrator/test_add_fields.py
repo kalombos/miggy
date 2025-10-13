@@ -1,6 +1,6 @@
 import peewee as pw
 
-from peewee_migrate import Migrator
+from peewee_migrate import Migrator, types
 from tests.conftest import PatchedPgDatabase
 
 
@@ -8,7 +8,7 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
