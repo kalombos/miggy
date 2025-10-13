@@ -164,37 +164,48 @@ class RemoveFields(MigrateOperation):
                 self.schema_migrator.drop_column(self.model._meta.table_name, field.column_name, cascade=self.cascade)
             )
         return ops
-    
+
+
+def fk_postfix(name: str) -> str:
+    return name if name.endswith("_id") else name + "_id"
+
+
 class RenameField(MigrateOperation):
     def __init__(self, model: ModelCls, old_name: str, new_name: str) -> None:
         self.model = model
-        self.old_name = old_name
-        self.new_name = new_name
-        self.field = self.model._meta.fields[self.old_name]
+        self.old_field_name = old_name
+        self.new_field_name = new_name
+        self.old_field = self.model._meta.fields[self.old_field_name]
 
     def state_forwards(self) -> None:
-        _delete_field(self.model, self.field)
-        if isinstance(self.field, pw.ForeignKeyField):
-            self.field.column_name = self.new_name + "_id"
-        self.model._meta.add_field(self.new_name, self.field)
+        _delete_field(self.model, self.old_field)
+        new_field = self.old_field.clone()
 
-    def resolve_new_name(self) -> str:
-        print(self.field.name)
-        print(self.field.column_name)
-        #column_name = name if name.endswith('_id') else name + '_id'
-        if self.field.column_name is None:
-            return self.new_name
-        return None
+        if self.allow_to_alter_field():
+            _, new_field.column_name = self.resolve_column_names()
+
+        self.model._meta.add_field(self.new_field_name, new_field)
+
+    def allow_to_alter_field(self) -> bool:
+        # If we detect column name has not been changed we allow to alter column name because
+        # we know what name should be
+        if isinstance(self.old_field, pw.ForeignKeyField):
+            return self.old_field.column_name == fk_postfix(self.old_field.name)
+        if self.old_field.column_name == self.old_field_name:
+            return True
+        return False
+
+    def resolve_column_names(self) -> tuple[str, str]:
+        if isinstance(self.old_field, pw.ForeignKeyField):
+            return self.old_field.column_name, fk_postfix(self.new_field_name)
+        return self.old_field.column_name, self.new_field_name
 
     def database_forwards(self) -> list[Operation]:
-        old_name = self.old_name
-        new_name = self.new_name
-        if isinstance(self.field, pw.ForeignKeyField):
-            pass
-
-        if new_name := self.resolve_new_name() is not None:
-            return [self.schema_migrator.rename_column(self.model._meta.table_name, old_name, new_name)]
+        if self.allow_to_alter_field():
+            old_column_name, new_column_name = self.resolve_column_names()
+            return [self.schema_migrator.rename_column(self.model._meta.table_name, old_column_name, new_column_name)]
         return []
+
 
 class ChangeNullable(MigrateOperation):
     def __init__(self, model: ModelCls, *names: str, is_null: bool) -> None:
