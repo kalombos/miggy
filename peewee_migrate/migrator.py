@@ -215,7 +215,7 @@ class ChangeFields(MigrateOperation):
             if old_column_name != field.column_name:
                 _ops.append(self.schema_migrator.rename_column(table_name, old_column_name, field.column_name))
 
-            _ops.append(self.schema_migrator.change_column(table_name, field.column_name, field))
+            _ops.append(self.schema_migrator.alter_column_type(table_name, field.column_name, field))
             _ops.extend(self.handle_fk(old_field, field))
             if old_field.null != field.null:
                 _operation = self.schema_migrator.drop_not_null if field.null else self.schema_migrator.add_not_null
@@ -359,20 +359,6 @@ class SchemaMigrator(ScM):
         raise NotImplementedError()
 
     @operation
-    def change_column(self, table, column_name, field):
-        """Change column."""
-        operations = [self.alter_change_column(table, column_name, field)]
-        return operations
-
-    def alter_change_column(self, table, column, field):
-        """Support change columns."""
-        ctx = self.make_context()
-        field_null, field.null = field.null, True
-        ctx = self._alter_table(ctx, table).literal(" ALTER COLUMN ").sql(field.ddl(ctx))
-        field.null = field_null
-        return ctx
-
-    @operation
     def sql(self, sql, *params):
         """Execute raw SQL."""
         return SQL(sql, *params)
@@ -421,13 +407,6 @@ class PostgresqlMigrator(SchemaMigrator, PgM):
         """Select database schema"""
         return self.set_search_path(schema)
 
-    def alter_change_column(self, table, column_name, field):
-        """Support change columns."""
-        context = super(PostgresqlMigrator, self).alter_change_column(table, column_name, field)
-        context._sql.insert(-1, "TYPE")
-        context._sql.insert(-1, " ")
-        return context
-
 
 class SqliteMigrator(SchemaMigrator, SqM):
     """Support the migrations in sqlite."""
@@ -436,7 +415,7 @@ class SqliteMigrator(SchemaMigrator, SqM):
         """SQLite doesnt support cascade syntax by default."""
         return lambda: model.drop_table(cascade=False)
 
-    def alter_change_column(self, table, column, field):
+    def alter_column_type(self, table, column, field):
         """Support change columns."""
         return self._update_column(table, column, lambda a, b: b)
 
