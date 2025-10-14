@@ -91,24 +91,44 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
             {"index": True},
             ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE INDEX "user_name" ON "user" (name)'],
         ),
+        ({"index": True}, {}, ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'DROP INDEX "user_name"']),
         (
-            {"index": True}, {}, ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'DROP INDEX "user_name"']
+            {"index": True},
+            {"unique": True},
+            [
+                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
+                'DROP INDEX "user_name"',
+                'CREATE UNIQUE INDEX "user_name" ON "user" (name)',
+            ],
         ),
         (
-            {"index": True}, {"unique": True}, 
+            {"unique": True},
+            {"index": True},
             [
-                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 
+                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
                 'DROP INDEX "user_name"',
-                'CREATE UNIQUE INDEX "user_name" ON "user" (name)'
-            ]
+                'CREATE INDEX "user_name" ON "user" (name)',
+            ],
         ),
         (
-            {"unique": True}, {"index": True}, 
+            {"unique": True, "column_name": "bom"},
+            {"index": True},
             [
-                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 
+                'ALTER TABLE "user" RENAME COLUMN "bom" TO "name"',
+                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
+                'DROP INDEX "user_bom"',
+                'CREATE INDEX "user_name" ON "user" (name)',
+            ],
+        ),
+        (
+            {"unique": True},
+            {"index": True, "column_name": "bom"},
+            [
+                'ALTER TABLE "user" RENAME COLUMN "name" TO "bom"',
+                'ALTER TABLE "user" ALTER COLUMN "bom" TYPE TEXT',
                 'DROP INDEX "user_name"',
-                'CREATE INDEX "user_name" ON "user" (name)'
-            ]
+                'CREATE INDEX "user_bom" ON "user" (bom)',
+            ],
         ),
     ],
 )
@@ -130,3 +150,57 @@ def test_change_indexes(
     migrator.run()
     assert patched_pg_db.queries == expected
     assert migrator.orm["user"].name.unique == params_after.get("unique", False)
+
+
+def test_change_fk_field_to_integer(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(types.Model):
+        name = pw.CharField()
+        created_at = pw.DateField()
+
+    @migrator.create_table
+    class Book(types.Model):
+        name = pw.CharField()
+        author = pw.ForeignKeyField(User)
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+    migrator.change_fields("book", author=pw.IntegerField())
+    migrator.run()
+
+    assert patched_pg_db.queries == [
+        'ALTER TABLE "book" RENAME COLUMN "author_id" TO "author"',
+        'ALTER TABLE "book" ALTER COLUMN "author" TYPE INTEGER',
+        'DROP INDEX "book_author_id"',
+    ]
+
+
+def test_change_integer_field_to_fk(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(types.Model):
+        name = pw.CharField()
+        created_at = pw.DateField()
+
+    @migrator.create_table
+    class Book(types.Model):
+        name = pw.CharField()
+        author = pw.IntegerField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+    migrator.change_fields("book", author=pw.ForeignKeyField(User))
+    migrator.run()
+
+    assert patched_pg_db.queries == [
+        'ALTER TABLE "book" RENAME COLUMN "author" TO "author_id"',
+        'ALTER TABLE "book" ALTER COLUMN "author_id" TYPE INTEGER',
+        (
+            'ALTER TABLE "book" ADD CONSTRAINT "fk_book_author_id_refs_user" '
+            'FOREIGN KEY ("author_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT'
+        ),
+        'CREATE INDEX "book_author_id" ON "book" (author_id)',
+    ]

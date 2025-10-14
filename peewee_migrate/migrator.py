@@ -157,6 +157,73 @@ class AddFields(MigrateOperation):
         return ops
 
 
+class ChangeFields(MigrateOperation):
+    def __init__(self, model: ModelCls, **fields: pw.Field) -> None:
+        self.model = model
+        self.old_fields: dict[str, pw.Field] = {name: getattr(self.model, name).clone() for name in fields}
+        self.fields = fields
+
+    def state_forwards(self) -> None:
+        for name, field in self.fields.items():
+            self.model._meta.add_field(name, field)
+
+    def handle_indexes(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops = []
+        _field = new_field
+        if _field.unique and old_field.unique:
+            return []
+        if not _field.unique and not old_field.unique and _field.index == old_field.index:
+            return []
+
+        if old_field.unique or old_field.index:
+            # It is not good architecture design when you pass migrator through attribute
+            # It should be refactored
+            d = DropIndex(self.model, old_field.column_name)
+            d.migrator = self.migrator
+            _ops.extend(d.database_forwards())
+        if _field.unique or _field.index:
+            a = AddIndex(self.model, _field.column_name, unique=_field.unique)
+            a.migrator = self.migrator
+            _ops.extend(a.database_forwards())
+        return _ops
+
+    def handle_fk(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops = []
+        if isinstance(new_field, pw.ForeignKeyField) and not isinstance(old_field, pw.ForeignKeyField):
+            on_delete = new_field.on_delete if new_field.on_delete else "RESTRICT"
+            on_update = new_field.on_update if new_field.on_update else "RESTRICT"
+            _ops.append(
+                self.schema_migrator.add_foreign_key_constraint(
+                    self.model._meta.table_name,
+                    new_field.column_name,
+                    new_field.rel_model._meta.table_name,
+                    new_field.rel_field.name,
+                    on_delete,
+                    on_update,
+                )
+            )
+        return _ops
+
+    def database_forwards(self) -> list[Operation]:
+        _ops = []
+        model = self.model
+        table_name = model._meta.table_name
+        for name, field in self.fields.items():
+            old_field = self.old_fields[name]
+            old_column_name = old_field.column_name
+
+            if old_column_name != field.column_name:
+                _ops.append(self.schema_migrator.rename_column(table_name, old_column_name, field.column_name))
+
+            _ops.append(self.schema_migrator.change_column(table_name, field.column_name, field))
+            _ops.extend(self.handle_fk(old_field, field))
+            if old_field.null != field.null:
+                _operation = self.schema_migrator.drop_not_null if field.null else self.schema_migrator.add_not_null
+                _ops.append(_operation(table_name, field.column_name))
+            _ops.extend(self.handle_indexes(old_field, field))
+        return _ops
+
+
 class RemoveFields(MigrateOperation):
     def __init__(self, model: ModelCls, *names: str, cascade: bool = False) -> None:
         self.model = model
@@ -468,51 +535,7 @@ class Migrator(object):
     def change_fields(self, model: ModelCls, **fields: pw.Field) -> None:
         """Change fields."""
 
-        table_name = model._meta.table_name
-        for name, field in fields.items():
-            old_field = model._meta.fields.get(name, field)
-            old_column_name = old_field and old_field.column_name
-
-            model._meta.add_field(name, field)
-
-            if isinstance(old_field, pw.ForeignKeyField):
-                self.ops.append(self.migrator.drop_foreign_key_constraint(table_name, old_column_name))
-
-            if old_column_name != field.column_name:
-                self.ops.append(self.migrator.rename_column(table_name, old_column_name, field.column_name))
-
-            if isinstance(field, pw.ForeignKeyField):
-                on_delete = field.on_delete if field.on_delete else "RESTRICT"
-                on_update = field.on_update if field.on_update else "RESTRICT"
-                self.ops.append(
-                    self.migrator.add_foreign_key_constraint(
-                        table_name,
-                        field.column_name,
-                        field.rel_model._meta.table_name,
-                        field.rel_field.name,
-                        on_delete,
-                        on_update,
-                    )
-                )
-                continue
-
-            self.ops.append(self.migrator.change_column(table_name, field.column_name, field))
-            if old_field.null != field.null:
-                self.ops.append(ChangeNullable(model, field.column_name, is_null=field.null))
-
-            # temprorary solution because field can be changed by operation
-
-            _field = field.clone()
-            if _field.unique and old_field.unique:
-                continue
-            if not _field.unique and not old_field.unique and _field.index == old_field.index:
-                continue
-            
-            if old_field.unique or old_field.index:
-                self.ops.append(DropIndex(model, _field.column_name))
-            if _field.unique or _field.index:
-                self.ops.append(AddIndex(model, _field.column_name, unique=_field.unique))
-
+        return self.migration.append(ChangeFields(model, **fields))
 
     change_columns = change_fields
 
