@@ -3,9 +3,10 @@ from collections.abc import Sequence
 from typing import Any, NamedTuple, cast
 
 import peewee as pw
-from playhouse.reflection import Column as VanilaColumn
+from playhouse.reflection import Column as ColumnSerializer
 
 from peewee_migrate.types import ModelCls
+from peewee_migrate.utils import get_default_constraint
 
 from . import types
 
@@ -51,9 +52,10 @@ FIELD_TO_PARAMS = {
 }
 
 
-class Column(VanilaColumn):
+class FieldSerializer(ColumnSerializer):
     def __init__(self, field, migrator=None):  # noqa
-        super(Column, self).__init__(
+        self.field = field
+        super(FieldSerializer, self).__init__(
             field.name,
             type(field),
             field.field_type,
@@ -79,9 +81,20 @@ class Column(VanilaColumn):
             self.related_name = field.backref
             self.rel_model = "migrator.orm['%s']" % field.rel_model._meta.table_name
 
-    def get_field(self, space=" "):
+    def get_field_parameters(self) -> dict[str, Any]:
+        params = super(FieldSerializer, self).get_field_parameters()
+        params.pop('constraints', None)
+        if self.default is not None:
+            params['default'] = self.default.replace('"', '\\"')
+        if self.field.constraints:
+            default_constraint = get_default_constraint(self.field)
+            if default_constraint is not None:
+                params['constraints'] = '[pmg_ext.Default("%s")]' % default_constraint.value.replace('"', '\\"')
+        return params
+
+    def serialize(self, space=" ") -> str:
         # Generate the field definition for this column.
-        field = super(Column, self).get_field()
+        field = self.get_field()
         module = FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
         name, _, field = [s and s.strip() for s in field.partition("=")]
         return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
@@ -305,13 +318,13 @@ def create_fields(Model, *fields, **kwargs):
     )
 
 
-def drop_fields(Model, *fields, **kwargs):
+def drop_fields(Model, *fields, **kwargs) -> str:
     return "migrator.remove_fields('%s', %s)" % (Model._meta.table_name, ", ".join(map(repr, fields)))
 
 
-def field_to_code(field, space=True, **kwargs):
-    col = Column(field, **kwargs)
-    return col.get_field(" " if space else "")
+def field_to_code(field, space=True, **kwargs) -> str:
+    serializer = FieldSerializer(field, **kwargs)
+    return serializer.serialize(" " if space else "")
 
 
 def compare_fields(field1, field2, **kwargs):

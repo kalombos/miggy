@@ -48,7 +48,9 @@ class PatchedPgDatabase(pw.PostgresqlDatabase):
         self.queries = []
 
     def execute_sql(self, sql, params=None, commit=None) -> Any:
-        self.queries.append(sql)
+        self.queries.append(
+            sql % tuple(params)
+        )
         return super().execute_sql(sql, params, commit)
 
 
