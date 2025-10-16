@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from peewee_migrate import Migrator
+from peewee_migrate import Migrator, types
 from tests.conftest import PatchedPgDatabase
 
 
@@ -9,7 +9,7 @@ def test_remove_fields(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         # also check if it is ok to drop field without dropping indexes before
         name = pw.CharField(unique=True)
         created_at = pw.DateField()
@@ -35,12 +35,12 @@ def test_remove_fk_field(patched_pg_db: PatchedPgDatabase, object_id_name: str |
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(pw.Model):
+    class User(types.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
     @migrator.create_table
-    class Book(pw.Model):
+    class Book(types.Model):
         name = pw.CharField()
         author = pw.ForeignKeyField(User, backref="books", object_id_name=object_id_name)
 

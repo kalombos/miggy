@@ -56,6 +56,17 @@ class CreateModel(MigrateOperation):
         return [lambda: self.model.create_table(safe=False)]
 
 
+class RemoveModel(MigrateOperation):
+    def __init__(self, model: ModelCls) -> None:
+        self.model = model
+
+    def state_forwards(self) -> None:
+        del self.migrator.orm[self.model._meta.table_name]
+
+    def database_forwards(self) -> list[Callable]:
+        return [lambda: self.model.drop_table(safe=False)]
+
+
 class AddIndex(MigrateOperation):
     def __init__(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None) -> None:
         self.model = model
@@ -144,6 +155,73 @@ class AddFields(MigrateOperation):
         for field in self.fields.values():
             ops.append(self.schema_migrator.add_column(self.model._meta.table_name, field.column_name, field))
         return ops
+
+
+class ChangeFields(MigrateOperation):
+    def __init__(self, model: ModelCls, **fields: pw.Field) -> None:
+        self.model = model
+        self.old_fields: dict[str, pw.Field] = {name: getattr(self.model, name).clone() for name in fields}
+        self.fields = fields
+
+    def state_forwards(self) -> None:
+        for name, field in self.fields.items():
+            self.model._meta.add_field(name, field)
+
+    def handle_indexes(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops = []
+        _field = new_field
+        if _field.unique and old_field.unique:
+            return []
+        if not _field.unique and not old_field.unique and _field.index == old_field.index:
+            return []
+
+        if old_field.unique or old_field.index:
+            # It is not good architecture design when you pass migrator through attribute
+            # It should be refactored
+            d = DropIndex(self.model, old_field.column_name)
+            d.migrator = self.migrator
+            _ops.extend(d.database_forwards())
+        if _field.unique or _field.index:
+            a = AddIndex(self.model, _field.column_name, unique=_field.unique)
+            a.migrator = self.migrator
+            _ops.extend(a.database_forwards())
+        return _ops
+
+    def handle_fk(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops = []
+        if isinstance(new_field, pw.ForeignKeyField) and not isinstance(old_field, pw.ForeignKeyField):
+            on_delete = new_field.on_delete if new_field.on_delete else "RESTRICT"
+            on_update = new_field.on_update if new_field.on_update else "RESTRICT"
+            _ops.append(
+                self.schema_migrator.add_foreign_key_constraint(
+                    self.model._meta.table_name,
+                    new_field.column_name,
+                    new_field.rel_model._meta.table_name,
+                    new_field.rel_field.name,
+                    on_delete,
+                    on_update,
+                )
+            )
+        return _ops
+
+    def database_forwards(self) -> list[Operation]:
+        _ops = []
+        model = self.model
+        table_name = model._meta.table_name
+        for name, field in self.fields.items():
+            old_field = self.old_fields[name]
+            old_column_name = old_field.column_name
+
+            if old_column_name != field.column_name:
+                _ops.append(self.schema_migrator.rename_column(table_name, old_column_name, field.column_name))
+
+            _ops.append(self.schema_migrator.alter_column_type(table_name, field.column_name, field))
+            _ops.extend(self.handle_fk(old_field, field))
+            if old_field.null != field.null:
+                _operation = self.schema_migrator.drop_not_null if field.null else self.schema_migrator.add_not_null
+                _ops.append(_operation(table_name, field.column_name))
+            _ops.extend(self.handle_indexes(old_field, field))
+        return _ops
 
 
 class RemoveFields(MigrateOperation):
@@ -280,25 +358,6 @@ class SchemaMigrator(ScM):
         """Select database schema"""
         raise NotImplementedError()
 
-    def drop_table(self, model, cascade=True):
-        return lambda: model.drop_table(cascade=cascade)
-
-    @operation
-    def change_column(self, table, column_name, field):
-        """Change column."""
-        operations = [self.alter_change_column(table, column_name, field)]
-        if not field.null:
-            operations.extend([self.add_not_null(table, column_name)])
-        return operations
-
-    def alter_change_column(self, table, column, field):
-        """Support change columns."""
-        ctx = self.make_context()
-        field_null, field.null = field.null, True
-        ctx = self._alter_table(ctx, table).literal(" ALTER COLUMN ").sql(field.ddl(ctx))
-        field.null = field_null
-        return ctx
-
     @operation
     def sql(self, sql, *params):
         """Execute raw SQL."""
@@ -348,13 +407,6 @@ class PostgresqlMigrator(SchemaMigrator, PgM):
         """Select database schema"""
         return self.set_search_path(schema)
 
-    def alter_change_column(self, table, column_name, field):
-        """Support change columns."""
-        context = super(PostgresqlMigrator, self).alter_change_column(table, column_name, field)
-        context._sql.insert(-1, "TYPE")
-        context._sql.insert(-1, " ")
-        return context
-
 
 class SqliteMigrator(SchemaMigrator, SqM):
     """Support the migrations in sqlite."""
@@ -363,7 +415,7 @@ class SqliteMigrator(SchemaMigrator, SqM):
         """SQLite doesnt support cascade syntax by default."""
         return lambda: model.drop_table(cascade=False)
 
-    def alter_change_column(self, table, column, field):
+    def alter_column_type(self, table, column, field):
         """Support change columns."""
         return self._update_column(table, column, lambda a, b: b)
 
@@ -430,10 +482,10 @@ class Migrator(object):
         """Clean the operations."""
         self.migration.clean()
 
-    def create_model(self, model):
+    def create_model(self, model: ModelCls) -> ModelCls:
         """Create model and table in database.
 
-        >> migrator.create_table(model)
+        >> migrator.create_model(model)
         """
         self.migration.append(CreateModel(model))
         return model
@@ -441,81 +493,40 @@ class Migrator(object):
     create_table = create_model
 
     @get_model
-    def drop_table(self, model, cascade=True):
+    def remove_model(self, model: ModelCls) -> None:
         """Drop model and table from database.
 
-        >> migrator.drop_table(model, cascade=True)
+        >> migrator.remove_model(model)
         """
-        del self.orm[model._meta.table_name]
-        self.migration.append(self.migrator.drop_table(model, cascade))
 
-    remove_model = drop_table
+        self.migration.append(RemoveModel(model))
+
+    drop_table = remove_model
 
     @get_model
-    def add_fields(self, model: ModelCls, **fields: Any):
+    def add_fields(self, model: ModelCls, **fields: Any) -> None:
         """Create new fields."""
         self.migration.append(AddFields(model, **fields))
 
     add_columns = add_fields
 
     @get_model
-    def change_columns(self, model, **fields):
+    def change_fields(self, model: ModelCls, **fields: pw.Field) -> None:
         """Change fields."""
-        for name, field in fields.items():
-            old_field = model._meta.fields.get(name, field)
-            old_column_name = old_field and old_field.column_name
 
-            model._meta.add_field(name, field)
+        return self.migration.append(ChangeFields(model, **fields))
 
-            if isinstance(old_field, pw.ForeignKeyField):
-                self.ops.append(self.migrator.drop_foreign_key_constraint(model._meta.table_name, old_column_name))
-
-            if old_column_name != field.column_name:
-                self.ops.append(self.migrator.rename_column(model._meta.table_name, old_column_name, field.column_name))
-
-            if isinstance(field, pw.ForeignKeyField):
-                on_delete = field.on_delete if field.on_delete else "RESTRICT"
-                on_update = field.on_update if field.on_update else "RESTRICT"
-                self.ops.append(
-                    self.migrator.add_foreign_key_constraint(
-                        model._meta.table_name,
-                        field.column_name,
-                        field.rel_model._meta.table_name,
-                        field.rel_field.name,
-                        on_delete,
-                        on_update,
-                    )
-                )
-                continue
-
-            self.ops.append(self.migrator.change_column(model._meta.table_name, field.column_name, field))
-
-            if field.unique == old_field.unique:
-                continue
-
-            if field.unique:
-                index = (field.column_name,), field.unique
-                self.ops.append(self.schema_migrator.add_model_index(model, *index))
-                model._meta.indexes.append(index)
-            else:
-                index = (field.column_name,), old_field.unique
-                # TODO It should be fixed to index_name instead of *index
-                self.ops.append(self.schema_migrator.drop_index(model._meta.table_name, *index))
-                model._meta.indexes.remove(index)
-
-        return model
-
-    change_fields = change_columns
+    change_columns = change_fields
 
     @get_model
-    def remove_fields(self, model, *names: str, cascade: bool = False) -> Any:
+    def remove_fields(self, model, *names: str, cascade: bool = False) -> None:
         """Remove fields from model."""
         self.migration.append(RemoveFields(model, *names, cascade=cascade))
 
     drop_columns = remove_fields
 
     @get_model
-    def rename_field(self, model: ModelCls, old_name: str, new_name: str):
+    def rename_field(self, model: ModelCls, old_name: str, new_name: str) -> None:
         """Rename field in model."""
 
         self.migration.append(RenameField(model, old_name, new_name))
@@ -523,35 +534,34 @@ class Migrator(object):
     rename_column = rename_field
 
     @get_model
-    def rename_model(self, model: ModelCls, new_name: str) -> Operation:
-        return self.migration.append(RenameModel(model, new_name))
+    def rename_model(self, model: ModelCls, new_name: str) -> None:
+        self.migration.append(RenameModel(model, new_name))
 
     rename_table = rename_model
 
     @get_model
-    def add_index(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None):
+    def add_index(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None) -> None:
         """Create indexes."""
         self.migration.append(AddIndex(model, *columns, unique=unique, where=where))
 
     @get_model
-    def drop_index(self, model: ModelCls, *columns: str):
+    def drop_index(self, model: ModelCls, *columns: str) -> None:
         """Drop indexes."""
         self.migration.append(DropIndex(model, *columns))
 
     @get_model
-    def add_not_null(self, model: ModelCls, *names: str):
+    def add_not_null(self, model: ModelCls, *names: str) -> None:
         """Add not null."""
         self.migration.append(ChangeNullable(model, *names, is_null=False))
 
     @get_model
-    def drop_not_null(self, model: ModelCls, *names: str):
+    def drop_not_null(self, model: ModelCls, *names: str) -> None:
         """Drop not null."""
         self.migration.append(ChangeNullable(model, *names, is_null=True))
 
     @get_model
-    def add_default(self, model, name, default):
+    def add_default(self, model: ModelCls, name: str, default: Any) -> None:
         """Add default."""
         field = model._meta.fields[name]
         model._meta.defaults[field] = field.default = default
         self.migration.append(self.migrator.apply_default(model._meta.table_name, name, field))
-        return model
