@@ -10,12 +10,14 @@ def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
     @migrator.create_model
     class User(types.Model):
         name = pw.CharField()
-        created_at = pw.DateField()
+        created_at = pw.DateField(constraints=[pw.SQL("DEFAULT now()")])
 
     assert User == migrator.orm["user"]
 
     migrator.run()
     assert patched_pg_db.queries == [
         'CREATE TABLE "user" ("id" SERIAL NOT NULL PRIMARY KEY, "name" VARCHAR(255) NOT NULL, '
-        '"created_at" DATE NOT NULL)'
+        '"created_at" DATE NOT NULL DEFAULT now())'
     ]
+
+    assert User.created_at.constraints[0].sql == "DEFAULT now()"

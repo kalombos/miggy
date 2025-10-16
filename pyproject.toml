@@ -47,7 +47,6 @@ dev = [
     "ruff==0.14.0",
     "poethepoet==0.37.0",
     "mypy==1.18.2",
-    "types-peewee"
 ]
 
 
@@ -63,6 +62,7 @@ pw_migrate = "peewee_migrate.cli:cli"
 
 [tool.mypy]
 exclude = "(venv|migrations)"
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120

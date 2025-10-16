@@ -70,7 +70,7 @@ def test_on_real_migrations(migrations_dir: Path):
         name = pw.CharField(default="red")
 
     code = model_to_code(Color)
-    assert "DEFAULT 'red'" in code
+    assert "name = pw.CharField(default='red', max_length=255)" in code
 
 
 def test_auto_postgresext():
