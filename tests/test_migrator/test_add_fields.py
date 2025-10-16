@@ -44,12 +44,12 @@ def test_add_fields__default_constraint(patched_pg_db: PatchedPgDatabase) -> Non
     migrator.run()
     patched_pg_db.clear_queries()
 
-    migrator.add_fields("user", created_at = pw.DateField(constraints=[pw.SQL("DEFAULT now()")]))
+    migrator.add_fields("user", created_at=pw.DateField(constraints=[pw.SQL("DEFAULT now()")]))
     migrator.run()
 
     assert patched_pg_db.queries == [
         'ALTER TABLE "user" ADD COLUMN "created_at" DATE DEFAULT now()',
-        'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL'
+        'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL',
     ]
 
 
@@ -63,11 +63,11 @@ def test_add_fields__default_value(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.run()
     patched_pg_db.clear_queries()
 
-    migrator.add_fields("user", age = pw.IntegerField(default=5))
+    migrator.add_fields("user", age=pw.IntegerField(default=5))
     migrator.run()
 
     assert patched_pg_db.queries == [
         'ALTER TABLE "user" ADD COLUMN "age" INTEGER',
-        'UPDATE "user" SET "age" = %s',
-        'ALTER TABLE "user" ALTER COLUMN "age" SET NOT NULL'
+        'UPDATE "user" SET "age" = 5',
+        'ALTER TABLE "user" ALTER COLUMN "age" SET NOT NULL',
     ]

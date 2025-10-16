@@ -23,7 +23,6 @@ Some examples (model - class or model name)::
 
 import datetime as dt
 import peewee as pw
-import peewee_migrate.ext as pmg_ext
 from decimal import ROUND_HALF_EVEN
 
 

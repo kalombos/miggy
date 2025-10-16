@@ -6,7 +6,7 @@ import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
 from peewee_migrate.types import ModelCls
-from peewee_migrate.utils import get_default_constraint
+from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
 
 from . import types
 
@@ -83,13 +83,14 @@ class FieldSerializer(ColumnSerializer):
 
     def get_field_parameters(self) -> dict[str, Any]:
         params = super(FieldSerializer, self).get_field_parameters()
-        params.pop('constraints', None)
-        if self.default is not None:
-            params['default'] = self.default.replace('"', '\\"')
+        # original method put value from default in constraints so override this logic
+        params.pop("constraints", None)
         if self.field.constraints:
             default_constraint = get_default_constraint(self.field)
             if default_constraint is not None:
-                params['constraints'] = '[pmg_ext.Default("%s")]' % default_constraint.value.replace('"', '\\"')
+                params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
+        if self.default is not None:
+            params["default"] = self.default
         return params
 
     def serialize(self, space=" ") -> str:
@@ -329,7 +330,7 @@ def field_to_code(field, space=True, **kwargs) -> str:
 
 def compare_fields(field1, field2, **kwargs):
     field_cls1, field_cls2 = type(field1), type(field2)
-    if field_cls1 != field_cls2:  # noqa
+    if field_cls1 != field_cls2 or get_default_constraint_value(field1) != get_default_constraint_value(field2):
         return {"cls": True}
 
     params1 = field_to_params(field1)
