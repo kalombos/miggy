@@ -5,6 +5,9 @@ from typing import Any
 import peewee as pw
 import playhouse.db_url
 import pytest
+from playhouse.db_url import connect
+
+from peewee_migrate.migrator import Migrator
 
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 
@@ -48,7 +51,8 @@ class PatchedPgDatabase(pw.PostgresqlDatabase):
         self.queries = []
 
     def execute_sql(self, sql, params=None, commit=None) -> Any:
-        self.queries.append(sql)
+        _sql = sql if params is None else sql % tuple(params)
+        self.queries.append(_sql)
         return super().execute_sql(sql, params, commit)
 
 
@@ -60,3 +64,8 @@ def patched_pg_db() -> Generator[PatchedPgDatabase, Any, None]:
         transaction.rollback()
     db.close()
     db.clear_queries()
+
+
+@pytest.fixture
+def sq_migrator() -> Migrator:
+    return Migrator(connect("sqlite:///:memory:"))

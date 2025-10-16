@@ -4,6 +4,7 @@ import peewee as pw
 import pytest
 
 from peewee_migrate import Migrator, types
+from peewee_migrate.utils import Default
 from tests.conftest import PatchedPgDatabase
 
 
@@ -204,3 +205,54 @@ def test_change_integer_field_to_fk(patched_pg_db: PatchedPgDatabase) -> None:
         ),
         'CREATE INDEX "book_author_id" ON "book" (author_id)',
     ]
+
+
+@pytest.mark.parametrize(
+    ("params_before", "params_after", "expected"),
+    [
+        (
+            {"column_name": "also_check_renaming"},
+            {"constraints": [pw.SQL("DEFAULT 5")]},
+            [
+                'ALTER TABLE "user" RENAME COLUMN "also_check_renaming" TO "age"',
+                'ALTER TABLE "user" ALTER COLUMN "age" SET DEFAULT 5',
+            ],
+        ),
+        (
+            {"constraints": [pw.SQL("DEFAULT 5")]},
+            {"constraints": [pw.SQL("DEFAULT 5")]},
+            [],
+        ),
+        (
+            {"constraints": [pw.SQL("DEFAULT 5")]},
+            {},
+            ['ALTER TABLE "user" ALTER COLUMN "age" DROP DEFAULT'],
+        ),
+        (
+            {"constraints": [Default("5")]},
+            {},
+            ['ALTER TABLE "user" ALTER COLUMN "age" DROP DEFAULT'],
+        ),
+        (
+            {},
+            {"constraints": [Default("6")]},
+            ['ALTER TABLE "user" ALTER COLUMN "age" SET DEFAULT 6'],
+        ),
+    ],
+)
+def test_change_default_constraints(
+    params_before: dict[str, Any], params_after: dict[str, Any], expected: list[str], patched_pg_db: PatchedPgDatabase
+) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(types.Model):
+        name = pw.CharField()
+        age = pw.IntegerField(**params_before)
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+    migrator.change_fields("user", age=pw.IntegerField(**params_after))
+    migrator.run()
+
+    assert patched_pg_db.queries == expected

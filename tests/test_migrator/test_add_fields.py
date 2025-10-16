@@ -15,7 +15,7 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.run()
     patched_pg_db.clear_queries()
 
-    migrator.add_columns("user", last_name=pw.CharField(null=True, unique=True), age=pw.IntegerField(null=True))
+    migrator.add_fields("user", last_name=pw.CharField(null=True, unique=True), age=pw.IntegerField(null=True))
     migrator.run()
 
     assert patched_pg_db.queries == [
@@ -32,3 +32,42 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
     age = migrator.orm["user"].age
     assert isinstance(age, pw.IntegerField)
     assert age.null
+
+
+def test_add_fields__default_constraint(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(types.Model):
+        name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.add_fields("user", created_at=pw.DateField(constraints=[pw.SQL("DEFAULT now()")]))
+    migrator.run()
+
+    assert patched_pg_db.queries == [
+        'ALTER TABLE "user" ADD COLUMN "created_at" DATE DEFAULT now()',
+        'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL',
+    ]
+
+
+def test_add_fields__default_value(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(types.Model):
+        name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.add_fields("user", age=pw.IntegerField(default=5))
+    migrator.run()
+
+    assert patched_pg_db.queries == [
+        'ALTER TABLE "user" ADD COLUMN "age" INTEGER',
+        'UPDATE "user" SET "age" = 5',
+        'ALTER TABLE "user" ALTER COLUMN "age" SET NOT NULL',
+    ]

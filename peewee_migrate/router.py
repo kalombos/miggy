@@ -93,7 +93,7 @@ class BaseRouter(object):
 
             migrate = compile_migrations(self.migrator, models)
             if not migrate:
-                return self.logger.warn("No changes found.")
+                return self.logger.warning("No changes found.")
 
             rollback = compile_migrations(self.migrator, models, reverse=True)
 

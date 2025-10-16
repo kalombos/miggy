@@ -19,6 +19,7 @@ from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
 from peewee_migrate.types import ModelCls
+from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
 
 
 class MigrateOperation:
@@ -204,6 +205,32 @@ class ChangeFields(MigrateOperation):
             )
         return _ops
 
+    def handle_default_constraint(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        old_value = get_default_constraint_value(old_field) or ""
+        new_value = get_default_constraint_value(new_field) or ""
+        if old_value != new_value:
+            if new_value:
+                return [
+                    self.schema_migrator.add_column_default(
+                        self.model._meta.table_name, new_field.column_name, new_value
+                    )
+                ]
+            else:
+                return [
+                    self.schema_migrator.drop_column_default(
+                        self.model._meta.table_name,
+                        new_field.column_name,
+                    )
+                ]
+        return []
+
+    def handle_type(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        if type(old_field) is not type(new_field):
+            return [
+                self.schema_migrator.alter_column_type(self.model._meta.table_name, new_field.column_name, new_field)
+            ]
+        return []
+
     def database_forwards(self) -> list[Operation]:
         _ops = []
         model = self.model
@@ -215,8 +242,9 @@ class ChangeFields(MigrateOperation):
             if old_column_name != field.column_name:
                 _ops.append(self.schema_migrator.rename_column(table_name, old_column_name, field.column_name))
 
-            _ops.append(self.schema_migrator.alter_column_type(table_name, field.column_name, field))
+            _ops.extend(self.handle_type(old_field, field))
             _ops.extend(self.handle_fk(old_field, field))
+            _ops.extend(self.handle_default_constraint(old_field, field))
             if old_field.null != field.null:
                 _operation = self.schema_migrator.drop_not_null if field.null else self.schema_migrator.add_not_null
                 _ops.append(_operation(table_name, field.column_name))
@@ -371,10 +399,49 @@ class SchemaMigrator(ScM):
             field.name = name
         return op
 
-    # TODO add column shoud be overrided to use add_model_index instead of add_index.
-    # Because create_table and the library use only ModelIndex for creating
-    # def add_column(self, table, column_name, field, **kwargs):
-    #     pass
+    @operation
+    def add_column(self, table, column_name, field):
+        # Adding a column is complicated by the fact that if there are rows
+        # present and the field is non-null, then we need to first add the
+        # column as a nullable field, then set the value, then add a not null
+        # constraint.
+        default_constraint = get_default_constraint(field)
+        if not field.null and field.default is None and not default_constraint:
+            raise ValueError("%s is not null but has no default" % column_name)
+
+        is_foreign_key = isinstance(field, pw.ForeignKeyField)
+        if is_foreign_key and not field.rel_field:
+            raise ValueError("Foreign keys must specify a `field`.")
+
+        operations = [self.alter_add_column(table, column_name, field)]
+
+        # In the event the field is *not* nullable and has no default constraint, update with the default
+        # value and set not null.
+        if not field.null:
+            if not default_constraint:
+                operations.append(
+                    self.apply_default(table, column_name, field),
+                )
+
+            operations.append(self.add_not_null(table, column_name))
+
+        if is_foreign_key and self.explicit_create_foreign_key:
+            operations.append(
+                self.add_foreign_key_constraint(
+                    table,
+                    column_name,
+                    field.rel_model._meta.table_name,
+                    field.rel_field.column_name,
+                    field.on_delete,
+                    field.on_update,
+                )
+            )
+
+        if field.index or field.unique:
+            using = getattr(field, "index_type", None)
+            operations.append(self.add_index(table, (column_name,), field.unique, using))
+
+        return operations
 
     @operation
     def add_model_index(
