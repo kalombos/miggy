@@ -2,7 +2,6 @@ import peewee as pw
 import pytest
 
 from peewee_migrate.auto import create_fields, diff_one
-from peewee_migrate.migrator import Migrator
 from peewee_migrate.types import Model
 
 
@@ -19,7 +18,7 @@ from peewee_migrate.types import Model
         pytest.param(pw.IntegerField(null=True), """field=pw.IntegerField(null=True)""", id="add_nullable"),
     ],
 )
-def test_add_fields(sq_migrator: Migrator, test_field: pw.Field, expected: str) -> None:
+def test_add_fields(test_field: pw.Field, expected: str) -> None:
     class OldTest(Model):
         first_name = pw.CharField()
 
@@ -33,6 +32,6 @@ def test_add_fields(sq_migrator: Migrator, test_field: pw.Field, expected: str) 
         class Meta:
             table_name = "test"
 
-    code = diff_one(Test, OldTest, migrator=sq_migrator)[0]
+    code = diff_one(Test, OldTest)[0]
     assert code == create_fields(Test, Test.field)
     assert expected in code

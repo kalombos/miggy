@@ -303,7 +303,7 @@ def compile_migrations(migrator, models, reverse=False):
     if reverse:
         source, models = models, source
 
-    migrations = diff_many(models, source, migrator, reverse=reverse)
+    migrations = diff_many(models, source, reverse=reverse)
     if not migrations:
         return False
 
