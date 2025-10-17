@@ -42,8 +42,8 @@ FIELD_TO_PARAMS = {
 }
 
 
-def field_to_code(field, space=True, **kwargs) -> str:
-    serializer = FieldSerializer(field, **kwargs)
+def field_to_code(field, space=True) -> str:
+    serializer = FieldSerializer(field)
     return serializer.serialize(" " if space else "")
 
 
@@ -194,7 +194,7 @@ def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str]
     return create_changes, drop_changes
 
 
-def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
+def diff_one(model1: ModelCls, model2: ModelCls) -> list[str]:
     """Find difference between given peewee models."""
     changes = []
 
@@ -210,7 +210,7 @@ def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
     names1 = set(fields1) - set(fields2)
     if names1:
         fields = [fields1[name] for name in names1]
-        changes.append(create_fields(model1, *fields, **kwargs))
+        changes.append(create_fields(model1, *fields))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)
@@ -225,7 +225,7 @@ def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
             fields_.append(field1)
 
     if fields_:
-        changes.append(change_fields(model1, *fields_, **kwargs))
+        changes.append(change_fields(model1, *fields_))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
@@ -233,7 +233,7 @@ def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
     return changes
 
 
-def diff_many(models1, models2, migrator=None, reverse=False):
+def diff_many(models1, models2, reverse=False):
     """Calculate changes for migrations from models2 to models1."""
     models1 = pw.sort_models(models1)
     models2 = pw.sort_models(models2)
@@ -250,11 +250,11 @@ def diff_many(models1, models2, migrator=None, reverse=False):
     for name, model1 in models1.items():
         if name not in models2:
             continue
-        changes += diff_one(model1, models2[name], migrator=migrator)
+        changes += diff_one(model1, models2[name])
 
     # Add models
     for name in [m for m in models1 if m not in models2]:
-        changes.append(create_model(models1[name], migrator=migrator))
+        changes.append(create_model(models1[name]))
 
     # Remove models
     for name in [m for m in models2 if m not in models1]:
@@ -263,7 +263,7 @@ def diff_many(models1, models2, migrator=None, reverse=False):
     return changes
 
 
-def model_to_code(Model, **kwargs):
+def model_to_code(Model):
     template = """class {classname}(pw.Model):
 {fields}
 
@@ -294,15 +294,15 @@ def model_to_code(Model, **kwargs):
     return template.format(classname=Model.__name__, fields=fields, meta=meta)
 
 
-def create_model(Model, **kwargs):
-    return "@migrator.create_model\n" + model_to_code(Model, **kwargs)
+def create_model(Model):
+    return "@migrator.create_model\n" + model_to_code(Model)
 
 
-def remove_model(Model, **kwargs):
+def remove_model(Model):
     return "migrator.remove_model('%s')" % Model._meta.table_name
 
 
-def create_fields(Model, *fields, **kwargs):
+def create_fields(Model, *fields):
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         Model._meta.table_name,
@@ -310,11 +310,11 @@ def create_fields(Model, *fields, **kwargs):
     )
 
 
-def drop_fields(Model, *fields, **kwargs) -> str:
+def drop_fields(Model, *fields) -> str:
     return "migrator.remove_fields('%s', %s)" % (Model._meta.table_name, ", ".join(map(repr, fields)))
 
 
-def change_fields(Model, *fields, **kwargs):
+def change_fields(Model, *fields):
     return "migrator.change_fields('%s', %s)" % (
         Model._meta.table_name,
         ("," + NEWLINE).join([field_to_code(f, False) for f in fields]),

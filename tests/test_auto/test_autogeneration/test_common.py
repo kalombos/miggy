@@ -14,7 +14,6 @@ from playhouse.postgres_ext import (
 
 from peewee_migrate.auto import create_model, diff_many, diff_one, model_to_code
 from peewee_migrate.cli import get_router
-from peewee_migrate.migrator import Migrator
 from peewee_migrate.types import Model
 
 
@@ -30,7 +29,7 @@ def test_on_real_migrations(migrations_dir: Path):
     assert code
     assert 'table_name = "person"' in code
 
-    changes = diff_many(models, [], migrator=migrator)
+    changes = diff_many(models, [])
     assert len(changes) == 2
 
     class Person1(Model):
@@ -42,7 +41,7 @@ def test_on_real_migrations(migrations_dir: Path):
         class Meta:
             table_name = "person"
 
-    changes = diff_one(Person1, Person_, migrator=migrator)
+    changes = diff_one(Person1, Person_)
     assert len(changes) == 3
     assert "on_delete='CASCADE'" in changes[0]
     assert "backref='persons'" in changes[0]
@@ -60,7 +59,7 @@ def test_on_real_migrations(migrations_dir: Path):
         class Meta:
             table_name = "person"
 
-    changes = diff_one(Person_, Person2, migrator=migrator)
+    changes = diff_one(Person_, Person2)
     assert not changes
 
     class Color(pw.Model):
@@ -71,16 +70,16 @@ def test_on_real_migrations(migrations_dir: Path):
     assert "name = pw.CharField(default='red', max_length=255)" in code
 
 
-def test_remove_fields_w_constraint(sq_migrator: Migrator) -> None:
+def test_remove_fields_w_constraint() -> None:
     class Test(Model):
         first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
 
-    code = diff_many([Test], [], migrator=sq_migrator)[0]
+    code = diff_many([Test], [])[0]
     assert code == create_model(Test)
     assert """first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in code
 
 
-def test_drop_field_w_constraint(sq_migrator: Migrator) -> None:
+def test_drop_field_w_constraint() -> None:
     class OldTest(Model):
         first_name = pw.CharField()
         age = pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])
@@ -94,7 +93,7 @@ def test_drop_field_w_constraint(sq_migrator: Migrator) -> None:
         class Meta:
             table_name = "test"
 
-    code = diff_one(Test, OldTest, migrator=sq_migrator)[0]
+    code = diff_one(Test, OldTest)[0]
     assert code == "migrator.remove_fields('test', 'age')"
 
 

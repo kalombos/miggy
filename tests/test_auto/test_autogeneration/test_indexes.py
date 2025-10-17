@@ -2,16 +2,9 @@ from typing import Any
 
 import peewee as pw
 import pytest
-from playhouse.db_url import connect
 
 from peewee_migrate.auto import IndexMeta, IndexMetaExtractor, add_index, diff_one, extract_index_meta, model_to_code
-from peewee_migrate.migrator import Migrator
 from peewee_migrate.types import Model
-
-
-@pytest.fixture
-def migrator() -> Migrator:
-    return Migrator(connect("sqlite:///:memory:"))
 
 
 class _DoesNotMatter(Model):
@@ -133,7 +126,9 @@ def test_extract_index_meta__advanced() -> None:
     ],
 )
 def test_field_index(
-    before_params: dict[str, Any], after_params: dict[str, Any], changes: list[str], migrator: Migrator
+    before_params: dict[str, Any],
+    after_params: dict[str, Any],
+    changes: list[str],
 ) -> None:
     class _Test(Model):
         first_name = pw.CharField(**before_params)
@@ -141,7 +136,7 @@ def test_field_index(
     class Test(Model):
         first_name = pw.CharField(**after_params)
 
-    assert diff_one(Test, _Test, migrator=migrator) == changes
+    assert diff_one(Test, _Test) == changes
 
 
 @pytest.mark.parametrize(
@@ -216,9 +211,7 @@ def test_field_index(
         ),
     ],
 )
-def test_tuple_indexes__from_meta(
-    indexes_before: list[Any], indexes_after: list[Any], migrator: Migrator, changes: list[str]
-) -> None:
+def test_tuple_indexes__from_meta(indexes_before: list[Any], indexes_after: list[Any], changes: list[str]) -> None:
     class _Test(Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
@@ -235,7 +228,7 @@ def test_tuple_indexes__from_meta(
             table_name = "test"
             indexes = indexes_after
 
-    assert diff_one(Test, _Test, migrator=migrator) == changes
+    assert diff_one(Test, _Test) == changes
 
 
 @pytest.mark.parametrize(
@@ -269,9 +262,7 @@ def test_tuple_indexes__from_meta(
         ),
     ],
 )
-def test_advanced_indexes(
-    before_kwargs: dict[str, Any], after_kwargs: dict[str, Any], migrator: Migrator, changes: list[str]
-) -> None:
+def test_advanced_indexes(before_kwargs: dict[str, Any], after_kwargs: dict[str, Any], changes: list[str]) -> None:
     class _Test(Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
@@ -290,7 +281,7 @@ def test_advanced_indexes(
 
     Test.add_index(Test.first_name, Test.last_name, **after_kwargs)
 
-    assert diff_one(Test, _Test, migrator=migrator) == changes
+    assert diff_one(Test, _Test) == changes
 
 
 def test_composite_unique_index__create_model():

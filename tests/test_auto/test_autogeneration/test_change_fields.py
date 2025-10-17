@@ -2,7 +2,6 @@ import peewee as pw
 import pytest
 
 from peewee_migrate.auto import change_fields, diff_one
-from peewee_migrate.migrator import Migrator
 from peewee_migrate.types import Model
 
 
@@ -43,9 +42,7 @@ from peewee_migrate.types import Model
         ),
     ],
 )
-def test_change_fields(
-    age_field_before: pw.Field, age_field_after: pw.Field, expected: str, sq_migrator: Migrator
-) -> None:
+def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, expected: str) -> None:
     class OldTest(Model):
         first_name = pw.CharField()
         age = age_field_before
@@ -60,6 +57,6 @@ def test_change_fields(
         class Meta:
             table_name = "test"
 
-    code = diff_one(Test, OldTest, migrator=sq_migrator)[0]
+    code = diff_one(Test, OldTest)[0]
     assert code == change_fields(Test, Test.age)
     assert expected in code
