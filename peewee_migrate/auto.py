@@ -32,28 +32,44 @@ def fk_to_params(field):
     return params
 
 
-def dtf_to_params(field):
-    params = {}
-    if not isinstance(field.formats, list):
-        params["formats"] = field.formats
-    return params
-
-
 FIELD_TO_PARAMS = {
     pw.CharField: lambda f: {"max_length": f.max_length},
     pw.DecimalField: lambda f: {
         "max_digits": f.max_digits,
         "decimal_places": f.decimal_places,
-        "auto_round": f.auto_round,
-        "rounding": f.rounding,
     },
     pw.ForeignKeyField: fk_to_params,
-    pw.DateTimeField: dtf_to_params,
 }
 
 
+def field_to_code(field, space=True, **kwargs) -> str:
+    serializer = FieldSerializer(field, **kwargs)
+    return serializer.serialize(" " if space else "")
+
+
+def _get_default(field: pw.Field) -> Any:
+    if field.default is not None and not callable(field.default):
+        return field.default
+    return None
+
+
+def field_to_params(field: pw.Field) -> dict[str, Any]:
+    params = FIELD_TO_PARAMS.get(type(field), lambda f: {})(field)
+    params["type"] = type(field)
+    params["null"] = field.null
+    params["column_name"] = field.column_name
+    params["default"] = _get_default(field)
+    params["default_constraint"] = get_default_constraint_value(field)
+    params["index"] = field.index and not field.unique, field.unique
+    return params
+
+
+def fields_not_equal(field1, field2) -> bool:
+    return field_to_params(field1) != field_to_params(field2)
+
+
 class FieldSerializer(ColumnSerializer):
-    def __init__(self, field, migrator=None):  # noqa
+    def __init__(self, field: pw.Field) -> None:
         self.field = field
         super(FieldSerializer, self).__init__(
             field.name,
@@ -203,38 +219,13 @@ def diff_one(model1: ModelCls, model2: ModelCls, **kwargs) -> list[str]:
 
     # Change fields
     fields_ = []
-    nulls_ = []
-    indexes_ = []
     for name in set(fields1) - names1 - names2:
         field1, field2 = fields1[name], fields2[name]
-        diff = compare_fields(field1, field2)
-        null = diff.pop("null", None)
-        index = diff.pop("index", None)
-
-        if diff:
+        if fields_not_equal(field1, field2):
             fields_.append(field1)
-
-        if null is not None:
-            nulls_.append((name, null))
-
-        if index is not None:
-            indexes_.append((name, index[0], index[1]))
 
     if fields_:
         changes.append(change_fields(model1, *fields_, **kwargs))
-
-    for name, null in nulls_:
-        changes.append(change_not_null(model1, name, null))
-
-    # Single-column indexes
-    # https://docs.peewee-orm.com/en/latest/peewee/models.html#single-column-indexes-and-constraints
-    for name, index, unique in indexes_:
-        if index is True or unique is True:
-            if fields2[name].unique or fields2[name].index:
-                changes.append(drop_index(model1, name))
-            changes.append(add_index(model1, name, unique=unique))
-        else:
-            changes.append(drop_index(model1, name))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
@@ -280,7 +271,7 @@ def model_to_code(Model, **kwargs):
 """
     fields = INDENT + NEWLINE.join(
         [
-            field_to_code(field, **kwargs)
+            field_to_code(field)
             for field in Model._meta.sorted_fields
             if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
         ]
@@ -315,45 +306,12 @@ def create_fields(Model, *fields, **kwargs):
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         Model._meta.table_name,
-        NEWLINE + ("," + NEWLINE).join([field_to_code(field, False, **kwargs) for field in fields]),
+        NEWLINE + ("," + NEWLINE).join([field_to_code(field, False) for field in fields]),
     )
 
 
 def drop_fields(Model, *fields, **kwargs) -> str:
     return "migrator.remove_fields('%s', %s)" % (Model._meta.table_name, ", ".join(map(repr, fields)))
-
-
-def field_to_code(field, space=True, **kwargs) -> str:
-    serializer = FieldSerializer(field, **kwargs)
-    return serializer.serialize(" " if space else "")
-
-
-def compare_fields(field1, field2, **kwargs):
-    field_cls1, field_cls2 = type(field1), type(field2)
-    if field_cls1 != field_cls2 or get_default_constraint_value(field1) != get_default_constraint_value(field2):
-        return {"cls": True}
-
-    params1 = field_to_params(field1)
-    params1["null"] = field1.null
-    params2 = field_to_params(field2)
-    params2["null"] = field2.null
-
-    return dict(set(params1.items()) - set(params2.items()))
-
-
-def field_to_params(field, **kwargs):
-    params = FIELD_TO_PARAMS.get(type(field), lambda f: {})(field)
-    if (
-        field.default is not None
-        and not callable(field.default)
-        and isinstance(field.default, collections.abc.Hashable)
-    ):
-        params["default"] = field.default
-
-    params["index"] = field.index and not field.unique, field.unique
-
-    params.pop("backref", None)  # Ignore backref
-    return params
 
 
 def change_fields(Model, *fields, **kwargs):
