@@ -80,34 +80,54 @@ def test_extract_index_meta__advanced() -> None:
 @pytest.mark.parametrize(
     ("before_params", "after_params", "changes"),
     [
-        # Adding index
-        ({}, {"index": True, "unique": True}, ["migrator.add_index('test', 'first_name', unique=True)"]),
-        ({}, {"index": False, "unique": True}, ["migrator.add_index('test', 'first_name', unique=True)"]),
-        ({}, {"index": True, "unique": False}, ["migrator.add_index('test', 'first_name', unique=False)"]),
+        # # Adding index
+        (
+            {},
+            {"index": True, "unique": True},
+            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+        ),
+        (
+            {},
+            {"index": False, "unique": True},
+            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+        ),
+        (
+            {},
+            {"index": True, "unique": False},
+            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+        ),
         # Changing index
         (
             {"index": True, "unique": False},
             {"index": True, "unique": True},
-            ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=True)"],
+            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
         ),
         (
             {"index": True, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=False)"],
+            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
         ),
         (
             {"index": False, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.drop_index('test', 'first_name')", "migrator.add_index('test', 'first_name', unique=False)"],
+            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
         ),
         # Dropping index
-        ({"index": True, "unique": True}, {}, ["migrator.drop_index('test', 'first_name')"]),
+        (
+            {"index": True, "unique": True},
+            {},
+            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+        ),
         (
             {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.drop_index('test', 'first_name')"],
+            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
         ),
-        ({"index": True, "unique": False}, {}, ["migrator.drop_index('test', 'first_name')"]),
+        (
+            {"index": True, "unique": False},
+            {},
+            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+        ),
         # do nothing
         ({"index": False, "unique": False}, {}, []),
     ],

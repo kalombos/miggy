@@ -193,7 +193,7 @@ def test_change_integer_field_to_fk(patched_pg_db: PatchedPgDatabase) -> None:
 
     migrator.run()
     patched_pg_db.clear_queries()
-    migrator.change_fields("book", author=pw.ForeignKeyField(User))
+    migrator.change_fields("book", author=pw.ForeignKeyField(User, on_delete="RESTRICT"))
     migrator.run()
 
     assert patched_pg_db.queries == [
@@ -201,7 +201,7 @@ def test_change_integer_field_to_fk(patched_pg_db: PatchedPgDatabase) -> None:
         'ALTER TABLE "book" ALTER COLUMN "author_id" TYPE INTEGER',
         (
             'ALTER TABLE "book" ADD CONSTRAINT "fk_book_author_id_refs_user" '
-            'FOREIGN KEY ("author_id") REFERENCES "user" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT'
+            'FOREIGN KEY ("author_id") REFERENCES "user" ("id") ON DELETE RESTRICT'
         ),
         'CREATE INDEX "book_author_id" ON "book" (author_id)',
     ]

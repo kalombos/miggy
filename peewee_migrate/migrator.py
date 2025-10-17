@@ -191,16 +191,14 @@ class ChangeFields(MigrateOperation):
     def handle_fk(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
         _ops = []
         if isinstance(new_field, pw.ForeignKeyField) and not isinstance(old_field, pw.ForeignKeyField):
-            on_delete = new_field.on_delete if new_field.on_delete else "RESTRICT"
-            on_update = new_field.on_update if new_field.on_update else "RESTRICT"
             _ops.append(
                 self.schema_migrator.add_foreign_key_constraint(
                     self.model._meta.table_name,
                     new_field.column_name,
                     new_field.rel_model._meta.table_name,
                     new_field.rel_field.name,
-                    on_delete,
-                    on_update,
+                    new_field.on_delete,
+                    new_field.on_update,
                 )
             )
         return _ops

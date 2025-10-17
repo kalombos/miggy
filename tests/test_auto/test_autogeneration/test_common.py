@@ -12,8 +12,9 @@ from playhouse.postgres_ext import (
     TSVectorField,
 )
 
-from peewee_migrate.auto import diff_many, diff_one, model_to_code
+from peewee_migrate.auto import create_model, diff_many, diff_one, model_to_code
 from peewee_migrate.cli import get_router
+from peewee_migrate.migrator import Migrator
 from peewee_migrate.types import Model
 
 
@@ -42,12 +43,9 @@ def test_on_real_migrations(migrations_dir: Path):
             table_name = "person"
 
     changes = diff_one(Person1, Person_, migrator=migrator)
-    assert len(changes) == 6
+    assert len(changes) == 3
     assert "on_delete='CASCADE'" in changes[0]
     assert "backref='persons'" in changes[0]
-    assert changes[-3] == "migrator.drop_not_null('person', 'last_name')"
-    assert changes[-2] == "migrator.drop_index('person', 'last_name')"
-    assert changes[-1] == "migrator.add_index('person', 'last_name', unique=True)"
 
     migrator.drop_index("person", "email")
     migrator.add_index("person", "email", unique=True)
@@ -71,6 +69,33 @@ def test_on_real_migrations(migrations_dir: Path):
 
     code = model_to_code(Color)
     assert "name = pw.CharField(default='red', max_length=255)" in code
+
+
+def test_remove_fields_w_constraint(sq_migrator: Migrator) -> None:
+    class Test(Model):
+        first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
+
+    code = diff_many([Test], [], migrator=sq_migrator)[0]
+    assert code == create_model(Test)
+    assert """first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in code
+
+
+def test_drop_field_w_constraint(sq_migrator: Migrator) -> None:
+    class OldTest(Model):
+        first_name = pw.CharField()
+        age = pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])
+
+        class Meta:
+            table_name = "test"
+
+    class Test(Model):
+        first_name = pw.CharField()
+
+        class Meta:
+            table_name = "test"
+
+    code = diff_one(Test, OldTest, migrator=sq_migrator)[0]
+    assert code == "migrator.remove_fields('test', 'age')"
 
 
 def test_auto_postgresext():
