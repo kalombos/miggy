@@ -233,11 +233,6 @@ class ChangeFields(MigrateOperation):
                 ]
         return []
 
-    def handle_default(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
-        if new_field.default is not None and new_field.default != old_field.default:
-            return [self.schema_migrator.apply_default(self.table_name, new_field.column_name, new_field)]
-        return []
-
     def handle_type(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
         if type(old_field) is not type(new_field):
             return [
@@ -259,7 +254,6 @@ class ChangeFields(MigrateOperation):
             _ops.extend(self.handle_type(old_field, field))
             _ops.extend(self.handle_fk_constraint(old_field, field))
             _ops.extend(self.handle_default_constraint(old_field, field))
-            _ops.extend(self.handle_default(old_field, field))
             if old_field.null != field.null:
                 _operation = self.schema_migrator.drop_not_null if field.null else self.schema_migrator.add_not_null
                 _ops.append(_operation(table_name, field.column_name))

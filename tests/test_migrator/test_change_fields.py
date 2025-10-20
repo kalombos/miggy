@@ -291,12 +291,12 @@ def test_change_default_constraints(
     ("field_before", "field_after", "expected"),
     [
         pytest.param(
-            pw.IntegerField(), pw.IntegerField(default=7), ['UPDATE "user" SET "age" = 7'], id="apply_default"
+            pw.IntegerField(), pw.IntegerField(default=7), [], id="apply_default"
         ),
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(default=lambda: 8),
-            ['UPDATE "user" SET "age" = 8'],
+            [],
             id="apply_default_callable",
         ),
         pytest.param(pw.IntegerField(default=7), pw.IntegerField(), [], id="nothing_to_do"),
