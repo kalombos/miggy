@@ -290,9 +290,7 @@ def test_change_default_constraints(
 @pytest.mark.parametrize(
     ("field_before", "field_after", "expected"),
     [
-        pytest.param(
-            pw.IntegerField(), pw.IntegerField(default=7), [], id="apply_default"
-        ),
+        pytest.param(pw.IntegerField(), pw.IntegerField(default=7), [], id="apply_default"),
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(default=lambda: 8),
