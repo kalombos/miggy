@@ -13,6 +13,14 @@ def test_field_to_code() -> None:
     )
 
 
+class _M1(pw.Model):
+    name = pw.CharField()
+
+
+class _M2(pw.Model):
+    name = pw.CharField()
+
+
 @pytest.mark.parametrize(
     ("f1", "f2", "expected"),
     [
@@ -33,6 +41,16 @@ def test_field_to_code() -> None:
         ),
         pytest.param(pw.IntegerField(), pw.CharField(), True, id="type"),
         pytest.param(pw.CharField(max_length=5), pw.CharField(), True, id="max_length"),
+        # FK
+        pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1), False, id="same_fk"),
+        pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M2), True, id="different_models_fk"),
+        pytest.param(
+            pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1, on_delete="CASCADE"), True, id="different_on_delete_fk"
+        ),
+        pytest.param(
+            pw.ForeignKeyField(_M1, on_update="RESTRICT"), pw.ForeignKeyField(_M1), True, id="different_on_update_fk"
+        ),
+        pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1, constraint_name="new_name"), True),
     ],
 )
 def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
