@@ -14,7 +14,6 @@ from playhouse.postgres_ext import (
 
 from peewee_migrate.auto import create_model, diff_many, diff_one, model_to_code
 from peewee_migrate.cli import get_router
-from peewee_migrate.types import Model
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -32,7 +31,7 @@ def test_on_real_migrations(migrations_dir: Path):
     changes = diff_many(models, [])
     assert len(changes) == 2
 
-    class Person1(Model):
+    class Person1(pw.Model):
         first_name = pw.IntegerField()
         last_name = pw.CharField(max_length=1024, null=True, unique=True)
         tag = pw.ForeignKeyField(Tag_, on_delete="CASCADE", backref="persons")
@@ -46,11 +45,8 @@ def test_on_real_migrations(migrations_dir: Path):
     assert "on_delete='CASCADE'" in changes[0]
     assert "backref='persons'" in changes[0]
 
-    migrator.drop_index("person", "email")
-    migrator.add_index("person", "email", unique=True)
-
-    class Person2(Model):
-        first_name = pw.CharField(unique=True)
+    class Person2(pw.Model):
+        first_name = pw.CharField(max_length=255)
         last_name = pw.CharField(max_length=255, index=True)
         dob = pw.DateField(null=True)
         birthday = pw.DateField(default=dt.datetime.now)
@@ -70,24 +66,15 @@ def test_on_real_migrations(migrations_dir: Path):
     assert "name = pw.CharField(default='red', max_length=255)" in code
 
 
-def test_remove_fields_w_constraint() -> None:
-    class Test(Model):
-        first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
-
-    code = diff_many([Test], [])[0]
-    assert code == create_model(Test)
-    assert """first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in code
-
-
 def test_drop_field_w_constraint() -> None:
-    class OldTest(Model):
+    class OldTest(pw.Model):
         first_name = pw.CharField()
         age = pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])
 
         class Meta:
             table_name = "test"
 
-    class Test(Model):
+    class Test(pw.Model):
         first_name = pw.CharField()
 
         class Meta:
@@ -95,6 +82,26 @@ def test_drop_field_w_constraint() -> None:
 
     code = diff_one(Test, OldTest)[0]
     assert code == "migrator.remove_fields('test', 'age')"
+
+
+def test_create_model() -> None:
+    class Test(pw.Model):
+        constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
+        i1 = pw.IntegerField()
+        i2 = pw.IntegerField()
+
+        class Meta:
+            indexes = ((("i1", "i2"), True),)
+
+    Test.add_index(Test.i1, Test.i2, name="i3")
+
+    changes = diff_many([Test], [])
+    create_model_code = changes[0]
+
+    assert create_model_code == create_model(Test)
+    assert changes[1] == "migrator.add_index('test', 'i1', 'i2', name='test_i1_i2', unique=True)"
+    assert changes[2] == "migrator.add_index('test', 'i1', 'i2', name='i3')"
+    assert """constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in create_model_code
 
 
 def test_auto_postgresext():

@@ -1,14 +1,13 @@
 import collections
 from collections.abc import Sequence
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple
 
 import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
-from peewee_migrate.types import ModelCls
 from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
 
-from . import types
+from .types import ModelCls
 
 INDENT = "    "
 NEWLINE = "\n" + INDENT
@@ -120,83 +119,98 @@ class FieldSerializer(ColumnSerializer):
 
 
 class IndexMeta(NamedTuple):
-    table_name: str
-    columns: tuple[str, ...]
+    model: str
+    fields: tuple[str, ...]
+    name: str
     unique: bool = False
     where: str | None = None
 
 
-class IndexMetaExtractor:
-    def __init__(self, model: ModelCls) -> None:
-        self.model = model
+def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
+    _field = model_cls._meta.combined.get(field, None)
+    if _field is None:
+        raise ValueError(f"{model_cls} does not have '{field}' field.")
+    return _field
 
-    def resolve_columns(self, columns: Sequence[Any]) -> tuple[str, ...]:
-        _columns = []
-        for column in columns:
-            if isinstance(column, str):
-                _columns.append(column)
-            elif isinstance(column, pw.Field):
-                _columns.append(column.name)
+
+class IndexMetaExtractor:
+    def __init__(self, model_cls: ModelCls, index_obj: Any) -> None:
+        self.model_cls = model_cls
+        self.index_obj = index_obj
+        self.table_name = self.model_cls._meta.table_name
+
+    def resolve_fields(self, fields: Sequence[Any]) -> tuple[str, ...]:
+        _fields = []
+        for field in fields:
+            if isinstance(field, str):
+                field = resolve_field(self.model_cls, field)
+            if isinstance(field, pw.Field):
+                _fields.append(field)
             else:
                 raise NotImplementedError
-        return tuple(_columns)
+        return tuple(_fields)
 
     def resolve_where(self, where: pw.Node | None) -> None | str:
         if isinstance(where, pw.SQL):
             if where.params is not None:
                 raise NotImplementedError(
-                    "SQL object with params for where condition is not suported. Use SQL object without params instead"
+                    "SQL object with params for where condition is not suported. Use SQL object without params instead."
                 )
             return where.sql
         if where is None:
             return None
         raise NotImplementedError(
-            f"{type(where)} for where condition is not suported. Use SQL object without params instead"
+            f"{type(where)} for where condition is not suported. Use SQL object without params instead."
         )
 
-    def extract(self) -> list[IndexMeta]:
-        indexes = []
-        model = self.model
-        table_name = model._meta.table_name
-        for index_obj in model._meta.indexes:
-            # Advanced Indexes
-            # https://docs.peewee-orm.com/en/latest/peewee/models.html#advanced-index-creation
-            if isinstance(index_obj, pw.ModelIndex):
-                i: types.ModelIndex = cast("types.ModelIndex", index_obj)
-                indexes.append(
-                    IndexMeta(
-                        table_name,
-                        self.resolve_columns(i._expressions),
-                        unique=i._unique,
-                        where=self.resolve_where(i._where),
-                    )
-                )
-            # Multi-column indexes
-            # https://docs.peewee-orm.com/en/latest/peewee/models.html#multi-column-indexes
-            if isinstance(index_obj, (list, tuple)):
-                columns, unique = index_obj
-                indexes.append(IndexMeta(table_name, self.resolve_columns(columns), unique=unique))
-        return indexes
+    def validate_fields(self, model_index: pw.ModelIndex) -> None:
+        for f in model_index._expressions:
+            if not isinstance(f, pw.Field):
+                raise NotImplementedError(f"{type(f)} for ModelIndex.field is not suported. Use Field object instead.")
+
+    def serialize_model_index(self, model_index: pw.ModelIndex) -> IndexMeta:
+        self.validate_fields(model_index)
+        return IndexMeta(
+            self.table_name,  # # should be fixed
+            tuple(f.name for f in model_index._expressions),
+            unique=model_index._unique,
+            where=self.resolve_where(model_index._where),
+            name=model_index._name,
+        )
+
+    def serialize(self) -> IndexMeta:
+        index_obj = self.index_obj
+        # Advanced Indexes
+        # https://docs.peewee-orm.com/en/latest/peewee/models.html#advanced-index-creation
+        if isinstance(index_obj, pw.ModelIndex):
+            return self.serialize_model_index(index_obj)
+
+        # Multi-column indexes
+        # https://docs.peewee-orm.com/en/latest/peewee/models.html#multi-column-indexes
+        if isinstance(index_obj, (list, tuple)):
+            fields, unique = index_obj
+            return self.serialize_model_index(pw.ModelIndex(self.model_cls, self.resolve_fields(fields), unique=unique))
+        raise NotImplementedError(f"{type(index_obj)} as Index is not suported. Use ModelIndex, list or tuple instead.")
 
 
-def extract_index_meta(model: ModelCls) -> list[IndexMeta]:
-    return IndexMetaExtractor(model).extract()
+def extract_index_meta(model_cls: type[pw.Model]) -> list[IndexMeta]:
+    return [IndexMetaExtractor(model_cls, i).serialize() for i in model_cls._meta.indexes]
 
 
-def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str], list[str]]:
+def diff_indexes_from_meta(current: type[pw.Model], prev: type[pw.Model]) -> tuple[list[str], list[str]]:
     create_changes = []
     drop_changes = []
     current_indexes = extract_index_meta(current)
     prev_indexes = extract_index_meta(prev)
 
     for index in set(current_indexes) - set(prev_indexes):
-        create_changes.append(add_index(current, *index.columns, unique=index.unique, where=index.where))
+        create_changes.append(add_index(index))
     for index in set(prev_indexes) - set(current_indexes):
-        drop_changes.append(drop_index(prev, *index.columns))
+        drop_changes.append(drop_index(prev, index.name))
     return create_changes, drop_changes
 
 
-def diff_one(model1: ModelCls, model2: ModelCls) -> list[str]:
+def diff_one(model1: type[pw.Model], model2: type[pw.Model]) -> list[str]:
     """Find difference between given peewee models."""
     changes = []
 
@@ -256,7 +270,10 @@ def diff_many(models1, models2, reverse=False):
 
     # Add models
     for name in [m for m in models1 if m not in models2]:
+        index_meta = extract_index_meta(models1[name])
         changes.append(create_model(models1[name]))
+        for i in index_meta:
+            changes.append(add_index(i))
 
     # Remove models
     for name in [m for m in models2 if m not in models1]:
@@ -288,7 +305,6 @@ def model_to_code(Model):
                 (INDENT + "primary_key = pw.CompositeKey{0}".format(Model._meta.primary_key.field_names))
                 if isinstance(Model._meta.primary_key, pw.CompositeKey)
                 else "",
-                (INDENT + "indexes = %s" % Model._meta.indexes) if Model._meta.indexes else "",
             ],
         )
     )
@@ -328,21 +344,17 @@ def change_not_null(Model, name, null):
     return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
 
 
-def add_index(model: types.ModelCls, *columns: str, unique: bool = False, where: str | None = None) -> str:
+def add_index(index_meta: IndexMeta) -> str:
     operation = "add_index"
-    table_name = model._meta.table_name
-    if where is None:
-        return "migrator.%s('%s', %s, unique=%s)" % (operation, table_name, ", ".join(map(repr, columns)), unique)
-    return "migrator.%s('%s', %s, unique=%s, where=pw.SQL(%s))" % (
-        operation,
-        table_name,
-        ", ".join(map(repr, columns)),
-        unique,
-        repr(where),
-    )
+    table_name = index_meta.model
+
+    _where = ", where=pw.SQL(%s)" % repr(index_meta.where) if index_meta.where else ""
+    _unique = f", unique={index_meta.unique}" if index_meta.unique else ""
+    _fields = ", ".join(map(repr, index_meta.fields))
+    return f"migrator.{operation}('{table_name}', {_fields}, name='{index_meta.name}'{_unique}{_where})"
 
 
-def drop_index(model: types.ModelCls, *columns: str) -> str:
+def drop_index(model: ModelCls, name: str) -> str:
     table_name = model._meta.table_name
     operation = "drop_index"
-    return "migrator.%s('%s', %s)" % (operation, table_name, ", ".join(map(repr, columns)))
+    return "migrator.%s('%s', '%s')" % (operation, table_name, name)

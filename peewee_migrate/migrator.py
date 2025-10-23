@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
@@ -9,7 +9,6 @@ from playhouse.migrate import (
     Operation,
     PostgresqlDatabase,
     SqliteDatabase,
-    make_index_name,
     operation,
 )
 from playhouse.migrate import MySQLMigrator as MqM
@@ -18,9 +17,27 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
-from peewee_migrate.auto import fk_to_params
+from peewee_migrate.auto import fk_to_params, resolve_field
 from peewee_migrate.types import ModelCls
 from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
+
+
+def has_single_index(field: pw.Field) -> bool:
+    return field.index or field.unique
+
+
+def get_single_index_name(field: pw.Field) -> str:
+    return make_single_model_index(field)._name
+
+
+def make_single_model_index(field: pw.Field) -> pw.ModelIndex:
+    return pw.ModelIndex(field.model, (field,), unique=field.unique, safe=False, using=field.index_type)
+
+
+def get_single_model_index(field: pw.Field) -> pw.Model:
+    if has_single_index(field):
+        return make_single_model_index(field)
+    return None
 
 
 class MigrateOperation:
@@ -51,6 +68,8 @@ class CreateModel(MigrateOperation):
         self.model = model
 
     def state_forwards(self) -> None:
+        # We use own attribute for indexes because we don't want to have conflict with standart index creation
+        self.model._meta.mg_indexes = {}
         self.migrator.orm[self.model._meta.table_name] = self.model
 
     def database_forwards(self) -> list[Callable]:
@@ -70,61 +89,42 @@ class RemoveModel(MigrateOperation):
 
 
 class AddIndex(MigrateOperation):
-    def __init__(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None) -> None:
-        self.model = model
-        self.columns = columns
-        self.unique = unique
-        self.where = where
+    def __init__(
+        self,
+        model_cls: ModelCls,
+        *fields: str,
+        name: str,
+        unique: bool = False,
+        where: pw.SQL | None = None,
+        safe: bool = False,
+    ) -> None:
+        self.model_index = pw.ModelIndex(
+            model=model_cls,
+            fields=[resolve_field(model_cls, f) for f in fields],
+            unique=unique,
+            where=where,
+            name=name,
+            safe=safe,
+        )
+        self.model_cls = model_cls
 
     def state_forwards(self) -> None:
-        if len(self.columns) == 1 and self.where is None:
-            field = self.model._meta.fields.get(self.columns[0])
-            field.unique = self.unique
-            field.index = True
-        else:
-            self.model._meta.indexes.append(
-                pw.ModelIndex(self.model, self.columns, unique=self.unique, where=self.where)
-            )
+        self.model_cls._meta.mg_indexes[self.model_index._name] = self.model_index
 
     def database_forwards(self) -> list[Operation]:
-        columns = self.columns
-        columns_ = []
-        for col in columns:
-            field = self.model._meta.fields.get(col)
-            if isinstance(field, pw.ForeignKeyField):
-                col = col + "_id"
-
-            columns_.append(col)
-        return [self.schema_migrator.add_model_index(self.model, columns_, unique=self.unique, where=self.where)]
+        return [self.schema_migrator.add_model_index(self.model_index)]
 
 
 class DropIndex(MigrateOperation):
-    def __init__(self, model: ModelCls, *columns: str) -> None:
-        self.model = model
-        self.columns = columns
+    def __init__(self, model_cls: ModelCls, name: str) -> None:
+        self.model_cls = model_cls
+        self.name = name
 
     def state_forwards(self) -> None:
-        if len(self.columns) == 1:
-            field = self.model._meta.fields.get(self.columns[0])
-            field.unique = field.index = False
-        else:
-            _indexes = []
-            for i in self.model._meta.indexes:
-                cols = i._expressions if isinstance(i, pw.ModelIndex) else i[0]  # type: ignore
-                if self.columns != cols:
-                    _indexes.append(i)
-            self.model._meta.indexes = _indexes
+        del self.model_cls._meta.mg_indexes[self.name]
 
     def database_forwards(self) -> list[Operation]:
-        columns = self.columns
-        columns_ = []
-        for col in columns:
-            field = self.model._meta.fields.get(col)
-            if isinstance(field, pw.ForeignKeyField):
-                col = col + "_id"
-            columns_.append(col)
-        index_name = make_index_name(self.model._meta.table_name, columns_)
-        return [self.schema_migrator.drop_index(self.model._meta.table_name, index_name)]
+        return [self.schema_migrator.drop_index(self.model_cls._meta.table_name, self.name)]
 
 
 class RenameModel(MigrateOperation):
@@ -178,17 +178,11 @@ class ChangeFields(MigrateOperation):
         if not _field.unique and not old_field.unique and _field.index == old_field.index:
             return []
 
-        if old_field.unique or old_field.index:
-            # It is not good architecture design when you pass migrator through attribute
-            # It should be refactored
-            # TODO why old_field.column_name? We have already renamed the field. Need to fix it.
-            d = DropIndex(self.model, old_field.column_name)
-            d.migrator = self.migrator
-            _ops.extend(d.database_forwards())
-        if _field.unique or _field.index:
-            a = AddIndex(self.model, _field.column_name, unique=_field.unique)
-            a.migrator = self.migrator
-            _ops.extend(a.database_forwards())
+        if has_single_index(old_field):
+            # We have already renamed the column so create name from the new field
+            _ops.append(self.schema_migrator.drop_index(self.table_name, get_single_index_name(_field)))
+        if model_index := get_single_model_index(_field):
+            _ops.append(self.schema_migrator.add_model_index(model_index))
         return _ops
 
     def handle_fk_constraint(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
@@ -249,7 +243,7 @@ class ChangeFields(MigrateOperation):
             old_column_name = old_field.column_name
 
             if old_column_name != field.column_name:
-                _ops.append(self.schema_migrator.rename_column(table_name, old_column_name, field.column_name))
+                _ops.append(self.schema_migrator.rename_field(table_name, old_field, field))
 
             _ops.extend(self.handle_type(old_field, field))
             _ops.extend(self.handle_fk_constraint(old_field, field))
@@ -288,37 +282,28 @@ def fk_postfix(name: str) -> str:
 class RenameField(MigrateOperation):
     def __init__(self, model: ModelCls, old_name: str, new_name: str) -> None:
         self.model = model
+        self.table_name = self.model._meta.table_name
         self.old_field_name = old_name
         self.new_field_name = new_name
         self.old_field = self.model._meta.fields[self.old_field_name]
+        self.new_field = self.old_field.clone()
+        self.new_field.column_name = self.resolve_new_name(self.old_field, new_name)
 
     def state_forwards(self) -> None:
         _delete_field(self.model, self.old_field)
-        new_field = self.old_field.clone()
+        self.model._meta.add_field(self.new_field_name, self.new_field)
 
-        if self.allow_to_alter_field():
-            _, new_field.column_name = self.resolve_column_names()
-
-        self.model._meta.add_field(self.new_field_name, new_field)
-
-    def allow_to_alter_field(self) -> bool:
-        # If we detect column name has not been changed we allow to alter column name because
-        # we know what name should be
-        if isinstance(self.old_field, pw.ForeignKeyField):
-            return self.old_field.column_name == fk_postfix(self.old_field.name)
-        if self.old_field.column_name == self.old_field_name:
-            return True
-        return False
-
-    def resolve_column_names(self) -> tuple[str, str]:
-        if isinstance(self.old_field, pw.ForeignKeyField):
-            return self.old_field.column_name, fk_postfix(self.new_field_name)
-        return self.old_field.column_name, self.new_field_name
+    def resolve_new_name(self, old_field: pw.Field, new_name: str) -> str:
+        if isinstance(old_field, pw.ForeignKeyField):
+            if old_field.column_name == fk_postfix(old_field.name):
+                return fk_postfix(new_name)
+        if old_field.column_name == old_field.name:
+            return new_name
+        return old_field.column_name
 
     def database_forwards(self) -> list[Operation]:
-        if self.allow_to_alter_field():
-            old_column_name, new_column_name = self.resolve_column_names()
-            return [self.schema_migrator.rename_column(self.model._meta.table_name, old_column_name, new_column_name)]
+        if self.old_field.column_name != self.new_field.column_name:
+            return [self.schema_migrator.rename_field(self.table_name, self.old_field, self.new_field)]
         return []
 
 
@@ -438,23 +423,27 @@ class SchemaMigrator(ScM):
                 )
             )
 
-        if field.index or field.unique:
-            using = getattr(field, "index_type", None)
-            operations.append(self.add_index(table, (column_name,), field.unique, using))
-
+        if model_index := get_single_model_index(field):
+            operations.append(self.add_model_index(model_index))
         return operations
 
     @operation
-    def add_model_index(
-        self,
-        model: ModelCls,
-        columns: Sequence[str],
-        unique=False,
-        where=None,
-    ):
+    def add_model_index(self, model_index: pw.ModelIndex):
         ctx = self.make_context()
-        index = pw.ModelIndex(model, columns, unique=unique, where=where, safe=False)
-        return ctx.sql(index)
+        return ctx.sql(model_index)
+
+    @operation
+    def rename_index(self, old_name: str, new_name: str):
+        ctx = self.make_context()
+        return ctx.literal("ALTER INDEX ").sql(pw.Entity(old_name)).literal(" RENAME TO ").sql(pw.Entity(new_name))
+
+    @operation
+    def rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):
+        operations = [self.rename_column(table, old_field.column_name, new_field.column_name)]
+        if old_model_index := get_single_model_index(old_field):
+            new_single_model_index = make_single_model_index(new_field)
+            operations.append(self.rename_index(old_model_index._name, new_single_model_index._name))
+        return operations
 
 
 class MySQLMigrator(SchemaMigrator, MqM):
@@ -634,14 +623,21 @@ class Migrator(object):
     rename_table = rename_model
 
     @get_model
-    def add_index(self, model: ModelCls, *columns: str, unique: bool = False, where: pw.SQL | None = None) -> None:
+    def add_index(
+        self,
+        model: ModelCls,
+        *fields: str,
+        name: str,
+        unique: bool = False,
+        where: pw.SQL | None = None,
+    ) -> None:
         """Create indexes."""
-        self.migration.append(AddIndex(model, *columns, unique=unique, where=where))
+        self.migration.append(AddIndex(model, *fields, name=name, unique=unique, where=where))
 
     @get_model
-    def drop_index(self, model: ModelCls, *columns: str) -> None:
+    def drop_index(self, model: ModelCls, name: str) -> None:
         """Drop indexes."""
-        self.migration.append(DropIndex(model, *columns))
+        self.migration.append(DropIndex(model, name))
 
     @get_model
     def add_not_null(self, model: ModelCls, *names: str) -> None:

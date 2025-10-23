@@ -68,28 +68,22 @@ def test_migrator_sqlite_common():
     order = Order.get()
     assert order.identifier == 77
 
-    migrator.add_index(Order, "identifier", "customer")
+    migrator.add_index(Order, "identifier", "customer", name="some_name")
     migrator.run()
-    assert Order._meta.indexes
+    assert Order._meta.mg_indexes
     assert not Order.identifier.index
 
-    migrator.drop_index(Order, "identifier", "customer")
+    migrator.drop_index(Order, "some_name")
     migrator.run()
-    assert not Order._meta.indexes
+    assert not Order._meta.mg_indexes
 
     migrator.remove_fields(Order, "customer")
     migrator.run()
     assert not hasattr(Order, "customer")
-    migrator.add_index(Order, "identifier", unique=True)
+    migrator.add_index(Order, "identifier", unique=True, name="some_name")
     migrator.run()
-    assert Order.identifier.index
-    assert Order.identifier.unique
-    assert not Order._meta.indexes
 
-    # TODO fix change_columns
-    # migrator.change_columns(Order, identifier=pw.IntegerField(default=0))
-    # assert not Order._meta.indexes
-    # migrator.run()
+    assert Order._meta.mg_indexes
 
     migrator.rename_table("order", "new_name")
     migrator.run()
@@ -99,42 +93,50 @@ def test_migrator_sqlite_common():
 
 
 @pytest.mark.parametrize(
-    ("columns", "unique", "where", "expected"),
+    ("fields", "name", "unique", "where", "expected"),
     [
         (
             ("name",),
+            "user_name",
             False,
             None,
-            'CREATE INDEX "user_name" ON "user" (name)',
+            'CREATE INDEX "user_name" ON "user" ("name")',
         ),
         (
             ("name", "created_at"),
+            "user_name_created_at",
             True,
             None,
-            'CREATE UNIQUE INDEX "user_name_created_at" ON "user" (name, created_at)',
+            'CREATE UNIQUE INDEX "user_name_created_at" ON "user" ("name", "created_at")',
         ),
         (
             ("name",),
+            "some_name",
             False,
             pw.SQL("name = 'John'"),
-            """CREATE INDEX "user_name" ON "user" (name) WHERE name = 'John'""",
+            """CREATE INDEX "some_name" ON "user" ("name") WHERE name = 'John'""",
         ),
     ],
 )
 def test_migrator_add_index(
-    patched_pg_db: PatchedPgDatabase, columns: tuple[str, ...], unique: bool, where: pw.SQL | None, expected: str
+    patched_pg_db: PatchedPgDatabase,
+    fields: tuple[str, ...],
+    name: str,
+    unique: bool,
+    where: pw.SQL | None,
+    expected: str,
 ) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
     migrator.run()
     patched_pg_db.clear_queries()
 
-    migrator.add_index("user", *columns, unique=unique, where=where)
+    migrator.add_index("user", *fields, name=name, unique=unique, where=where)
     migrator.run()
     assert patched_pg_db.queries == [expected]
 

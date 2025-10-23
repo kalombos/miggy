@@ -8,8 +8,6 @@ import logging
 
 import peewee as pw
 
-from . import types
-
 # Package information
 # ===================
 
@@ -24,7 +22,7 @@ LOGGER.addHandler(logging.StreamHandler())
 LOGGER.setLevel(logging.INFO)
 
 
-class MigrateHistory(types.Model):
+class MigrateHistory(pw.Model):
     """Presents the migrations in database."""
 
     name = pw.CharField()
