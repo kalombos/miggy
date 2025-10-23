@@ -3,7 +3,8 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from peewee_migrate import Migrator, types
+from peewee_migrate import Migrator
+from peewee_migrate.migrator import has_single_index
 from peewee_migrate.utils import Default
 from tests.conftest import PatchedPgDatabase
 
@@ -42,7 +43,7 @@ def test_change_nullable(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
         created_at = pw.DateField(null=null_before)
 
@@ -62,7 +63,7 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
@@ -84,13 +85,13 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
         (
             {},
             {"unique": True},
-            ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE UNIQUE INDEX "user_name" ON "user" (name)'],
+            ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE UNIQUE INDEX "user_name" ON "user" ("name")'],
         ),
         ({"unique": True}, {}, ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'DROP INDEX "user_name"']),
         (
             {},
             {"index": True},
-            ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE INDEX "user_name" ON "user" (name)'],
+            ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE INDEX "user_name" ON "user" ("name")'],
         ),
         ({"index": True}, {}, ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'DROP INDEX "user_name"']),
         (
@@ -99,7 +100,7 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
             [
                 'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
                 'DROP INDEX "user_name"',
-                'CREATE UNIQUE INDEX "user_name" ON "user" (name)',
+                'CREATE UNIQUE INDEX "user_name" ON "user" ("name")',
             ],
         ),
         (
@@ -108,7 +109,7 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
             [
                 'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
                 'DROP INDEX "user_name"',
-                'CREATE INDEX "user_name" ON "user" (name)',
+                'CREATE INDEX "user_name" ON "user" ("name")',
             ],
         ),
         (
@@ -116,9 +117,10 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
             {"index": True},
             [
                 'ALTER TABLE "user" RENAME COLUMN "bom" TO "name"',
+                'ALTER INDEX "user_bom" RENAME TO "user_name"',
                 'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
-                'DROP INDEX "user_bom"',
-                'CREATE INDEX "user_name" ON "user" (name)',
+                'DROP INDEX "user_name"',
+                'CREATE INDEX "user_name" ON "user" ("name")',
             ],
         ),
         (
@@ -126,9 +128,10 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
             {"index": True, "column_name": "bom"},
             [
                 'ALTER TABLE "user" RENAME COLUMN "name" TO "bom"',
+                'ALTER INDEX "user_name" RENAME TO "user_bom"',
                 'ALTER TABLE "user" ALTER COLUMN "bom" TYPE TEXT',
-                'DROP INDEX "user_name"',
-                'CREATE INDEX "user_bom" ON "user" (bom)',
+                'DROP INDEX "user_bom"',
+                'CREATE INDEX "user_bom" ON "user" ("bom")',
             ],
         ),
     ],
@@ -139,7 +142,7 @@ def test_change_indexes(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField(**params_before)
         created_at = pw.DateField()
 
@@ -150,7 +153,9 @@ def test_change_indexes(
     migrator.change_fields("user", name=pw.TextField(**params_after))
     migrator.run()
     assert patched_pg_db.queries == expected
-    assert migrator.orm["user"].name.unique == params_after.get("unique", False)
+
+    has_index = params_after.get("unique", False) or params_after.get("index", False)
+    assert has_single_index(migrator.orm["user"].name) == has_index
 
 
 class _M1(pw.Model):
@@ -173,7 +178,7 @@ class _M2(pw.Model):
                     'ALTER TABLE "testmodel" ADD CONSTRAINT "fk_testmodel_non_fk_field_id_refs__m1" '
                     'FOREIGN KEY ("non_fk_field_id") REFERENCES "_m1" ("id") ON DELETE RESTRICT'
                 ),
-                'CREATE INDEX "testmodel_non_fk_field_id" ON "testmodel" (non_fk_field_id)',
+                'CREATE INDEX "testmodel_non_fk_field_id" ON "testmodel" ("non_fk_field_id")',
             ],
             id="non_fk_to_fk",
         ),
@@ -190,9 +195,10 @@ class _M2(pw.Model):
             {"fk_field": pw.IntegerField()},
             [
                 'ALTER TABLE "testmodel" RENAME COLUMN "fk_field_id" TO "fk_field"',
+                'ALTER INDEX "testmodel_fk_field_id" RENAME TO "testmodel_fk_field"',
                 'ALTER TABLE "testmodel" ALTER COLUMN "fk_field" TYPE INTEGER',
                 'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_fk_field_id_fkey"',
-                'DROP INDEX "testmodel_fk_field_id"',
+                'DROP INDEX "testmodel_fk_field"',
             ],
             id="fk_to_integer",
         ),
@@ -207,7 +213,10 @@ class _M2(pw.Model):
         ),
         pytest.param(
             {"fk_field": pw.ForeignKeyField(_M2, column_name="some_name")},
-            ['ALTER TABLE "testmodel" RENAME COLUMN "fk_field_id" TO "some_name"'],
+            [
+                'ALTER TABLE "testmodel" RENAME COLUMN "fk_field_id" TO "some_name"',
+                'ALTER INDEX "testmodel_fk_field_id" RENAME TO "testmodel_some_name"',
+            ],
             id="change_column_name",
         ),
     ],
@@ -221,7 +230,7 @@ def test_change_integer_field_to_fk(
     migrator.create_table(_M2)
 
     @migrator.create_table
-    class TestModel(types.Model):
+    class TestModel(pw.Model):
         name = pw.CharField()
         fk_field = pw.ForeignKeyField(_M2)
         non_fk_field = pw.IntegerField()
@@ -275,7 +284,7 @@ def test_change_default_constraints(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
         age = pw.IntegerField(**params_before)
 
@@ -306,7 +315,7 @@ def test_change_default(
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
         age = field_before
 

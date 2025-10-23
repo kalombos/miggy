@@ -2,7 +2,6 @@ import peewee as pw
 import pytest
 
 from peewee_migrate.auto import create_fields, diff_one
-from peewee_migrate.types import Model
 
 
 class _M1(pw.Model):
@@ -31,13 +30,13 @@ class _M1(pw.Model):
     ],
 )
 def test_add_fields(test_field: pw.Field, expected: str) -> None:
-    class OldTest(Model):
+    class OldTest(pw.Model):
         first_name = pw.CharField()
 
         class Meta:
             table_name = "test"
 
-    class Test(Model):
+    class Test(pw.Model):
         first_name = pw.CharField()
         field = test_field
 

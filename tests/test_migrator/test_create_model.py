@@ -20,6 +20,10 @@ def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
         check_default_constraint = pw.DateField(constraints=[pw.SQL("DEFAULT now()")])
         check_fk = pw.ForeignKeyField(Company, constraint_name="blabla", on_update="RESTRICT", index=False)
 
+    migrator.add_index(
+        "user", "check_char_length", where=pw.SQL("check_char_length='sdfsfad'"), name="user_check_char_length"
+    )
+
     assert User == migrator.orm["user"]
 
     migrator.run()
@@ -33,4 +37,5 @@ def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
         '"check_default_constraint" DATE NOT NULL DEFAULT now(), '
         '"check_fk_id" INTEGER NOT NULL, CONSTRAINT "blabla" FOREIGN KEY '
         '("check_fk_id") REFERENCES "company" ("id") ON UPDATE RESTRICT)',
+        """CREATE INDEX "user_check_char_length" ON "user" ("check_char_length") WHERE check_char_length='sdfsfad'""",
     ]
