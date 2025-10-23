@@ -5,6 +5,10 @@ from peewee_migrate.auto import change_fields, diff_one
 from peewee_migrate.types import Model
 
 
+class _M1(pw.Model):
+    name = pw.CharField()
+
+
 @pytest.mark.parametrize(
     ("age_field_before", "age_field_after", "expected"),
     [
@@ -39,6 +43,21 @@ from peewee_migrate.types import Model
             pw.IntegerField(column_name="new_name"),
             """age=pw.IntegerField(column_name='new_name')""",
             id="column_name",
+        ),
+        pytest.param(
+            pw.IntegerField(),
+            pw.ForeignKeyField(_M1, column_name="new_name", on_update="RESTRICT"),
+            (
+                "age=pw.ForeignKeyField(backref='test_set', column_name='new_name', "
+                "field='id', model=migrator.orm['_m1'], on_update='RESTRICT')"
+            ),
+            id="add_fk",
+        ),
+        pytest.param(
+            pw.ForeignKeyField(_M1, column_name="new_name"),
+            pw.IntegerField(),
+            "age=pw.IntegerField()",
+            id="remove_fk",
         ),
     ],
 )

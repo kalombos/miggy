@@ -18,6 +18,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
+from peewee_migrate.auto import fk_to_params
 from peewee_migrate.types import ModelCls
 from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
 
@@ -161,6 +162,7 @@ class AddFields(MigrateOperation):
 class ChangeFields(MigrateOperation):
     def __init__(self, model: ModelCls, **fields: pw.Field) -> None:
         self.model = model
+        self.table_name = self.model._meta.table_name
         self.old_fields: dict[str, pw.Field] = {name: getattr(self.model, name).clone() for name in fields}
         self.fields = fields
 
@@ -179,6 +181,7 @@ class ChangeFields(MigrateOperation):
         if old_field.unique or old_field.index:
             # It is not good architecture design when you pass migrator through attribute
             # It should be refactored
+            # TODO why old_field.column_name? We have already renamed the field. Need to fix it.
             d = DropIndex(self.model, old_field.column_name)
             d.migrator = self.migrator
             _ops.extend(d.database_forwards())
@@ -188,9 +191,16 @@ class ChangeFields(MigrateOperation):
             _ops.extend(a.database_forwards())
         return _ops
 
-    def handle_fk(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
-        _ops = []
-        if isinstance(new_field, pw.ForeignKeyField) and not isinstance(old_field, pw.ForeignKeyField):
+    def handle_fk_constraint(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops: list[Operation] = []
+        is_old_field_fk = isinstance(old_field, pw.ForeignKeyField)
+        is_new_field_fk = isinstance(new_field, pw.ForeignKeyField)
+        if is_old_field_fk and is_new_field_fk and fk_to_params(old_field) == fk_to_params(new_field):
+            # Nothing's changed for fk
+            return _ops
+        if is_old_field_fk:
+            _ops.append(self.schema_migrator.drop_foreign_key_constraint(self.table_name, new_field.column_name))
+        if is_new_field_fk:
             _ops.append(
                 self.schema_migrator.add_foreign_key_constraint(
                     self.model._meta.table_name,
@@ -199,6 +209,7 @@ class ChangeFields(MigrateOperation):
                     new_field.rel_field.name,
                     new_field.on_delete,
                     new_field.on_update,
+                    constraint_name=new_field.constraint_name,
                 )
             )
         return _ops
@@ -241,7 +252,7 @@ class ChangeFields(MigrateOperation):
                 _ops.append(self.schema_migrator.rename_column(table_name, old_column_name, field.column_name))
 
             _ops.extend(self.handle_type(old_field, field))
-            _ops.extend(self.handle_fk(old_field, field))
+            _ops.extend(self.handle_fk_constraint(old_field, field))
             _ops.extend(self.handle_default_constraint(old_field, field))
             if old_field.null != field.null:
                 _operation = self.schema_migrator.drop_not_null if field.null else self.schema_migrator.add_not_null
@@ -389,14 +400,6 @@ class SchemaMigrator(ScM):
         """Execute raw SQL."""
         return SQL(sql, *params)
 
-    def alter_add_column(self, table, column_name, field, **kwargs):
-        """Fix fieldname for ForeignKeys."""
-        name = field.name
-        op = super(SchemaMigrator, self).alter_add_column(table, column_name, field, **kwargs)
-        if isinstance(field, pw.ForeignKeyField):
-            field.name = name
-        return op
-
     @operation
     def add_column(self, table, column_name, field):
         # Adding a column is complicated by the fact that if there are rows
@@ -471,6 +474,32 @@ class PostgresqlMigrator(SchemaMigrator, PgM):
     def select_schema(self, schema):
         """Select database schema"""
         return self.set_search_path(schema)
+
+    def get_foreign_key_constraint(self, table: str, column_name: str) -> str:
+        sql = """
+            SELECT DISTINCT
+                kcu.constraint_name
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON (tc.constraint_name = kcu.constraint_name AND
+                    tc.constraint_schema = kcu.constraint_schema AND
+                    tc.table_name = kcu.table_name AND
+                    tc.table_schema = kcu.table_schema)
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON (ccu.constraint_name = tc.constraint_name AND
+                    ccu.constraint_schema = tc.constraint_schema)
+            WHERE
+                tc.constraint_type = 'FOREIGN KEY' AND
+                tc.table_name = %s AND
+                tc.table_schema = current_schema() AND
+                kcu.column_name  = %s"""
+        cursor = self.database.execute_sql(sql, (table, column_name))
+        return cursor.fetchall()[0][0]
+
+    @operation
+    def drop_foreign_key_constraint(self, table: str, column_name: str):
+        fk_constraint = self.get_foreign_key_constraint(table, column_name)
+        return self.drop_constraint(table, fk_constraint)
 
 
 class SqliteMigrator(SchemaMigrator, SqM):

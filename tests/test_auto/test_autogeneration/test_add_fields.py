@@ -5,6 +5,10 @@ from peewee_migrate.auto import create_fields, diff_one
 from peewee_migrate.types import Model
 
 
+class _M1(pw.Model):
+    name = pw.CharField()
+
+
 @pytest.mark.parametrize(
     ("test_field", "expected"),
     [
@@ -16,6 +20,14 @@ from peewee_migrate.types import Model
         pytest.param(pw.IntegerField(default=5), """field=pw.IntegerField(default=5)""", id="add_default"),
         pytest.param(pw.IntegerField(default=lambda: 5), """field=pw.IntegerField()""", id="add_default_callable"),
         pytest.param(pw.IntegerField(null=True), """field=pw.IntegerField(null=True)""", id="add_nullable"),
+        pytest.param(
+            pw.ForeignKeyField(_M1, on_delete="CASCADE", null=True),
+            (
+                "pw.ForeignKeyField(backref='test_set', column_name='field_id', "
+                "field='id', model=migrator.orm['_m1'], null=True, on_delete='CASCADE')"
+            ),
+            id="add_fk",
+        ),
     ],
 )
 def test_add_fields(test_field: pw.Field, expected: str) -> None:

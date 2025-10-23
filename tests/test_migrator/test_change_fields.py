@@ -153,58 +153,87 @@ def test_change_indexes(
     assert migrator.orm["user"].name.unique == params_after.get("unique", False)
 
 
-def test_change_fk_field_to_integer(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(types.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    @migrator.create_table
-    class Book(types.Model):
-        name = pw.CharField()
-        author = pw.ForeignKeyField(User)
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-    migrator.change_fields("book", author=pw.IntegerField())
-    migrator.run()
-
-    assert patched_pg_db.queries == [
-        'ALTER TABLE "book" RENAME COLUMN "author_id" TO "author"',
-        'ALTER TABLE "book" ALTER COLUMN "author" TYPE INTEGER',
-        'DROP INDEX "book_author_id"',
-    ]
+class _M1(pw.Model):
+    name = pw.CharField()
 
 
-def test_change_integer_field_to_fk(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
+class _M2(pw.Model):
+    name = pw.CharField()
 
-    @migrator.create_table
-    class User(types.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
 
-    @migrator.create_table
-    class Book(types.Model):
-        name = pw.CharField()
-        author = pw.IntegerField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-    migrator.change_fields("book", author=pw.ForeignKeyField(User, on_delete="RESTRICT"))
-    migrator.run()
-
-    assert patched_pg_db.queries == [
-        'ALTER TABLE "book" RENAME COLUMN "author" TO "author_id"',
-        'ALTER TABLE "book" ALTER COLUMN "author_id" TYPE INTEGER',
-        (
-            'ALTER TABLE "book" ADD CONSTRAINT "fk_book_author_id_refs_user" '
-            'FOREIGN KEY ("author_id") REFERENCES "user" ("id") ON DELETE RESTRICT'
+@pytest.mark.parametrize(
+    ("change_params", "expected"),
+    [
+        pytest.param(
+            {"non_fk_field": pw.ForeignKeyField(_M1, on_delete="RESTRICT")},
+            [
+                'ALTER TABLE "testmodel" RENAME COLUMN "non_fk_field" TO "non_fk_field_id"',
+                'ALTER TABLE "testmodel" ALTER COLUMN "non_fk_field_id" TYPE INTEGER',
+                (
+                    'ALTER TABLE "testmodel" ADD CONSTRAINT "fk_testmodel_non_fk_field_id_refs__m1" '
+                    'FOREIGN KEY ("non_fk_field_id") REFERENCES "_m1" ("id") ON DELETE RESTRICT'
+                ),
+                'CREATE INDEX "testmodel_non_fk_field_id" ON "testmodel" (non_fk_field_id)',
+            ],
+            id="non_fk_to_fk",
         ),
-        'CREATE INDEX "book_author_id" ON "book" (author_id)',
-    ]
+        pytest.param(
+            {"fk_field": pw.ForeignKeyField(_M1)},
+            [
+                'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_fk_field_id_fkey"',
+                'ALTER TABLE "testmodel" ADD CONSTRAINT "fk_testmodel_fk_field_id_refs__m1" '
+                'FOREIGN KEY ("fk_field_id") REFERENCES "_m1" ("id")',
+            ],
+            id="fk_to_fk",
+        ),
+        pytest.param(
+            {"fk_field": pw.IntegerField()},
+            [
+                'ALTER TABLE "testmodel" RENAME COLUMN "fk_field_id" TO "fk_field"',
+                'ALTER TABLE "testmodel" ALTER COLUMN "fk_field" TYPE INTEGER',
+                'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_fk_field_id_fkey"',
+                'DROP INDEX "testmodel_fk_field_id"',
+            ],
+            id="fk_to_integer",
+        ),
+        pytest.param(
+            {"fk_field": pw.ForeignKeyField(_M2, constraint_name="some_name")},
+            [
+                'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_fk_field_id_fkey"',
+                'ALTER TABLE "testmodel" ADD CONSTRAINT "some_name" '
+                'FOREIGN KEY ("fk_field_id") REFERENCES "_m2" ("id")',
+            ],
+            id="change_constraint_name",
+        ),
+        pytest.param(
+            {"fk_field": pw.ForeignKeyField(_M2, column_name="some_name")},
+            ['ALTER TABLE "testmodel" RENAME COLUMN "fk_field_id" TO "some_name"'],
+            id="change_column_name",
+        ),
+    ],
+)
+def test_change_integer_field_to_fk(
+    change_params: dict[str, Any], expected: list[str], patched_pg_db: PatchedPgDatabase
+) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    migrator.create_table(_M1)
+    migrator.create_table(_M2)
+
+    @migrator.create_table
+    class TestModel(types.Model):
+        name = pw.CharField()
+        fk_field = pw.ForeignKeyField(_M2)
+        non_fk_field = pw.IntegerField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+    migrator.change_fields("testmodel", **change_params)
+    migrator.run()
+
+    # remove query for constraints
+    queries = [q for q in patched_pg_db.queries if "FROM information_schema.table_constraints" not in q]
+    assert queries == expected
 
 
 @pytest.mark.parametrize(
@@ -253,6 +282,37 @@ def test_change_default_constraints(
     migrator.run()
     patched_pg_db.clear_queries()
     migrator.change_fields("user", age=pw.IntegerField(**params_after))
+    migrator.run()
+
+    assert patched_pg_db.queries == expected
+
+
+@pytest.mark.parametrize(
+    ("field_before", "field_after", "expected"),
+    [
+        pytest.param(pw.IntegerField(), pw.IntegerField(default=7), [], id="apply_default"),
+        pytest.param(
+            pw.IntegerField(),
+            pw.IntegerField(default=lambda: 8),
+            [],
+            id="apply_default_callable",
+        ),
+        pytest.param(pw.IntegerField(default=7), pw.IntegerField(), [], id="nothing_to_do"),
+    ],
+)
+def test_change_default(
+    field_before: pw.Field, field_after: pw.Field, expected: list[str], patched_pg_db: PatchedPgDatabase
+) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(types.Model):
+        name = pw.CharField()
+        age = field_before
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+    migrator.change_fields("user", age=field_after)
     migrator.run()
 
     assert patched_pg_db.queries == expected

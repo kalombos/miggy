@@ -23,12 +23,14 @@ FIELD_MODULES_MAP = {
 }
 
 
-def fk_to_params(field):
-    params = {}
+def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
+    params = {"model": field.rel_model}
     if field.on_delete is not None:
         params["on_delete"] = "'%s'" % field.on_delete
     if field.on_update is not None:
         params["on_update"] = "'%s'" % field.on_update
+    if field.constraint_name is not None:
+        params["constraint_name"] = "'%s'" % field.constraint_name
     return params
 
 

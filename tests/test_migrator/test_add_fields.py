@@ -1,6 +1,9 @@
-import peewee as pw
+from typing import Any
 
-from peewee_migrate import Migrator, types
+import peewee as pw
+import pytest
+
+from peewee_migrate import Migrator
 from tests.conftest import PatchedPgDatabase
 
 
@@ -8,7 +11,7 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
         created_at = pw.DateField()
 
@@ -38,7 +41,7 @@ def test_add_fields__default_constraint(patched_pg_db: PatchedPgDatabase) -> Non
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
 
     migrator.run()
@@ -57,7 +60,7 @@ def test_add_fields__default_value(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
-    class User(types.Model):
+    class User(pw.Model):
         name = pw.CharField()
 
     migrator.run()
@@ -71,3 +74,44 @@ def test_add_fields__default_value(patched_pg_db: PatchedPgDatabase) -> None:
         'UPDATE "user" SET "age" = 5',
         'ALTER TABLE "user" ALTER COLUMN "age" SET NOT NULL',
     ]
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        (
+            {
+                "null": True,
+            },
+            [
+                'ALTER TABLE "author" ADD COLUMN "user_id" INTEGER REFERENCES "user" ("id")',
+                'CREATE INDEX "author_user_id" ON "author" ("user_id")',
+            ],
+        ),
+        (
+            {"null": True, "on_delete": "CASCADE", "on_update": "RESTRICT", "index": False},
+            [
+                'ALTER TABLE "author" ADD COLUMN "user_id" INTEGER REFERENCES "user" '
+                '("id") ON DELETE CASCADE ON UPDATE RESTRICT',
+            ],
+        ),
+    ],
+)
+def test_add_fk_field(params: dict[str, Any], expected: list[str], patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        name = pw.CharField()
+
+    @migrator.create_table
+    class Author(pw.Model):
+        rating = pw.IntegerField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.add_fields("author", user=pw.ForeignKeyField(User, **params))
+    migrator.run()
+
+    assert patched_pg_db.queries == expected
