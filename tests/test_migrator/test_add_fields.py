@@ -15,6 +15,9 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
         name = pw.CharField()
         created_at = pw.DateField()
 
+        class Meta:
+            table_name = "some_name"
+
     migrator.run()
     patched_pg_db.clear_queries()
 
@@ -22,9 +25,9 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.run()
 
     assert patched_pg_db.queries == [
-        'ALTER TABLE "user" ADD COLUMN "last_name" VARCHAR(255)',
-        'CREATE UNIQUE INDEX "user_last_name" ON "user" ("last_name")',
-        'ALTER TABLE "user" ADD COLUMN "age" INTEGER',
+        'ALTER TABLE "some_name" ADD COLUMN "last_name" VARCHAR(255)',
+        'CREATE UNIQUE INDEX "some_name_last_name" ON "some_name" ("last_name")',
+        'ALTER TABLE "some_name" ADD COLUMN "age" INTEGER',
     ]
 
     last_name = migrator.orm["user"].last_name

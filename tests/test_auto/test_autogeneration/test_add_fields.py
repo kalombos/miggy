@@ -7,6 +7,9 @@ from peewee_migrate.auto import create_fields, diff_one
 class _M1(pw.Model):
     name = pw.CharField()
 
+    class Meta:
+        table_name = "some_name"
+
 
 @pytest.mark.parametrize(
     ("test_field", "expected"),

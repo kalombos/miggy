@@ -54,10 +54,6 @@ def test_migrator_sqlite_common():
     assert Order._meta.columns["identifier"].null
     migrator.run()
 
-    migrator.add_default(Order, "identifier", 11)
-    assert Order._meta.fields["identifier"].default == 11
-    migrator.run()
-
     migrator.change_columns(Order, identifier=pw.IntegerField(default=0))
     assert Order.identifier.field_type == "INT"
     migrator.run()
@@ -88,7 +84,8 @@ def test_migrator_sqlite_common():
     migrator.rename_table("order", "new_name")
     migrator.run()
     assert Order._meta.table_name == "new_name"
-    migrator.rename_table("new_name", "order")
+    migrator.rename_table("order", "order")
+    assert Order._meta.table_name == "order"
     migrator.run()
 
 

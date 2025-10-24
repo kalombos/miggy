@@ -12,6 +12,9 @@ def test_remove_model(patched_pg_db: PatchedPgDatabase) -> None:
         name = pw.CharField(index=True)
         created_at = pw.DateField()
 
+        class Meta:
+            table_name = "what"
+
     assert User == migrator.orm["user"]
     migrator.run()
 
@@ -19,6 +22,6 @@ def test_remove_model(patched_pg_db: PatchedPgDatabase) -> None:
 
     migrator.remove_model("user")
     migrator.run()
-    assert patched_pg_db.queries == ['DROP TABLE "user"']
+    assert patched_pg_db.queries == ['DROP TABLE "what"']
 
     assert "user" not in migrator.orm

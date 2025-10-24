@@ -1,41 +1,54 @@
-"""Peewee migrations."""
+"""Peewee migrations -- 001_test.py.
+
+Some examples (model - class or model name)::
+
+    > Model = migrator.orm['model_name']            # Return model in current state by name
+
+    > migrator.sql(sql)                             # Run custom SQL
+    > migrator.python(func, *args, **kwargs)        # Run python code
+    > migrator.create_model(Model: Model)                  # Create a model (could be used as decorator)
+    > migrator.remove_model(model: str | Model)    # Remove a model
+    > migrator.add_fields(model: str | Model, **fields: pw.Field)          # Add fields to a model
+    > migrator.change_fields(model: str | Model, **fields: pw.Field)       # Change fields
+    > migrator.remove_fields(model: str | Model, *field_names: pw.Field, cascade: bool = False)
+    > migrator.rename_field(model: str | Model, old_name: str, new_name: str)
+    > migrator.rename_table(model: str | Model, new_table_name: str)
+    > migrator.add_index(model: str | Model, *fields: str, name: str, unique: bool = False, where: pw.SQL | None = None)
+    > migrator.drop_index(model: str | Model, name: str)
+    > migrator.add_not_null(model: str | Model, *field_names: str)
+    > migrator.drop_not_null(model: str | Model, *field_names: str)
+
+"""
 
 import datetime as dt
 
 import peewee as pw
 
+from peewee_migrate import migrations
 
-def migrate(migrator, database, **kwargs):
-    """Write your migrations here.
+SQL = pw.SQL
 
-    > Model = migrator.orm['name']
 
-    > migrator.sql(sql)
-    > migrator.python(func, *args, **kwargs)
-    > migrator.create_model(Model)
-    > migrator.store_model(Model)
-    > migrator.remove_model(Model, cascade=True)
-    > migrator.add_fields(Model, **fields)
-    > migrator.change_fields(Model, **fields)
-    > migrator.remove_fields(Model, *field_names, cascade=True)
-    > migrator.rename_field(Model, old_field_name, new_field_name)
-    > migrator.rename_table(Model, new_table_name)
-    > migrator.add_index(Model, *col_names, unique=False)
-    > migrator.drop_index(Model, index_name)
-    > migrator.add_not_null(Model, field_name)
-    > migrator.drop_not_null(Model, field_name)
-    > migrator.add_default(Model, field_name, default)
+class Migration(migrations.Migration):
+    atomic = True
 
-    """
+    @staticmethod
+    def migrate(migrator, database, fake=False):
+        """Write your migrations here."""
 
-    @migrator.create_model
-    class Tag(pw.Model):
-        tag = pw.CharField()
+        @migrator.create_model
+        class Tag(pw.Model):
+            tag = pw.CharField()
 
-    @migrator.create_model
-    class Person(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField(index=True)
-        dob = pw.DateField(null=True)
-        birthday = pw.DateField(default=dt.datetime.now)
-        email = pw.CharField(index=True, unique=True)
+        @migrator.create_model
+        class Person(pw.Model):
+            first_name = pw.CharField()
+            last_name = pw.CharField(index=True)
+            dob = pw.DateField(null=True)
+            birthday = pw.DateField(default=dt.datetime.now)
+            email = pw.CharField(index=True, unique=True)
+
+    @staticmethod
+    def rollback(migrator, database, fake=False):
+        """Write your rollback migrations here."""
+        pass

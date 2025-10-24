@@ -16,7 +16,7 @@ def migrations_dir():
 
 
 @pytest.fixture(params=["sqlite", "postgresql"])
-def database(request):
+def database(request: pytest.FixtureRequest):
     if request.param == "sqlite":
         db = playhouse.db_url.connect("sqlite:///:memory:")
     else:
@@ -53,11 +53,14 @@ class PatchedPgDatabase(pw.PostgresqlDatabase):
         return super().execute_sql(sql, params, commit)
 
 
-@pytest.fixture()
-def patched_pg_db() -> Generator[PatchedPgDatabase, Any, None]:
+@pytest.fixture(params=({"in_transaction": True},))
+def patched_pg_db(request: pytest.FixtureRequest) -> Generator[PatchedPgDatabase, Any, None]:
     db = PatchedPgDatabase(POSTGRES_DSN)
-    with db.transaction() as transaction:
+    if request.param.get("in_transaction"):
+        with db.transaction() as transaction:
+            yield db
+            transaction.rollback()
+    else:
         yield db
-        transaction.rollback()
     db.close()
     db.clear_queries()

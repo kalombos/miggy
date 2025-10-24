@@ -3,6 +3,11 @@
 import os
 from unittest import mock
 
+import pytest
+
+from peewee_migrate.cli import get_router
+from tests.conftest import PatchedPgDatabase
+
 
 def test_router_run_already_applied_ok(router):
     router.run()
@@ -58,11 +63,16 @@ def test_router_merge(router, migrations_dir):
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-def test_router_compile(tmpdir):
-    from peewee_migrate.cli import get_router
-
+@pytest.mark.parametrize(
+    "patched_pg_db",
+    [
+        {"in_transaction": False},
+    ],
+    indirect=["patched_pg_db"],
+)
+def test_router_compile(tmpdir, patched_pg_db: PatchedPgDatabase):
     migrations = tmpdir.mkdir("migrations")
-    router = get_router(str(migrations), "sqlite:///:memory:")
+    router = get_router(str(migrations), patched_pg_db)
     router.compile("test_router_compile")
 
     with open(str(migrations.join("001_test_router_compile.py"))) as f:
@@ -71,8 +81,6 @@ def test_router_compile(tmpdir):
 
 
 def test_router_schema(tmpdir):
-    from peewee_migrate.cli import get_router
-
     schema_name = "test"
     migrations = tmpdir.mkdir("migrations")
 

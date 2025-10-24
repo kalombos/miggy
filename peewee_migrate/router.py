@@ -11,6 +11,7 @@ import peewee as pw
 
 from peewee_migrate import LOGGER, MigrateHistory
 from peewee_migrate.auto import NEWLINE, diff_many
+from peewee_migrate.migrations import Migration
 from peewee_migrate.migrator import Migrator
 from peewee_migrate.utils import exec_in
 
@@ -132,37 +133,42 @@ class BaseRouter(object):
     def run_one(self, name, migrator, fake=True, downgrade=False, force=False):
         """Run/emulate a migration with given name."""
         try:
-            migrate, rollback = self.read(name)
+            migration = self.read(name)
             if fake:
                 cursor_mock = mock.Mock()
                 cursor_mock.fetch_one.return_value = None
                 with mock.patch("peewee.Model.select"):
                     with mock.patch("peewee.Database.execute_sql", return_value=cursor_mock):
-                        migrate(migrator, self.database, fake=fake)
+                        migration.migrate(migrator, self.database, fake=fake)
 
                 if force:
                     self.model.create(name=name)
                     self.logger.info("Done %s", name)
 
                 migrator.clean()
-                return migrator
+                return
 
-            with self.database.transaction():
+            def run_migrator():
                 if not downgrade:
                     self.logger.info('Migrate "%s"', name)
-                    migrate(migrator, self.database, fake=fake)
+                    migration.migrate(migrator, self.database, fake=fake)
                     migrator.run()
                     self.model.create(name=name)
                 else:
                     self.logger.info("Rolling back %s", name)
-                    rollback(migrator, self.database, fake=fake)
+                    migration.rollback(migrator, self.database, fake=fake)
                     migrator.run()
                     self.model.delete().where(self.model.name == name).execute()
 
                 self.logger.info("Done %s", name)
 
+            if migration.atomic:
+                with self.database.transaction():
+                    run_migrator()
+            else:
+                run_migrator()
+
         except Exception:
-            self.database.rollback()
             operation = "Migration" if not downgrade else "Rollback"
             self.logger.exception("%s failed: %s", operation, name)
             raise
@@ -210,7 +216,7 @@ class Router(BaseRouter):
     def todo(self):
         """Scan migrations in file system."""
         if not os.path.exists(self.migrate_dir):
-            self.logger.warn("Migration directory: %s does not exist.", self.migrate_dir)
+            self.logger.warning("Migration directory: %s does not exist.", self.migrate_dir)
             os.makedirs(self.migrate_dir)
         return sorted(f[:-3] for f in os.listdir(self.migrate_dir) if self.filemask.match(f))
 
@@ -237,7 +243,18 @@ class Router(BaseRouter):
             code = f.read()
             scope = {}
             exec_in(code, scope)
-            return scope.get("migrate", VOID), scope.get("rollback", VOID)
+            if migration := scope.get("Migration", None):
+                return migration
+
+            # for backward compatibility
+            migrate, rollback = scope.get("migrate", VOID), scope.get("rollback", VOID)
+
+            class _Migration(Migration):
+                pass
+
+            _Migration.migrate = migrate
+            _Migration.rollback = rollback
+            return _Migration
 
     def clear(self):
         """Remove migrations from fs."""
@@ -245,20 +262,6 @@ class Router(BaseRouter):
         for name in self.todo:
             filename = os.path.join(self.migrate_dir, name + ".py")
             os.remove(filename)
-
-
-class ModuleRouter(BaseRouter):
-    def __init__(self, database, migrate_module="migrations", **kwargs):
-        super(ModuleRouter, self).__init__(database, **kwargs)
-
-        if isinstance(migrate_module, str):
-            migrate_module = import_module(migrate_module)
-
-        self.migrate_module = migrate_module
-
-    def read(self, name):
-        mod = getattr(self.migrate_module, name)
-        return getattr(mod, "migrate", VOID), getattr(mod, "rollback", VOID)
 
 
 def load_models(module):
