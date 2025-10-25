@@ -235,7 +235,7 @@ class Router(BaseRouter):
 
     def read(self, name):
         """Read migration from file."""
-        call_params = dict()
+        call_params = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
             # if system is windows - force utf-8 encoding
             call_params["encoding"] = "utf-8"
@@ -279,7 +279,7 @@ def _import_submodules(package, passed=UNDEFINED):
 
     modules = []
 
-    for loader, name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+    for _loader, name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
         if name in passed:
             continue
         passed.add(name)

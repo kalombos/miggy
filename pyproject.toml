@@ -67,10 +67,14 @@ ignore_missing_imports = true
 line-length = 120
 [tool.ruff.lint]
 select = [
-    'UP035',
-    'F',
+    'A',
+    'B',
+    'C',
     'E',
+    'F',
+    'G',
     'I',
+    'UP035',
     'TC'
 ]
 

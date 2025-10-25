@@ -370,7 +370,7 @@ class MigrationSet:
                 op()
 
     def clean(self) -> None:
-        self.ops = list()
+        self.ops = []
 
 
 class SchemaMigrator(ScM):
@@ -547,7 +547,7 @@ class Migrator(object):
 
         self.database = database
         self.schema = schema
-        self.orm = dict()
+        self.orm = {}
         self.schema_migrator = SchemaMigrator.from_database(self.database)
 
         self.migration_set = MigrationSet(self)

@@ -32,7 +32,7 @@ def router(tmpdir, db_url):
 def migrations(router):
     migrations_number = 5
     name = "test"
-    for i in range(migrations_number):
+    for _ in range(migrations_number):
         router().create(name)
     return ["00%s_test" % i for i in range(1, migrations_number + 1)]
 
@@ -51,7 +51,7 @@ def test_help():
 
 
 def test_create(dir_option, db_option):
-    for i in range(2):
+    for _ in range(2):
         result = runner.invoke(cli, ["create", dir_option, db_option, "-vvv", "test"])
         assert result.exit_code == 0
 
