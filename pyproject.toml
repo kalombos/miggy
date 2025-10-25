@@ -14,10 +14,8 @@ authors = [
   {name = "Kirill Klenov"},
   {name = "spumer"},
 ]
-readme = "README.md"
-
 description = "a database migration tool for usage with the peewee ORM"
-readme = "README.rst"
+readme = "README.md"
 requires-python = ">=3.10"
 classifiers=[
     'Development Status :: 4 - Beta',
