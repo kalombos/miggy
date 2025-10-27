@@ -15,6 +15,11 @@ def migrations_dir():
     return pathlib.Path(__file__).with_name("migrations")
 
 
+@pytest.fixture()
+def resources_dir() -> pathlib.Path:
+    return pathlib.Path(__file__).with_name("resources")
+
+
 @pytest.fixture(params=["sqlite", "postgresql"])
 def database(request: pytest.FixtureRequest):
     if request.param == "sqlite":

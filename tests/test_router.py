@@ -1,8 +1,10 @@
 """Tests for `peewee_migrate` module."""
 
 import os
+import pathlib
 from unittest import mock
 
+import playhouse
 import pytest
 
 from peewee_migrate.cli import get_router
@@ -91,4 +93,17 @@ def test_router_schema(tmpdir):
         assert router.migrator.schema == schema_name
 
 
-# pylama:ignore=W0621
+@pytest.mark.parametrize(
+    ("migration_name", "expected"),
+    [
+        ("w_transaction", True),
+        ("wo_transaction", False),
+    ],
+)
+def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration_name: str) -> None:
+    db = playhouse.db_url.connect("sqlite:///:memory:")
+    with mock.patch.object(db, "transaction") as mocked:
+        router = get_router(resources_dir / "transaction_test", db)
+        router.run_one(migration_name, router.migrator, fake=False)
+        transaction_called = mocked.call_count == 1
+        assert transaction_called is expected
