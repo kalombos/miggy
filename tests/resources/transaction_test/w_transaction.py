@@ -22,23 +22,20 @@ Some examples (model - class or model name)::
 
 import peewee as pw
 
-from peewee_migrate import migrations
-
 SQL = pw.SQL
 
 
-class Migration(migrations.Migration):
-    atomic = True
+__ATOMIC = True
 
-    @staticmethod
-    def migrate(migrator, database, fake=False):
-        """Write your migrations here."""
 
-        @migrator.create_model
-        class Tag(pw.Model):
-            tag = pw.CharField()
+def migrate(migrator, database, fake=False):
+    """Write your migrations here."""
 
-    @staticmethod
-    def rollback(migrator, database, fake=False):
-        """Write your rollback migrations here."""
-        pass
+    @migrator.create_model
+    class Tag(pw.Model):
+        tag = pw.CharField()
+
+
+def rollback(migrator, database, fake=False):
+    """Write your rollback migrations here."""
+    pass

@@ -9,7 +9,7 @@ from peewee_migrate.utils import get_default_constraint, get_default_constraint_
 
 from .types import ModelCls
 
-INDENT = "    " * 2
+INDENT = "    "
 NEWLINE = "\n" + INDENT
 FIELD_MODULES_MAP = {
     "ArrayField": "pw_pext",

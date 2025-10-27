@@ -11,7 +11,6 @@ import peewee as pw
 
 from peewee_migrate import LOGGER, MigrateHistory
 from peewee_migrate.auto import NEWLINE, diff_many
-from peewee_migrate.migrations import Migration
 from peewee_migrate.migrator import Migrator
 from peewee_migrate.utils import exec_in
 
@@ -22,6 +21,18 @@ UNDEFINED = object()
 VOID = lambda m, d: None  # noqa
 with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "template.txt")) as t:
     MIGRATE_TEMPLATE = t.read()
+
+
+class Migration:
+    atomic = True
+
+    @staticmethod
+    def migrate(migrator, database, fake=False) -> None:
+        pass
+
+    @staticmethod
+    def rollback(migrator, database, fake=False) -> None:
+        pass
 
 
 class BaseRouter(object):
@@ -243,15 +254,17 @@ class Router(BaseRouter):
             code = f.read()
             scope = {}
             exec_in(code, scope)
-            if migration := scope.get("Migration", None):
-                return migration
 
-            # for backward compatibility
-            migrate, rollback = scope.get("migrate", VOID), scope.get("rollback", VOID)
+            atomic, migrate, rollback = (
+                scope.get("__ATOMIC", True),
+                scope.get("migrate", VOID),
+                scope.get("rollback", VOID),
+            )
 
             class _Migration(Migration):
                 pass
 
+            _Migration.atomic = atomic
             _Migration.migrate = migrate
             _Migration.rollback = rollback
             return _Migration

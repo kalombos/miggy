@@ -348,7 +348,7 @@ def _delete_field(model: ModelCls, field: pw.Field) -> None:
         delattr(field.rel_model, field.backref)
 
 
-class MigrationSet:
+class Migration:
     def __init__(self, migrator: "Migrator") -> None:
         self.migrator = migrator
         self.ops: list[Operation | Callable] = []
@@ -550,7 +550,7 @@ class Migrator(object):
         self.orm = {}
         self.schema_migrator = SchemaMigrator.from_database(self.database)
 
-        self.migration_set = MigrationSet(self)
+        self.migration_set = Migration(self)
 
     def run(self):
         """Run operations."""
