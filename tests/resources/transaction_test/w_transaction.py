@@ -20,8 +20,6 @@ Some examples (model - class or model name)::
 
 """
 
-import datetime as dt
-
 import peewee as pw
 
 SQL = pw.SQL
@@ -36,14 +34,6 @@ def migrate(migrator, database, fake=False):
     @migrator.create_model
     class Tag(pw.Model):
         tag = pw.CharField()
-
-    @migrator.create_model
-    class Person(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField(index=True)
-        dob = pw.DateField(null=True)
-        birthday = pw.DateField(default=dt.datetime.now)
-        email = pw.CharField(index=True, unique=True)
 
 
 def rollback(migrator, database, fake=False):

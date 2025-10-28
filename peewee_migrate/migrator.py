@@ -22,6 +22,20 @@ from peewee_migrate.types import ModelCls
 from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
 
 
+class ModelIndex(pw.ModelIndex):
+    def __init__(
+        self, model, fields, unique=False, safe=True, where=None, using=None, name=None, concurrently=False
+    ) -> None:
+        self.concurrently = concurrently
+        super().__init__(model=model, fields=fields, unique=unique, safe=safe, where=where, using=using, name=name)
+
+    def __sql__(self, ctx):
+        context = super().__sql__(ctx)
+        if self.concurrently:
+            context._sql.insert(1, "CONCURRENTLY ")
+        return context
+
+
 def has_single_index(field: pw.Field) -> bool:
     return field.index or field.unique
 
@@ -30,8 +44,8 @@ def get_single_index_name(field: pw.Field) -> str:
     return make_single_model_index(field)._name
 
 
-def make_single_model_index(field: pw.Field) -> pw.ModelIndex:
-    return pw.ModelIndex(field.model, (field,), unique=field.unique, safe=False, using=field.index_type)
+def make_single_model_index(field: pw.Field) -> ModelIndex:
+    return ModelIndex(field.model, (field,), unique=field.unique, safe=False, using=field.index_type)
 
 
 def get_single_model_index(field: pw.Field) -> pw.Model:
@@ -69,11 +83,9 @@ class CreateModel(MigrateOperation):
 
     def state_forwards(self) -> None:
         # We use own attribute for indexes because we don't want to have conflict with standart index creation
-        self.model._meta.mg_indexes = {}
-        self.migrator.orm[self.model._meta.table_name] = self.model
+        self.migrator.orm[self.model._meta.name] = self.model
 
     def database_forwards(self) -> list[Callable]:
-        self.model._meta.database = self.migrator.database  # without it we can't run `model.create_table`
         return [lambda: self.model.create_table(safe=False)]
 
 
@@ -82,7 +94,7 @@ class RemoveModel(MigrateOperation):
         self.model = model
 
     def state_forwards(self) -> None:
-        del self.migrator.orm[self.model._meta.table_name]
+        del self.migrator.orm[self.model._meta.name]
 
     def database_forwards(self) -> list[Callable]:
         return [lambda: self.model.drop_table(safe=False)]
@@ -97,14 +109,16 @@ class AddIndex(MigrateOperation):
         unique: bool = False,
         where: pw.SQL | None = None,
         safe: bool = False,
+        concurrently: bool = False,
     ) -> None:
-        self.model_index = pw.ModelIndex(
+        self.model_index = ModelIndex(
             model=model_cls,
             fields=[resolve_field(model_cls, f) for f in fields],
             unique=unique,
             where=where,
             name=name,
             safe=safe,
+            concurrently=concurrently,
         )
         self.model_cls = model_cls
 
@@ -127,16 +141,14 @@ class DropIndex(MigrateOperation):
         return [self.schema_migrator.drop_index(self.model_cls._meta.table_name, self.name)]
 
 
-class RenameModel(MigrateOperation):
-    def __init__(self, model: ModelCls, new_name: str) -> None:
+class RenameTable(MigrateOperation):
+    def __init__(self, model: ModelCls, new_table_name: str) -> None:
         self.model = model
         self.old_name = model._meta.table_name
-        self.new_name = new_name
+        self.new_name = new_table_name
 
     def state_forwards(self) -> None:
-        del self.migrator.orm[self.old_name]
         self.model._meta.table_name = self.new_name
-        self.migrator.orm[self.new_name] = self.model
 
     def database_forwards(self) -> list[Callable]:
         """Rename table in database."""
@@ -358,7 +370,7 @@ class Migration:
                 op()
 
     def clean(self) -> None:
-        self.ops = list()
+        self.ops = []
 
 
 class SchemaMigrator(ScM):
@@ -428,7 +440,7 @@ class SchemaMigrator(ScM):
         return operations
 
     @operation
-    def add_model_index(self, model_index: pw.ModelIndex):
+    def add_model_index(self, model_index: ModelIndex):
         ctx = self.make_context()
         return ctx.sql(model_index)
 
@@ -513,9 +525,13 @@ def get_model(method):
     @wraps(method)
     def wrapper(migrator, model, *args, **kwargs):
         if isinstance(model, str):
-            model = migrator.orm[model]
+            model = migrator.orm[model.lower()]
 
+        model._meta.database = migrator.database
         model._meta.schema = migrator.schema
+        model._meta.legacy_table_names = False
+        if not hasattr(model._meta, "mg_indexes"):
+            model._meta.mg_indexes = {}
         return method(migrator, model, *args, **kwargs)
 
     return wrapper
@@ -531,46 +547,37 @@ class Migrator(object):
 
         self.database = database
         self.schema = schema
-        self.orm = dict()
+        self.orm = {}
         self.schema_migrator = SchemaMigrator.from_database(self.database)
 
-        self.migration = Migration(self)
-
-    @property
-    def ops(self) -> Migration:
-        # for backward compatibility
-        return self.migration  # backward compatibility
-
-    @property
-    def migrator(self) -> SchemaMigrator:
-        # for backward compatibility
-        return self.schema_migrator
+        self.migration_set = Migration(self)
 
     def run(self):
         """Run operations."""
         if self.schema:
-            self.migration.ops.insert(0, self.migrator.select_schema(self.schema))
-        self.migration.apply()
+            self.migration_set.ops.insert(0, self.schema_migrator.select_schema(self.schema))
+        self.migration_set.apply()
         self.clean()
 
     def python(self, func, *args, **kwargs):
         """Run python code."""
-        self.migration.append(lambda: func(*args, **kwargs))
+        self.migration_set.append(lambda: func(*args, **kwargs))
 
     def sql(self, sql, *params):
         """Execure raw SQL."""
-        self.migration.append(self.migrator.sql(sql, *params))
+        self.migration_set.append(self.schema_migrator.sql(sql, *params))
 
     def clean(self):
         """Clean the operations."""
-        self.migration.clean()
+        self.migration_set.clean()
 
+    @get_model
     def create_model(self, model: ModelCls) -> ModelCls:
         """Create model and table in database.
 
         >> migrator.create_model(model)
         """
-        self.migration.append(CreateModel(model))
+        self.migration_set.append(CreateModel(model))
         return model
 
     create_table = create_model
@@ -582,14 +589,14 @@ class Migrator(object):
         >> migrator.remove_model(model)
         """
 
-        self.migration.append(RemoveModel(model))
+        self.migration_set.append(RemoveModel(model))
 
     drop_table = remove_model
 
     @get_model
     def add_fields(self, model: ModelCls, **fields: Any) -> None:
         """Create new fields."""
-        self.migration.append(AddFields(model, **fields))
+        self.migration_set.append(AddFields(model, **fields))
 
     add_columns = add_fields
 
@@ -597,14 +604,14 @@ class Migrator(object):
     def change_fields(self, model: ModelCls, **fields: pw.Field) -> None:
         """Change fields."""
 
-        return self.migration.append(ChangeFields(model, **fields))
+        return self.migration_set.append(ChangeFields(model, **fields))
 
     change_columns = change_fields
 
     @get_model
     def remove_fields(self, model, *names: str, cascade: bool = False) -> None:
         """Remove fields from model."""
-        self.migration.append(RemoveFields(model, *names, cascade=cascade))
+        self.migration_set.append(RemoveFields(model, *names, cascade=cascade))
 
     drop_columns = remove_fields
 
@@ -612,15 +619,15 @@ class Migrator(object):
     def rename_field(self, model: ModelCls, old_name: str, new_name: str) -> None:
         """Rename field in model."""
 
-        self.migration.append(RenameField(model, old_name, new_name))
+        self.migration_set.append(RenameField(model, old_name, new_name))
 
     rename_column = rename_field
 
     @get_model
-    def rename_model(self, model: ModelCls, new_name: str) -> None:
-        self.migration.append(RenameModel(model, new_name))
+    def rename_table(self, model: ModelCls, new_table_name: str) -> None:
+        self.migration_set.append(RenameTable(model, new_table_name))
 
-    rename_table = rename_model
+    rename_model = rename_table
 
     @get_model
     def add_index(
@@ -630,28 +637,25 @@ class Migrator(object):
         name: str,
         unique: bool = False,
         where: pw.SQL | None = None,
+        safe: bool = False,
+        concurrently: bool = False,
     ) -> None:
         """Create indexes."""
-        self.migration.append(AddIndex(model, *fields, name=name, unique=unique, where=where))
+        self.migration_set.append(
+            AddIndex(model, *fields, name=name, unique=unique, where=where, safe=safe, concurrently=concurrently)
+        )
 
     @get_model
     def drop_index(self, model: ModelCls, name: str) -> None:
         """Drop indexes."""
-        self.migration.append(DropIndex(model, name))
+        self.migration_set.append(DropIndex(model, name))
 
     @get_model
     def add_not_null(self, model: ModelCls, *names: str) -> None:
         """Add not null."""
-        self.migration.append(ChangeNullable(model, *names, is_null=False))
+        self.migration_set.append(ChangeNullable(model, *names, is_null=False))
 
     @get_model
     def drop_not_null(self, model: ModelCls, *names: str) -> None:
         """Drop not null."""
-        self.migration.append(ChangeNullable(model, *names, is_null=True))
-
-    @get_model
-    def add_default(self, model: ModelCls, name: str, default: Any) -> None:
-        """Add default."""
-        field = model._meta.fields[name]
-        model._meta.defaults[field] = field.default = default
-        self.migration.append(self.migrator.apply_default(model._meta.table_name, name, field))
+        self.migration_set.append(ChangeNullable(model, *names, is_null=True))

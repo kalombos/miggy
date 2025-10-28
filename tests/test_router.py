@@ -1,7 +1,14 @@
 """Tests for `peewee_migrate` module."""
 
 import os
+import pathlib
 from unittest import mock
+
+import playhouse
+import pytest
+
+from peewee_migrate.cli import get_router
+from tests.conftest import PatchedPgDatabase
 
 
 def test_router_run_already_applied_ok(router):
@@ -58,11 +65,16 @@ def test_router_merge(router, migrations_dir):
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-def test_router_compile(tmpdir):
-    from peewee_migrate.cli import get_router
-
+@pytest.mark.parametrize(
+    "patched_pg_db",
+    [
+        {"in_transaction": False},
+    ],
+    indirect=["patched_pg_db"],
+)
+def test_router_compile(tmpdir, patched_pg_db: PatchedPgDatabase):
     migrations = tmpdir.mkdir("migrations")
-    router = get_router(str(migrations), "sqlite:///:memory:")
+    router = get_router(str(migrations), patched_pg_db)
     router.compile("test_router_compile")
 
     with open(str(migrations.join("001_test_router_compile.py"))) as f:
@@ -71,8 +83,6 @@ def test_router_compile(tmpdir):
 
 
 def test_router_schema(tmpdir):
-    from peewee_migrate.cli import get_router
-
     schema_name = "test"
     migrations = tmpdir.mkdir("migrations")
 
@@ -83,4 +93,17 @@ def test_router_schema(tmpdir):
         assert router.migrator.schema == schema_name
 
 
-# pylama:ignore=W0621
+@pytest.mark.parametrize(
+    ("migration_name", "expected"),
+    [
+        ("w_transaction", True),
+        ("wo_transaction", False),
+    ],
+)
+def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration_name: str) -> None:
+    db = playhouse.db_url.connect("sqlite:///:memory:")
+    with mock.patch.object(db, "transaction") as mocked:
+        router = get_router(resources_dir / "transaction_test", db)
+        router.run_one(migration_name, router.migrator, fake=False)
+        transaction_called = mocked.call_count == 1
+        assert transaction_called is expected

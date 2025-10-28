@@ -170,7 +170,7 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
 @click.option("--directory", default="migrations", help="Directory where migrations are stored")
 @click.option("--schema", default=None, help="Database schema")
 @click.option("-v", "--verbose", count=True)
-def list(database=None, directory=None, schema=None, verbose=None):
+def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A001
     """List migrations."""
     router = get_router(directory, database, schema, verbose)
     click.echo("Migrations are done:")

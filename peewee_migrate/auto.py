@@ -96,7 +96,7 @@ class FieldSerializer(ColumnSerializer):
         if isinstance(field, pw.ForeignKeyField):
             self.to_field = field.rel_field.name
             self.related_name = field.backref
-            self.rel_model = "migrator.orm['%s']" % field.rel_model._meta.table_name
+            self.rel_model = "migrator.orm['%s']" % field.rel_model._meta.name
 
     def get_field_parameters(self) -> dict[str, Any]:
         params = super(FieldSerializer, self).get_field_parameters()
