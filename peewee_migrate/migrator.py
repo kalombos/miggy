@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, ValuesView
 from copy import deepcopy
 from typing import Any
 
@@ -21,7 +21,7 @@ from peewee_migrate.auto import fk_to_params, resolve_field
 from peewee_migrate.types import ModelCls
 from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
 
-_State = dict[str, pw.Model]
+ModelDict = dict[str, ModelCls]
 
 
 def copy_model(model_cls: ModelCls) -> ModelCls:
@@ -45,33 +45,40 @@ def copy_model(model_cls: ModelCls) -> ModelCls:
     return type(model_cls.__name__, model_cls.__bases__, attrs)
 
 
-class State(_State):
+class State:
+    def __init__(self, data: ModelDict | None = None) -> None:
+        self.data: ModelDict = data or {}
+        self._snapshot: ModelDict | None = None
+
     def normalize_key(self, key: str) -> str:
-        return key.lower()
+        _key = key.lower()
+        if self._snapshot is not None:
+            if _key in self._snapshot:
+                self._snapshot[_key] = copy_model(self._snapshot[_key])
+        return _key
 
-    def __setitem__(self, key, val) -> None:
-        super().__setitem__(self.normalize_key(key), val)
+    def __setitem__(self, key: str, val: ModelCls) -> None:
+        self.data[self.normalize_key(key)] = val
 
-    def __getitem__(self, key) -> pw.Model:
-        return super().__getitem__(self.normalize_key(key))
+    def __getitem__(self, key: str) -> ModelCls:
+        return self.data[self.normalize_key(key)]
 
-    def __contains__(self, key) -> bool:
-        return super().__contains__(self.normalize_key(key))
+    def __delitem__(self, key: str) -> None:
+        del self.data[self.normalize_key(key)]
 
-    def get(self, key, default=None) -> pw.Model | None:
-        return super().get(self.normalize_key(key), default)
+    def __contains__(self, key: str) -> bool:
+        return self.normalize_key(key) in self.data
 
-    def pop(self, key, default=None) -> pw.Model | None:
-        return super().pop(self.normalize_key(key), default)
+    def values(self) -> ValuesView[ModelCls]:
+        return self.data.values()
 
-    def __delitem__(self, key) -> None:
-        super().__delitem__(self.normalize_key(key))
+    def create_snapshot(self) -> None:
+        self._snapshot = self.data.copy()
 
-    def copy(self) -> "State":
-        new_state = State()
-        for k, v in self.items():
-            new_state[k] = v
-        return new_state
+    def pop_snapshot(self) -> "State":
+        _snapshot = self._snapshot
+        self._snapshot = None
+        return State(_snapshot)
 
 
 def _indexes_state(model_cls: pw.Model) -> dict[str, Any]:
@@ -113,9 +120,6 @@ def get_single_model_index(field: pw.Field) -> pw.Model:
 
 
 class MigrateOperation:
-    def __init__(self, model_name: str) -> None:
-        self.model_name = model_name
-
     def state_forwards(self, state: State) -> None:
         """
         Take the state from the previous migration, and mutate it
@@ -136,7 +140,6 @@ class MigrateOperation:
 
 class CreateModel(MigrateOperation):
     def __init__(self, model: ModelCls) -> None:
-        super().__init__(model._meta.name)
         self.model = model
 
     def state_forwards(self, state: State) -> None:
@@ -153,6 +156,9 @@ class CreateModel(MigrateOperation):
 
 
 class RemoveModel(MigrateOperation):
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+
     def state_forwards(self, state: State) -> None:
         del state[self.model_name]
 
@@ -174,7 +180,7 @@ class AddIndex(MigrateOperation):
         safe: bool = False,
         concurrently: bool = False,
     ) -> None:
-        super().__init__(model_name)
+        self.model_name = model_name
         self.fields = fields
         self.unique = unique
         self.where = where
@@ -211,7 +217,7 @@ class AddIndex(MigrateOperation):
 
 class DropIndex(MigrateOperation):
     def __init__(self, model_name: str, name: str) -> None:
-        super().__init__(model_name)
+        self.model_name = model_name
         self.name = name
 
     def state_forwards(self, state: State) -> None:
@@ -227,7 +233,7 @@ class DropIndex(MigrateOperation):
 
 class RenameTable(MigrateOperation):
     def __init__(self, model_name: str, new_table_name: str) -> None:
-        super().__init__(model_name)
+        self.model_name = model_name
         self.new_table_name = new_table_name
 
     def state_forwards(self, state: State) -> None:
@@ -244,7 +250,7 @@ class RenameTable(MigrateOperation):
 
 class AddFields(MigrateOperation):
     def __init__(self, model_name: str, **fields: Any) -> None:
-        super().__init__(model_name)
+        self.model_name = model_name
         self.fields = fields
 
     def state_forwards(self, state: State) -> None:
@@ -393,7 +399,7 @@ def fk_postfix(name: str) -> str:
 
 class RenameField(MigrateOperation):
     def __init__(self, model_name: str, old_name: str, new_name: str) -> None:
-        super().__init__(model_name)
+        self.model_name = model_name
         self.old_field_name = old_name
         self.new_field_name = new_name
 
@@ -461,20 +467,18 @@ def _delete_field(model: ModelCls, field: pw.Field) -> None:
 
 
 class Migration:
-    def __init__(self, migrator: "Migrator") -> None:
-        self.migrator = migrator
+    def __init__(self, state: State, schema_migrator: "SchemaMigrator") -> None:
+        self.state = state
+        self.schema_migrator = schema_migrator
         self.ops: list[Operation | Callable] = []
 
     def append(self, op: MigrateOperation) -> None:
         if isinstance(op, MigrateOperation):
-            # TODO move this logic to state class
-            from_state = self.migrator.orm.copy()
-            model_name = op.model_name
-            if model_name in from_state:
-                from_state[model_name] = copy_model(self.migrator.orm[model_name])
+            self.state.create_snapshot()
+            op.state_forwards(self.state)
+            from_state = self.state.pop_snapshot()
 
-            op.state_forwards(self.migrator.orm)
-            self.ops.extend(op.database_forwards(self.migrator.schema_migrator, from_state, self.migrator.orm))
+            self.ops.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
         else:
             self.ops.append(op)
 
@@ -646,10 +650,15 @@ class Migrator(object):
 
         self.database = database
         self.schema = schema
-        self.orm = State()
+        self.state = State()
         self.schema_migrator = SchemaMigrator.from_database(self.database)
 
-        self.migration = Migration(self)
+        self.migration = Migration(self.state, self.schema_migrator)
+
+    @property
+    def orm(self) -> State:
+        # for backward compatibility
+        return self.state
 
     def run(self):
         """Run operations."""
