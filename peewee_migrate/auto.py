@@ -160,7 +160,7 @@ class IndexMetaExtractor:
         model_index = self.index_obj
         self.validate_fields(model_index)
         return IndexMeta(
-            self.model_cls._meta.name,  # # should be fixed
+            self.model_cls._meta.name,
             tuple(f.name for f in model_index._expressions),
             unique=model_index._unique,
             where=self.resolve_where(model_index._where),
