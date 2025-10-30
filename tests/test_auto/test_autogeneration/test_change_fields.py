@@ -2,6 +2,7 @@ import peewee as pw
 import pytest
 
 from peewee_migrate.auto import change_fields, diff_one
+from peewee_migrate.migrator import copy_model
 
 
 class _M1(pw.Model):
@@ -68,6 +69,7 @@ def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, ex
         class Meta:
             table_name = "test"
 
+    # ._meta.name
     class Test(pw.Model):
         first_name = pw.CharField()
         age = age_field_after
@@ -78,3 +80,22 @@ def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, ex
     code = diff_one(Test, OldTest)[0]
     assert code == change_fields(Test, Test.age)
     assert expected in code
+
+
+@pytest.mark.parametrize(
+    ("field_before", "field_after"),
+    [
+        pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1), id="fk_copy_model"),
+        pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(copy_model(_M1)), id="fk_copy_model"),
+    ],
+)
+def test_change_field__no_changes(field_before: pw.Field, field_after: pw.Field) -> None:
+    class OldTest(pw.Model):
+        first_name = pw.CharField()
+        age = field_before
+
+    class Test(pw.Model):
+        first_name = pw.CharField()
+        age = field_after
+
+    assert diff_one(Test, OldTest) == []

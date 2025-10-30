@@ -29,7 +29,7 @@ def test_migrator_sqlite_common():
     assert Order == migrator.orm["order"]
     migrator.run()
 
-    migrator.add_columns(Order, finished=pw.BooleanField(default=False))
+    migrator.add_fields("order", finished=pw.BooleanField(default=False))
     assert "finished" in Order._meta.fields
     migrator.run()
 
@@ -39,22 +39,22 @@ def test_migrator_sqlite_common():
     assert not hasattr(Order, "customer_id_id")
     migrator.run()
 
-    migrator.add_columns(Order, customer=pw.ForeignKeyField(Customer, null=True))
+    migrator.add_fields("order", customer=pw.ForeignKeyField(Customer, null=True))
     assert "customer" in Order._meta.fields
     assert Order.customer.name == "customer"
     migrator.run()
     assert Order.customer.name == "customer"
 
-    migrator.rename_column(Order, "number", "identifier")
+    migrator.rename_field("Order", "number", "identifier")
     assert "identifier" in Order._meta.fields
     migrator.run()
 
-    migrator.drop_not_null(Order, "identifier")
+    migrator.drop_not_null("Order", "identifier")
     assert Order._meta.fields["identifier"].null
     assert Order._meta.columns["identifier"].null
     migrator.run()
 
-    migrator.change_columns(Order, identifier=pw.IntegerField(default=0))
+    migrator.change_columns("Order", identifier=pw.IntegerField(default=0))
     assert Order.identifier.field_type == "INT"
     migrator.run()
 
@@ -64,22 +64,22 @@ def test_migrator_sqlite_common():
     order = Order.get()
     assert order.identifier == 77
 
-    migrator.add_index(Order, "identifier", "customer", name="some_name")
+    migrator.add_index("Order", "identifier", "customer", name="some_name")
     migrator.run()
-    assert Order._meta.mg_indexes
+    assert Order._meta.indexes_state
     assert not Order.identifier.index
 
-    migrator.drop_index(Order, "some_name")
+    migrator.drop_index("Order", "some_name")
     migrator.run()
-    assert not Order._meta.mg_indexes
+    assert not Order._meta.indexes_state
 
-    migrator.remove_fields(Order, "customer")
+    migrator.remove_fields("order", "customer")
     migrator.run()
     assert not hasattr(Order, "customer")
-    migrator.add_index(Order, "identifier", unique=True, name="some_name")
+    migrator.add_index("Order", "identifier", unique=True, name="some_name")
     migrator.run()
 
-    assert Order._meta.mg_indexes
+    assert Order._meta.indexes_state
 
     migrator.rename_table("order", "new_name")
     migrator.run()

@@ -23,7 +23,7 @@ FIELD_MODULES_MAP = {
 
 
 def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
-    params = {"model": field.rel_model}
+    params = {"model": field.rel_model._meta.name}
     if field.on_delete is not None:
         params["on_delete"] = "'%s'" % field.on_delete
     if field.on_update is not None:
@@ -65,7 +65,7 @@ def field_to_params(field: pw.Field) -> dict[str, Any]:
     return params
 
 
-def fields_not_equal(field1, field2) -> bool:
+def fields_not_equal(field1: pw.Field, field2: pw.Field) -> bool:
     return field_to_params(field1) != field_to_params(field2)
 
 
