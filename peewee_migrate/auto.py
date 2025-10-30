@@ -33,14 +33,26 @@ def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
     return params
 
 
-FIELD_TO_PARAMS = {
+TYPE_PARAMS = {
     pw.CharField: lambda f: {"max_length": f.max_length},
     pw.DecimalField: lambda f: {
         "max_digits": f.max_digits,
         "decimal_places": f.decimal_places,
     },
-    pw.ForeignKeyField: fk_to_params,
 }
+
+
+def get_type_params(field: pw.Field) -> dict[str, Any]:
+    field_type = type(field)
+    params = TYPE_PARAMS.get(field_type, lambda f: {})(field)
+    return params
+
+
+def get_field_params(field: pw.Field) -> dict[str, Any]:
+    params = get_type_params(field)
+    if isinstance(field, pw.ForeignKeyField):
+        params.update(fk_to_params(field))
+    return params
 
 
 def field_to_code(field, space=True) -> str:
@@ -55,7 +67,7 @@ def _get_default(field: pw.Field) -> Any:
 
 
 def field_to_params(field: pw.Field) -> dict[str, Any]:
-    params = FIELD_TO_PARAMS.get(type(field), lambda f: {})(field)
+    params = get_field_params(field)
     params["type"] = type(field)
     params["null"] = field.null
     params["column_name"] = field.column_name
@@ -86,8 +98,7 @@ class FieldSerializer(ColumnSerializer):
         if field.default is not None and not callable(field.default):
             self.default = repr(field.default)
 
-        if self.field_class in FIELD_TO_PARAMS:
-            self.extra_parameters.update(FIELD_TO_PARAMS[self.field_class](field))
+        self.extra_parameters.update(get_field_params(field))
 
         self.rel_model = None
         self.related_name = None

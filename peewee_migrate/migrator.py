@@ -16,7 +16,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
-from peewee_migrate.auto import fk_to_params, resolve_field
+from peewee_migrate.auto import fk_to_params, get_type_params, resolve_field
 from peewee_migrate.types import ModelCls
 from peewee_migrate.utils import (
     ModelIndex,
@@ -289,7 +289,7 @@ class ChangeFields(MigrateOperation):
     def handle_type(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
-        if type(old_field) is not type(new_field):
+        if type(old_field) is not type(new_field) or get_type_params(old_field) != get_type_params(new_field):
             table_name = old_field.model._meta.table_name
             return [schema_migrator.alter_column_type(table_name, new_field.column_name, new_field)]
         return []
