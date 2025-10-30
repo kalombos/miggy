@@ -5,16 +5,14 @@ The package description.
 
 import datetime as dt
 import logging
+from importlib.metadata import version
 
 import peewee as pw
 
 # Package information
 # ===================
 
-__version__ = "1.6.5"
-__project__ = "peewee_migrate2"
-__author__ = "spumer, Kirill Klenov"
-__license__ = "BSD"
+__version__ = version("miggy")
 
 
 LOGGER = logging.getLogger(__name__)

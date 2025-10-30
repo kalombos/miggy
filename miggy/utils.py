@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 import peewee as pw
 
-from peewee_migrate.types import ModelCls
+from miggy.types import ModelCls
 
 if TYPE_CHECKING:
-    from peewee_migrate.types import ModelCls
+    from miggy.types import ModelCls
 
 
 def exec_in(code, glob, loc=None):

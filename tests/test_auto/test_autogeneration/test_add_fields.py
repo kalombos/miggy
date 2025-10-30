@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from peewee_migrate.auto import create_fields, diff_one
+from miggy.auto import create_fields, diff_one
 
 
 class _M1(pw.Model):

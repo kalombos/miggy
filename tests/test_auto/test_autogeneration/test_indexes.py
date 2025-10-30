@@ -3,8 +3,8 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from peewee_migrate.auto import diff_one
-from peewee_migrate.utils import ModelIndex
+from miggy.auto import diff_one
+from miggy.utils import ModelIndex
 
 
 @pytest.mark.parametrize(

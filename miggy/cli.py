@@ -13,9 +13,9 @@ CLEAN_RE = re.compile(r"\s+$", re.M)
 
 
 def get_router(directory, database, schema=None, verbose=0):
-    from peewee_migrate import LOGGER
-    from peewee_migrate.router import Router
-    from peewee_migrate.utils import exec_in
+    from miggy import LOGGER
+    from miggy.router import Router
+    from miggy.utils import exec_in
 
     logging_level = VERBOSE[verbose]
     config = {}

@@ -3,8 +3,8 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from peewee_migrate import Migrator
-from peewee_migrate.utils import Default, has_single_index
+from miggy import Migrator
+from miggy.utils import Default, has_single_index
 from tests.conftest import PatchedPgDatabase
 
 
