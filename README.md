@@ -27,18 +27,7 @@ Requirements
 
 Installation
 ------------
-
-To reduce code changes Python package name don\'t changed. Only name on
-PyPI.
-
-If you have installed previous version please remove it before using
-pip: :
-
-    pip uninstall peewee_migrate
-
-**Peewee Migrate** should be installed using pip: :
-
-    pip install peewee_migrate2
+    pip install miggy
 
 Usage
 -----
@@ -47,9 +36,9 @@ Usage
 
 Getting help:
 
-    $ pw_migrate --help
+    $ miggy --help
 
-    Usage: pw_migrate [OPTIONS] COMMAND [ARGS]...
+    Usage: miggy [OPTIONS] COMMAND [ARGS]...
 
     Options:
         --help  Show this message and exit.
@@ -61,9 +50,9 @@ Getting help:
 
 Create migration:
 
-    $ pw_migrate create --help
+    $ miggy create --help
 
-    Usage: pw_migrate create [OPTIONS] NAME
+    Usage: miggy create [OPTIONS] NAME
 
         Create migration.
 
@@ -78,9 +67,9 @@ Create migration:
 
 Run migrations:
 
-    $ pw_migrate migrate --help
+    $ miggy migrate --help
 
-    Usage: pw_migrate migrate [OPTIONS]
+    Usage: miggy migrate [OPTIONS]
 
         Run migrations.
 
@@ -94,9 +83,9 @@ Run migrations:
 
 Auto create migration:
 
-    $ pw_migrate makemigrations --help
+    $ miggy makemigrations --help
 
-    Usage: pw_migrate makemigrations [OPTIONS]
+    Usage: miggy makemigrations [OPTIONS]
 
       Create a migration automatically
 
@@ -119,7 +108,7 @@ Auto create migration:
 
 ### From python
 
-    from peewee_migrate import Router
+    from miggy import Router
     from peewee import SqliteDatabase
 
     router = Router(SqliteDatabase('test.db'))

@@ -15,10 +15,10 @@ from playhouse.migrate import PostgresqlMigrator as PgM
 from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
-from peewee_migrate import LOGGER
-from peewee_migrate.auto import fk_to_params, get_type_params, resolve_field
-from peewee_migrate.types import ModelCls
-from peewee_migrate.utils import (
+from miggy import LOGGER
+from miggy.auto import fk_to_params, get_type_params, resolve_field
+from miggy.types import ModelCls
+from miggy.utils import (
     ModelIndex,
     copy_model,
     delete_field,

@@ -1,4 +1,4 @@
-from peewee_migrate.router import load_models
+from miggy.router import load_models
 
 
 def fqn(obj):

@@ -12,7 +12,7 @@ from playhouse.postgres_ext import (
     TSVectorField,
 )
 
-from peewee_migrate.auto import (
+from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
     add_index,
@@ -21,7 +21,7 @@ from peewee_migrate.auto import (
     fields_not_equal,
     model_to_code,
 )
-from peewee_migrate.utils import ModelIndex
+from miggy.utils import ModelIndex
 
 
 class _M1(pw.Model):

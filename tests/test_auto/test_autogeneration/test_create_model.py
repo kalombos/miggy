@@ -1,6 +1,6 @@
 import peewee as pw
 
-from peewee_migrate.auto import create_model, diff_many
+from miggy.auto import create_model, diff_many
 
 
 def test_create_model_w_constraint() -> None:

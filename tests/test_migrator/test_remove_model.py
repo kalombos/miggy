@@ -1,6 +1,6 @@
 import peewee as pw
 
-from peewee_migrate import Migrator, types
+from miggy import Migrator, types
 from tests.conftest import PatchedPgDatabase
 
 

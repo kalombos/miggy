@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
-from peewee_migrate.utils import ModelIndex, get_default_constraint, get_default_constraint_value, indexes_state
+from miggy.utils import ModelIndex, get_default_constraint, get_default_constraint_value, indexes_state
 
 from .types import ModelCls
 

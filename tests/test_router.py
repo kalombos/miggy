@@ -1,5 +1,3 @@
-"""Tests for `peewee_migrate` module."""
-
 import os
 import pathlib
 from unittest import mock
@@ -7,7 +5,7 @@ from unittest import mock
 import playhouse
 import pytest
 
-from peewee_migrate.cli import get_router
+from miggy.cli import get_router
 from tests.conftest import PatchedPgDatabase
 
 
@@ -86,7 +84,7 @@ def test_router_schema(tmpdir):
     schema_name = "test"
     migrations = tmpdir.mkdir("migrations")
 
-    with mock.patch("peewee_migrate.router.BaseRouter.done"):
+    with mock.patch("miggy.router.BaseRouter.done"):
         router = get_router(str(migrations), "postgres:///fake", schema=schema_name)
 
         assert router.schema == schema_name

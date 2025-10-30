@@ -1,14 +1,14 @@
 import peewee as pw
 import pytest
 
-from peewee_migrate import Migrator, types
+from miggy import Migrator, types
 from tests.conftest import PatchedPgDatabase
 
 
 def test_migrator_sqlite_common():
     from playhouse.db_url import connect
 
-    from peewee_migrate import Migrator
+    from miggy import Migrator
 
     database = connect("sqlite:///:memory:")
     migrator = Migrator(database)

@@ -9,10 +9,10 @@ from unittest import mock
 
 import peewee as pw
 
-from peewee_migrate import LOGGER, MigrateHistory
-from peewee_migrate.auto import NEWLINE, diff_many
-from peewee_migrate.migrator import Migrator
-from peewee_migrate.utils import exec_in
+from miggy import LOGGER, MigrateHistory
+from miggy.auto import NEWLINE, diff_many
+from miggy.migrator import Migrator
+from miggy.utils import exec_in
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
 CURDIR = os.getcwd()

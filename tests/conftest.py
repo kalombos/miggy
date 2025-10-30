@@ -34,7 +34,7 @@ def database(request: pytest.FixtureRequest):
 
 @pytest.fixture()
 def router(migrations_dir, database):
-    from peewee_migrate.cli import get_router
+    from miggy.cli import get_router
 
     router = get_router(migrations_dir, database)
 

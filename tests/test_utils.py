@@ -3,7 +3,7 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from peewee_migrate.utils import Default, copy_model, delete_field, get_default_constraint
+from miggy.utils import Default, copy_model, delete_field, get_default_constraint
 
 
 @pytest.mark.parametrize(

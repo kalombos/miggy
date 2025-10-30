@@ -3,8 +3,8 @@ from pathlib import Path
 
 import peewee as pw
 
-from peewee_migrate.auto import create_model, diff_many, diff_one, model_to_code
-from peewee_migrate.cli import get_router
+from miggy.auto import create_model, diff_many, diff_one, model_to_code
+from miggy.cli import get_router
 
 
 def test_on_real_migrations(migrations_dir: Path):

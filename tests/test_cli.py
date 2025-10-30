@@ -1,7 +1,7 @@
 import pytest
 from click.testing import CliRunner
 
-from peewee_migrate.cli import cli, get_router
+from miggy.cli import cli, get_router
 
 runner = CliRunner()
 
