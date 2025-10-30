@@ -64,9 +64,7 @@ def test_change_nullable(
         (
             pw.CharField(),
             pw.CharField(max_length=None),
-            [
-                'ALTER TABLE "user" ALTER COLUMN "field" TYPE VARCHAR'
-            ],
+            ['ALTER TABLE "user" ALTER COLUMN "field" TYPE VARCHAR'],
         ),
         (
             pw.CharField(),
@@ -76,16 +74,12 @@ def test_change_nullable(
         (
             pw.CharField(),
             pw.CharField(max_length=5),
-            [
-                'ALTER TABLE "user" ALTER COLUMN "field" TYPE VARCHAR(5)'
-            ],
+            ['ALTER TABLE "user" ALTER COLUMN "field" TYPE VARCHAR(5)'],
         ),
         (
             pw.DecimalField(),
             pw.DecimalField(max_digits=4, decimal_places=2),
-            [
-                'ALTER TABLE "user" ALTER COLUMN "field" TYPE NUMERIC(4, 2)'
-            ],
+            ['ALTER TABLE "user" ALTER COLUMN "field" TYPE NUMERIC(4, 2)'],
         ),
     ],
 )
