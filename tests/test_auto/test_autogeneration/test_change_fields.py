@@ -2,7 +2,7 @@ import peewee as pw
 import pytest
 
 from peewee_migrate.auto import change_fields, diff_one
-from peewee_migrate.migrator import copy_model
+from peewee_migrate.utils import copy_model
 
 
 class _M1(pw.Model):
@@ -69,7 +69,6 @@ def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, ex
         class Meta:
             table_name = "test"
 
-    # ._meta.name
     class Test(pw.Model):
         first_name = pw.CharField()
         age = age_field_after

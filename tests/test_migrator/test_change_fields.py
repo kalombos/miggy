@@ -4,8 +4,7 @@ import peewee as pw
 import pytest
 
 from peewee_migrate import Migrator
-from peewee_migrate.migrator import has_single_index
-from peewee_migrate.utils import Default
+from peewee_migrate.utils import Default, has_single_index
 from tests.conftest import PatchedPgDatabase
 
 

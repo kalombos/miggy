@@ -315,11 +315,8 @@ def _check_model(obj, models=None):
 
 def compile_migrations(migrator, models, reverse=False):
     """Compile migrations for given models."""
-    source = migrator.orm.values()
-    if reverse:
-        source, models = models, source
 
-    migrations = diff_many(models, source, reverse=reverse)
+    migrations = diff_many(models, migrator.state.values(), reverse=reverse)
     if not migrations:
         return False
 
