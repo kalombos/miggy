@@ -2,6 +2,15 @@ from typing import Any
 
 import peewee as pw
 import pytest
+from playhouse.postgres_ext import (
+    ArrayField,
+    BinaryJSONField,
+    DateTimeTZField,
+    HStoreField,
+    IntervalField,
+    JSONField,
+    TSVectorField,
+)
 
 from peewee_migrate.auto import (
     IndexMeta,
@@ -10,7 +19,9 @@ from peewee_migrate.auto import (
     extract_index_meta,
     field_to_code,
     fields_not_equal,
+    model_to_code,
 )
+from peewee_migrate.utils import ModelIndex
 
 
 class _M1(pw.Model):
@@ -97,7 +108,7 @@ def test_index_meta_extractor__resolve_where() -> None:
 )
 def test_index_meta_extractor__resolve_where__exceptions(where: Any, expected_match: str) -> None:
     with pytest.raises(NotImplementedError, match=expected_match):
-        IndexMetaExtractor(_DoesNotMatter, ("first_name",)).resolve_where(where)
+        IndexMetaExtractor(_DoesNotMatter, ModelIndex(_DoesNotMatter, ("first_name",))).resolve_where(where)
 
 
 def test_extract_index_meta__tuple() -> None:
@@ -159,6 +170,34 @@ def test_extract_index_meta__advanced__str_field_error() -> None:
         NotImplementedError, match="<class 'str'> for ModelIndex.field is not suported. Use Field object instead."
     ):
         extract_index_meta(Test)
+
+
+def test_model_to_code_postgresext():
+    class Object(pw.Model):
+        array_field = ArrayField()
+        binary_json_field = BinaryJSONField()
+        dattime_tz_field = DateTimeTZField()
+        hstore_field = HStoreField()
+        interval_field = IntervalField()
+        json_field = JSONField()
+        ts_vector_field = TSVectorField()
+
+    code = model_to_code(Object)
+    assert code
+    assert "json_field = pw_pext.JSONField()" in code
+    assert "hstore_field = pw_pext.HStoreField(index=True)" in code
+
+
+def test_model_to_code_indexes():
+    class Object(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+        class Meta:
+            indexes = ((("first_name", "last_name"), True),)
+
+    code = model_to_code(Object)
+    assert "indexes" not in code
 
 
 @pytest.mark.parametrize(

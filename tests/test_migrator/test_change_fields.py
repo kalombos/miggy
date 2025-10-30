@@ -4,8 +4,7 @@ import peewee as pw
 import pytest
 
 from peewee_migrate import Migrator
-from peewee_migrate.migrator import has_single_index
-from peewee_migrate.utils import Default
+from peewee_migrate.utils import Default, has_single_index
 from tests.conftest import PatchedPgDatabase
 
 
@@ -57,6 +56,50 @@ def test_change_nullable(
 
     assert migrator.orm["user"].created_at.null == null_after
     assert isinstance(migrator.orm["user"].created_at, pw.DateTimeField)
+
+
+@pytest.mark.parametrize(
+    ("field_before", "field_after", "expected"),
+    [
+        (
+            pw.CharField(),
+            pw.CharField(max_length=None),
+            ['ALTER TABLE "user" ALTER COLUMN "field" TYPE VARCHAR'],
+        ),
+        (
+            pw.CharField(),
+            pw.CharField(),
+            [],
+        ),
+        (
+            pw.CharField(),
+            pw.CharField(max_length=5),
+            ['ALTER TABLE "user" ALTER COLUMN "field" TYPE VARCHAR(5)'],
+        ),
+        (
+            pw.DecimalField(),
+            pw.DecimalField(max_digits=4, decimal_places=2),
+            ['ALTER TABLE "user" ALTER COLUMN "field" TYPE NUMERIC(4, 2)'],
+        ),
+    ],
+)
+def test_change_type(
+    field_before: pw.Field, field_after: pw.Field, expected: list[str], patched_pg_db: PatchedPgDatabase
+) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        name = pw.CharField()
+        field = field_before
+
+    assert User == migrator.orm["user"]
+    migrator.run()
+    patched_pg_db.queries.clear()
+
+    migrator.change_fields("user", field=field_after)
+    migrator.run()
+    assert patched_pg_db.queries == expected
 
 
 def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:

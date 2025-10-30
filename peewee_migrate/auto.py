@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
-from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
+from peewee_migrate.utils import ModelIndex, get_default_constraint, get_default_constraint_value, indexes_state
 
 from .types import ModelCls
 
@@ -33,14 +33,26 @@ def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
     return params
 
 
-FIELD_TO_PARAMS = {
+TYPE_PARAMS = {
     pw.CharField: lambda f: {"max_length": f.max_length},
     pw.DecimalField: lambda f: {
         "max_digits": f.max_digits,
         "decimal_places": f.decimal_places,
     },
-    pw.ForeignKeyField: fk_to_params,
 }
+
+
+def get_type_params(field: pw.Field) -> dict[str, Any]:
+    field_type = type(field)
+    params = TYPE_PARAMS.get(field_type, lambda f: {})(field)
+    return params
+
+
+def get_field_params(field: pw.Field) -> dict[str, Any]:
+    params = get_type_params(field)
+    if isinstance(field, pw.ForeignKeyField):
+        params.update(fk_to_params(field))
+    return params
 
 
 def field_to_code(field, space=True) -> str:
@@ -55,7 +67,7 @@ def _get_default(field: pw.Field) -> Any:
 
 
 def field_to_params(field: pw.Field) -> dict[str, Any]:
-    params = FIELD_TO_PARAMS.get(type(field), lambda f: {})(field)
+    params = get_field_params(field)
     params["type"] = type(field)
     params["null"] = field.null
     params["column_name"] = field.column_name
@@ -86,8 +98,7 @@ class FieldSerializer(ColumnSerializer):
         if field.default is not None and not callable(field.default):
             self.default = repr(field.default)
 
-        if self.field_class in FIELD_TO_PARAMS:
-            self.extra_parameters.update(FIELD_TO_PARAMS[self.field_class](field))
+        self.extra_parameters.update(get_field_params(field))
 
         self.rel_model = None
         self.related_name = None
@@ -134,21 +145,9 @@ def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
 
 
 class IndexMetaExtractor:
-    def __init__(self, model_cls: ModelCls, index_obj: Any) -> None:
+    def __init__(self, model_cls: ModelCls, index_obj: ModelIndex) -> None:
         self.model_cls = model_cls
         self.index_obj = index_obj
-        self.table_name = self.model_cls._meta.table_name
-
-    def resolve_fields(self, fields: Sequence[Any]) -> tuple[str, ...]:
-        _fields = []
-        for field in fields:
-            if isinstance(field, str):
-                field = resolve_field(self.model_cls, field)
-            if isinstance(field, pw.Field):
-                _fields.append(field)
-            else:
-                raise NotImplementedError
-        return tuple(_fields)
 
     def resolve_where(self, where: pw.Node | None) -> None | str:
         if isinstance(where, pw.SQL):
@@ -168,33 +167,53 @@ class IndexMetaExtractor:
             if not isinstance(f, pw.Field):
                 raise NotImplementedError(f"{type(f)} for ModelIndex.field is not suported. Use Field object instead.")
 
-    def serialize_model_index(self, model_index: pw.ModelIndex) -> IndexMeta:
+    def serialize(self) -> IndexMeta:
+        model_index = self.index_obj
         self.validate_fields(model_index)
         return IndexMeta(
-            self.table_name,  # # should be fixed
+            self.model_cls._meta.name,
             tuple(f.name for f in model_index._expressions),
             unique=model_index._unique,
             where=self.resolve_where(model_index._where),
             name=model_index._name,
         )
 
-    def serialize(self) -> IndexMeta:
-        index_obj = self.index_obj
+
+def extract_index_meta(model_cls: ModelCls) -> list[IndexMeta]:
+    rebuild_indexes(model_cls)
+    indexes = indexes_state(model_cls).values()
+    return [IndexMetaExtractor(model_cls, i).serialize() for i in indexes]
+
+
+def rebuild_indexes(model_cls: ModelCls) -> None:
+    def resolve_fields(fields: Sequence[Any]) -> tuple[str, ...]:
+        _fields = []
+        for field in fields:
+            if isinstance(field, str):
+                field = resolve_field(model_cls, field)
+            if isinstance(field, pw.Field):
+                _fields.append(field)
+            else:
+                raise NotImplementedError
+        return tuple(_fields)
+
+    for index_obj in model_cls._meta.indexes:
         # Advanced Indexes
         # https://docs.peewee-orm.com/en/latest/peewee/models.html#advanced-index-creation
         if isinstance(index_obj, pw.ModelIndex):
-            return self.serialize_model_index(index_obj)
+            indexes_state(model_cls)[index_obj._name] = index_obj
 
         # Multi-column indexes
         # https://docs.peewee-orm.com/en/latest/peewee/models.html#multi-column-indexes
-        if isinstance(index_obj, (list, tuple)):
+        elif isinstance(index_obj, (list, tuple)):
             fields, unique = index_obj
-            return self.serialize_model_index(pw.ModelIndex(self.model_cls, self.resolve_fields(fields), unique=unique))
-        raise NotImplementedError(f"{type(index_obj)} as Index is not suported. Use ModelIndex, list or tuple instead.")
-
-
-def extract_index_meta(model_cls: type[pw.Model]) -> list[IndexMeta]:
-    return [IndexMetaExtractor(model_cls, i).serialize() for i in model_cls._meta.indexes]
+            model_index = ModelIndex(model_cls, resolve_fields(fields), unique=unique)
+            indexes_state(model_cls)[model_index._name] = model_index
+        else:
+            raise NotImplementedError(
+                f"{type(index_obj)} as Index is not suported. Use ModelIndex, list or tuple instead."
+            )
+    model_cls._meta.indexes = []
 
 
 def diff_indexes_from_meta(current: type[pw.Model], prev: type[pw.Model]) -> tuple[list[str], list[str]]:
@@ -249,35 +268,37 @@ def diff_one(model1: type[pw.Model], model2: type[pw.Model]) -> list[str]:
     return changes
 
 
-def diff_many(models1, models2, reverse=False):
+def diff_many(models, state_models, reverse=False):
     """Calculate changes for migrations from models2 to models1."""
-    models1 = pw.sort_models(models1)
-    models2 = pw.sort_models(models2)
+    if reverse:
+        state_models, models = models, state_models
+    models = pw.sort_models(models)
+    state_models = pw.sort_models(state_models)
 
     if reverse:
-        models1 = reversed(models1)
-        models2 = reversed(models2)
+        models = reversed(models)
+        state_models = reversed(state_models)
 
-    models1 = collections.OrderedDict([(m._meta.name, m) for m in models1])
-    models2 = collections.OrderedDict([(m._meta.name, m) for m in models2])
+    models = collections.OrderedDict([(m._meta.name, m) for m in models])
+    state_models = collections.OrderedDict([(m._meta.name, m) for m in state_models])
 
     changes = []
 
-    for name, model1 in models1.items():
-        if name not in models2:
+    for name, model1 in models.items():
+        if name not in state_models:
             continue
-        changes += diff_one(model1, models2[name])
+        changes += diff_one(model1, state_models[name])
 
     # Add models
-    for name in [m for m in models1 if m not in models2]:
-        index_meta = extract_index_meta(models1[name])
-        changes.append(create_model(models1[name]))
+    for name in [m for m in models if m not in state_models]:
+        index_meta = extract_index_meta(models[name])
+        changes.append(create_model(models[name]))
         for i in index_meta:
             changes.append(add_index(i))
 
     # Remove models
-    for name in [m for m in models2 if m not in models1]:
-        changes.append(remove_model(models2[name]))
+    for name in [m for m in state_models if m not in models]:
+        changes.append(remove_model(state_models[name]))
 
     return changes
 
@@ -346,15 +367,13 @@ def change_not_null(Model, name, null):
 
 def add_index(index_meta: IndexMeta) -> str:
     operation = "add_index"
-    table_name = index_meta.model
 
     _where = ", where=pw.SQL(%s)" % repr(index_meta.where) if index_meta.where else ""
     _unique = f", unique={index_meta.unique}" if index_meta.unique else ""
     _fields = ", ".join(map(repr, index_meta.fields))
-    return f"migrator.{operation}('{table_name}', {_fields}, name='{index_meta.name}'{_unique}{_where})"
+    return f"migrator.{operation}('{index_meta.model}', {_fields}, name='{index_meta.name}'{_unique}{_where})"
 
 
 def drop_index(model: ModelCls, name: str) -> str:
-    table_name = model._meta.table_name
     operation = "drop_index"
-    return "migrator.%s('%s', '%s')" % (operation, table_name, name)
+    return "migrator.%s('%s', '%s')" % (operation, model._meta.name, name)

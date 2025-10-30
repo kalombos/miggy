@@ -1,5 +1,4 @@
 from collections.abc import Callable, ValuesView
-from copy import deepcopy
 from typing import Any
 
 import peewee as pw
@@ -17,32 +16,22 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from peewee_migrate import LOGGER
-from peewee_migrate.auto import fk_to_params, resolve_field
+from peewee_migrate.auto import fk_to_params, get_type_params, resolve_field
 from peewee_migrate.types import ModelCls
-from peewee_migrate.utils import get_default_constraint, get_default_constraint_value
+from peewee_migrate.utils import (
+    ModelIndex,
+    copy_model,
+    delete_field,
+    get_default_constraint,
+    get_default_constraint_value,
+    get_single_index_name,
+    get_single_model_index,
+    has_single_index,
+    indexes_state,
+    make_single_model_index,
+)
 
 ModelDict = dict[str, ModelCls]
-
-
-def copy_model(model_cls: ModelCls) -> ModelCls:
-    # this function based on ModelBase.__new__ logic
-    attrs = {}
-    # copying fields
-    for k, v in model_cls.__dict__.items():
-        if isinstance(v, pw.FieldAccessor) and not v.field.primary_key:
-            attrs[k] = deepcopy(v.field)
-    # copying Meta
-    meta_options = {}
-    if hasattr(model_cls, "_meta"):
-        base_meta = model_cls._meta
-        meta_keys = ["indexes", "legacy_table_names", "table_name", "database", "indexes_state"]
-        for k in meta_keys:
-            try:
-                meta_options[k] = base_meta.__dict__[k]
-            except KeyError:
-                pass
-        attrs["Meta"] = type("Meta", (object,), meta_options)
-    return type(model_cls.__name__, model_cls.__bases__, attrs)
 
 
 class State:
@@ -81,44 +70,6 @@ class State:
         return State(_snapshot)
 
 
-def _indexes_state(model_cls: pw.Model) -> dict[str, Any]:
-    if not hasattr(model_cls._meta, "indexes_state"):
-        model_cls._meta.indexes_state = {}
-    return model_cls._meta.indexes_state
-
-
-class ModelIndex(pw.ModelIndex):
-    def __init__(
-        self, model, fields, unique=False, safe=True, where=None, using=None, name=None, concurrently=False
-    ) -> None:
-        self.concurrently = concurrently
-        super().__init__(model=model, fields=fields, unique=unique, safe=safe, where=where, using=using, name=name)
-
-    def __sql__(self, ctx):
-        context = super().__sql__(ctx)
-        if self.concurrently:
-            context._sql.insert(1, "CONCURRENTLY ")
-        return context
-
-
-def has_single_index(field: pw.Field) -> bool:
-    return field.index or field.unique
-
-
-def get_single_index_name(field: pw.Field) -> str:
-    return make_single_model_index(field)._name
-
-
-def make_single_model_index(field: pw.Field) -> ModelIndex:
-    return ModelIndex(field.model, (field,), unique=field.unique, safe=False, using=field.index_type)
-
-
-def get_single_model_index(field: pw.Field) -> pw.Model:
-    if has_single_index(field):
-        return make_single_model_index(field)
-    return None
-
-
 class MigrateOperation:
     def state_forwards(self, state: State) -> None:
         """
@@ -134,6 +85,7 @@ class MigrateOperation:
         """
         Perform the mutation on the database schema in the normal
         (forwards) direction.
+        state params MUST NOT be changed
         """
         raise NotImplementedError
 
@@ -143,16 +95,13 @@ class CreateModel(MigrateOperation):
         self.model = model
 
     def state_forwards(self, state: State) -> None:
-        # We use own attribute for indexes because we don't want to have conflict with standart index creation
+        self.model._meta.legacy_table_names = False
         state[self.model._meta.name] = self.model
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
-        model = to_state[self.model._meta.name]
-        model._meta.database = schema_migrator.database
-        model._meta.legacy_table_names = False
-        return [lambda: model.create_table(safe=False)]
+        return [schema_migrator.create_table(to_state[self.model._meta.name])]
 
 
 class RemoveModel(MigrateOperation):
@@ -165,8 +114,7 @@ class RemoveModel(MigrateOperation):
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
-        model = from_state[self.model_name]
-        return [lambda: model.drop_table(safe=False)]
+        return [schema_migrator.drop_table(from_state[self.model_name])]
 
 
 class AddIndex(MigrateOperation):
@@ -205,7 +153,7 @@ class AddIndex(MigrateOperation):
     def state_forwards(self, state: State) -> None:
         model = state[self.model_name]
         model_index = self.build_index(model)
-        _indexes_state(model)[model_index._name] = model_index
+        indexes_state(model)[model_index._name] = model_index
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
@@ -222,7 +170,7 @@ class DropIndex(MigrateOperation):
 
     def state_forwards(self, state: State) -> None:
         model = state[self.model_name]
-        del _indexes_state(model)[self.name]
+        del indexes_state(model)[self.name]
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
@@ -341,7 +289,7 @@ class ChangeFields(MigrateOperation):
     def handle_type(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
-        if type(old_field) is not type(new_field):
+        if type(old_field) is not type(new_field) or get_type_params(old_field) != get_type_params(new_field):
             table_name = old_field.model._meta.table_name
             return [schema_migrator.alter_column_type(table_name, new_field.column_name, new_field)]
         return []
@@ -379,7 +327,7 @@ class RemoveFields(MigrateOperation):
         model = state[self.model_name]
         for name in self.names:
             field = state[self.model_name]._meta.fields[name]
-            _delete_field(model, field)
+            delete_field(model, field)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
@@ -408,7 +356,7 @@ class RenameField(MigrateOperation):
 
         old_field = model._meta.fields[self.old_field_name]
         new_field = old_field.clone()
-        _delete_field(model, old_field)
+        delete_field(model, old_field)
 
         new_field.column_name = self.resolve_new_name(old_field, self.new_field_name)
         model._meta.add_field(self.new_field_name, new_field)
@@ -455,15 +403,6 @@ class ChangeNullable(MigrateOperation):
             _operation = schema_migrator.drop_not_null if self.is_null else schema_migrator.add_not_null
             ops.append(_operation(model._meta.table_name, field.column_name))
         return ops
-
-
-def _delete_field(model: ModelCls, field: pw.Field) -> None:
-    """Delete field from model."""
-    model._meta.remove_field(field.name)
-    delattr(model, field.name)
-    if isinstance(field, pw.ForeignKeyField):
-        delattr(model, field.object_id_name)
-        delattr(field.rel_model, field.backref)
 
 
 class Migration:
@@ -577,6 +516,14 @@ class SchemaMigrator(ScM):
             new_single_model_index = make_single_model_index(new_field)
             operations.append(self.rename_index(old_model_index._name, new_single_model_index._name))
         return operations
+
+    def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
+        model._meta.database = self.database
+        return lambda: model.create_table(safe=safe)
+
+    def drop_table(self, model: ModelCls, safe: bool = False) -> Callable:
+        model._meta.database = self.database
+        return lambda: model.drop_table(safe=safe)
 
 
 class MySQLMigrator(SchemaMigrator, MqM):

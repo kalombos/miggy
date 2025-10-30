@@ -3,7 +3,8 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from peewee_migrate.auto import diff_one, model_to_code
+from peewee_migrate.auto import diff_one
+from peewee_migrate.utils import ModelIndex
 
 
 @pytest.mark.parametrize(
@@ -211,13 +212,28 @@ def test_advanced_indexes(before_kwargs: dict[str, Any], after_kwargs: dict[str,
     assert diff_one(create_model(after_kwargs), create_model(before_kwargs)) == changes
 
 
-def test_composite_unique_index__create_model():
-    class Object(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
+def test_indexes_rebuilding() -> None:
+    def create_model1() -> type[pw.Model]:
+        class Test(pw.Model):
+            first_name = pw.CharField()
+            last_name = pw.CharField()
 
-        class Meta:
-            indexes = ((("first_name", "last_name"), True),)
+            class Meta:
+                indexes = [
+                    (["first_name", "last_name"], False),
+                    (["first_name"], False),
+                ]
 
-    code = model_to_code(Object)
-    assert code
+        return Test
+
+    def create_model2() -> type[pw.Model]:
+        class Test(pw.Model):
+            first_name = pw.CharField()
+            last_name = pw.CharField()
+
+        Test._meta.indexes_state = {"test_first_name": ModelIndex(Test, (Test.first_name,))}
+        return Test
+
+    assert diff_one(create_model1(), create_model2()) == [
+        "migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name')"
+    ]

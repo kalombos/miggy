@@ -2,15 +2,6 @@ import datetime as dt
 from pathlib import Path
 
 import peewee as pw
-from playhouse.postgres_ext import (
-    ArrayField,
-    BinaryJSONField,
-    DateTimeTZField,
-    HStoreField,
-    IntervalField,
-    JSONField,
-    TSVectorField,
-)
 
 from peewee_migrate.auto import create_model, diff_many, diff_one, model_to_code
 from peewee_migrate.cli import get_router
@@ -102,19 +93,3 @@ def test_create_model() -> None:
     assert changes[1] == "migrator.add_index('test', 'i1', 'i2', name='test_i1_i2', unique=True)"
     assert changes[2] == "migrator.add_index('test', 'i1', 'i2', name='i3')"
     assert """constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in create_model_code
-
-
-def test_auto_postgresext():
-    class Object(pw.Model):
-        array_field = ArrayField()
-        binary_json_field = BinaryJSONField()
-        dattime_tz_field = DateTimeTZField()
-        hstore_field = HStoreField()
-        interval_field = IntervalField()
-        json_field = JSONField()
-        ts_vector_field = TSVectorField()
-
-    code = model_to_code(Object)
-    assert code
-    assert "json_field = pw_pext.JSONField()" in code
-    assert "hstore_field = pw_pext.HStoreField(index=True)" in code
