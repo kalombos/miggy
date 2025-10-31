@@ -1,22 +1,19 @@
-Peewee Migrate 2
+Miggy
 ============
 
 
 A simple migration engine for **[peewee](https://github.com/coleifer/peewee)**.
 
 
-[![CI workflow](https://github.com/kalombos/peewee_migrate2/actions/workflows/tests.yml/badge.svg)](https://github.com/kalombos/peewee_migrate2/actions/workflows/tests.yml) [![PyPi Version](http://img.shields.io/pypi/v/peewee_migrate2.svg?style=flat-square)](https://pypi.python.org/pypi/peewee_migrate2)
+[![CI workflow](https://github.com/kalombos/miggy/actions/workflows/tests.yml/badge.svg)](https://github.com/kalombos/miggy/actions/workflows/tests.yml) [![PyPi Version](http://img.shields.io/pypi/v/miggy.svg?style=flat-square)](https://pypi.python.org/pypi/miggy)
 
 
 Why Fork?
 ---------
 
-It's a fork of original <https://github.com/klen/peewee_migrate>. Thank
-`klen` for that!
+This project is a fork of the original <https://github.com/klen/peewee_migrate> by `klen` — many thanks to them for the initial work!
 
-But `klen` does not support project for a long time.
-
-To fix critical issues project was forked and development continued.
+Since the original project has not been actively maintained for some time, this fork was created to fix critical issues and continue development.
 
 Requirements
 ------------
@@ -144,7 +141,7 @@ Bug tracker
 
 If you have any suggestions, bug reports or annoyances please report
 them to the issue tracker at
-<https://github.com/kalombos/peewee_migrate2/issues>
+<https://github.com/kalombos/miggy/issues>
 
 Developing
 ----------
@@ -170,7 +167,7 @@ poe check
 Contributors
 ------------
 
-See [AUTHORS.md](https://github.com/kalombos/peewee_migrate2/blob/develop/AUTHORS.md)
+See [AUTHORS.md](https://github.com/kalombos/miggy/blob/develop/AUTHORS.md)
 
 License
 -------
