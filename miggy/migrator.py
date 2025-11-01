@@ -32,6 +32,7 @@ from miggy.utils import (
 )
 
 ModelDict = dict[str, ModelCls]
+RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
 class State:
@@ -88,6 +89,33 @@ class MigrateOperation:
         state params MUST NOT be changed
         """
         raise NotImplementedError
+
+
+class RunPython(MigrateOperation):
+    def __init__(self, func: RunPythonF) -> None:
+        self.func = func
+        
+    def state_forwards(self, state: State) -> None:
+        pass
+
+    def database_forwards(
+        self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
+    ) -> list[Operation] | list[Callable]:
+        self.func(schema_migrator, from_state)
+
+
+class RunSql(MigrateOperation):
+    def __init__(self, sql: str, *params: Any) -> None:
+        self.sql = sql
+        self.params = params
+        
+    def state_forwards(self, state: State) -> None:
+        pass
+
+    def database_forwards(
+        self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
+    ) -> list[Operation] | list[Callable]:
+        schema_migrator.sql(self.sql, *self.params)
 
 
 class CreateModel(MigrateOperation):
@@ -409,28 +437,26 @@ class Migration:
     def __init__(self, state: State, schema_migrator: "SchemaMigrator") -> None:
         self.state = state
         self.schema_migrator = schema_migrator
-        self.ops: list[Operation | Callable] = []
+        self.migrate_operations: list[MigrateOperation] = []
 
     def append(self, op: MigrateOperation) -> None:
-        if isinstance(op, MigrateOperation):
-            self.state.create_snapshot()
-            op.state_forwards(self.state)
-            from_state = self.state.pop_snapshot()
-
-            self.ops.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
-        else:
-            self.ops.append(op)
+        self.migrate_operations.append(op)
+            
 
     def apply(self) -> None:
-        for op in self.ops:
-            if isinstance(op, Operation):
-                LOGGER.info("%s %s", op.method, op.args)
-                op.run()
-            else:
-                op()
+        for migrate_operation in self.migrate_operations:
+            self.state.create_snapshot()
+            migrate_operation.state_forwards(self.state)
+            from_state = self.state.pop_snapshot()
+            for op in migrate_operation.database_forwards(self.schema_migrator, from_state, self.state):            
+                if isinstance(op, Operation):
+                    LOGGER.info("%s %s", op.method, op.args)
+                    op.run()
+                else:
+                    op()
 
     def clean(self) -> None:
-        self.ops = []
+        self.migrate_operations = []
 
 
 class SchemaMigrator(ScM):
@@ -602,6 +628,9 @@ class Migrator(object):
 
         self.migration = Migration(self.state, self.schema_migrator)
 
+    def add_operation(self, op: MigrateOperation):
+        self.migration.append(op)
+
     @property
     def orm(self) -> State:
         # for backward compatibility
@@ -610,17 +639,17 @@ class Migrator(object):
     def run(self):
         """Run operations."""
         if self.schema:
-            self.migration.ops.insert(0, self.schema_migrator.select_schema(self.schema))
+            self.migration.migrate_operations.insert(0, self.schema_migrator.select_schema(self.schema))
         self.migration.apply()
         self.clean()
 
-    def python(self, func, *args, **kwargs):
+    def python(self, func: RunPythonF):
         """Run python code."""
-        self.migration.append(lambda: func(*args, **kwargs))
+        self.add_operation(RunPython(func))
 
-    def sql(self, sql, *params):
+    def sql(self, sql: str, *params: Any):
         """Execure raw SQL."""
-        self.migration.append(self.schema_migrator.sql(sql, *params))
+        self.add_operation(RunSql(sql, *params))
 
     def clean(self):
         """Clean the operations."""
@@ -631,7 +660,7 @@ class Migrator(object):
 
         >> migrator.create_model(model)
         """
-        self.migration.append(CreateModel(model))
+        self.add_operation(CreateModel(model))
         return model
 
     create_table = create_model
@@ -642,38 +671,38 @@ class Migrator(object):
         >> migrator.remove_model(model)
         """
 
-        self.migration.append(RemoveModel(model_name))
+        self.add_operation(RemoveModel(model_name))
 
     drop_table = remove_model
 
     def add_fields(self, model_name: str, **fields: Any) -> None:
         """Create new fields."""
-        self.migration.append(AddFields(model_name, **fields))
+        self.add_operation(AddFields(model_name, **fields))
 
     add_columns = add_fields
 
     def change_fields(self, model_name: str, **fields: pw.Field) -> None:
         """Change fields."""
 
-        return self.migration.append(ChangeFields(model_name, **fields))
+        return self.add_operation(ChangeFields(model_name, **fields))
 
     change_columns = change_fields
 
     def remove_fields(self, model_name: str, *names: str, cascade: bool = False) -> None:
         """Remove fields from model."""
-        self.migration.append(RemoveFields(model_name, *names, cascade=cascade))
+        self.add_operation(RemoveFields(model_name, *names, cascade=cascade))
 
     drop_columns = remove_fields
 
     def rename_field(self, model_name: str, old_name: str, new_name: str) -> None:
         """Rename field in model."""
 
-        self.migration.append(RenameField(model_name, old_name, new_name))
+        self.add_operation(RenameField(model_name, old_name, new_name))
 
     rename_column = rename_field
 
     def rename_table(self, model_name: str, new_table_name: str) -> None:
-        self.migration.append(RenameTable(model_name, new_table_name))
+        self.add_operation(RenameTable(model_name, new_table_name))
 
     rename_model = rename_table
 
@@ -688,18 +717,18 @@ class Migrator(object):
         concurrently: bool = False,
     ) -> None:
         """Create indexes."""
-        self.migration.append(
+        self.add_operation(
             AddIndex(model_name, *fields, name=name, unique=unique, where=where, safe=safe, concurrently=concurrently)
         )
 
     def drop_index(self, model_name: str, name: str) -> None:
         """Drop indexes."""
-        self.migration.append(DropIndex(model_name, name))
+        self.add_operation(DropIndex(model_name, name))
 
     def add_not_null(self, model_name: str, *names: str) -> None:
         """Add not null."""
-        self.migration.append(ChangeNullable(model_name, *names, is_null=False))
+        self.add_operation(ChangeNullable(model_name, *names, is_null=False))
 
     def drop_not_null(self, model_name: str, *names: str) -> None:
         """Drop not null."""
-        self.migration.append(ChangeNullable(model_name, *names, is_null=True))
+        self.add_operation(ChangeNullable(model_name, *names, is_null=True))
