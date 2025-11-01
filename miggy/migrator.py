@@ -443,11 +443,13 @@ class Migration:
         self.migrate_operations.append(op)
             
 
-    def apply(self) -> None:
+    def apply(self, change_schema: bool) -> None:
         for migrate_operation in self.migrate_operations:
             self.state.create_snapshot()
             migrate_operation.state_forwards(self.state)
             from_state = self.state.pop_snapshot()
+            if not change_schema:
+                continue
             for op in migrate_operation.database_forwards(self.schema_migrator, from_state, self.state):            
                 if isinstance(op, Operation):
                     LOGGER.info("%s %s", op.method, op.args)
@@ -636,11 +638,11 @@ class Migrator(object):
         # for backward compatibility
         return self.state
 
-    def run(self):
+    def run(self, change_schema: bool):
         """Run operations."""
         if self.schema:
             self.migration.migrate_operations.insert(0, self.schema_migrator.select_schema(self.schema))
-        self.migration.apply()
+        self.migration.apply(change_schema)
         self.clean()
 
     def python(self, func: RunPythonF):
