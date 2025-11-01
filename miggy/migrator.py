@@ -123,7 +123,6 @@ class CreateModel(MigrateOperation):
         self.model = model
 
     def state_forwards(self, state: State) -> None:
-        self.model._meta.legacy_table_names = False
         state[self.model._meta.name] = self.model
 
     def database_forwards(

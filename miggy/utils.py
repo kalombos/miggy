@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -8,6 +10,8 @@ import peewee as pw
 from miggy.types import ModelCls
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from miggy.types import ModelCls
 
 
@@ -58,13 +62,37 @@ def get_default_constraint_value(field: pw.Field):
     c = get_default_constraint(field)
     return c.value if c else None
 
+def _truncate_constraint_name(constraint, maxlen=64):
+    if len(constraint) > maxlen:
+        name_hash = hashlib.md5(constraint.encode('utf-8')).hexdigest()
+        constraint = '%s_%s' % (constraint[:(maxlen - 8)], name_hash[:7])
+    return constraint
+
 
 class ModelIndex(pw.ModelIndex):
     def __init__(
-        self, model, fields, unique=False, safe=True, where=None, using=None, name=None, concurrently=False
+        self, model: ModelCls, 
+        fields: Sequence[pw.Field],
+        name: str,
+        unique: bool = False, 
+        safe: bool =True, 
+        where: pw.SQL | None = None,         
+        concurrently=False,
+        using = None
     ) -> None:
         self.concurrently = concurrently
         super().__init__(model=model, fields=fields, unique=unique, safe=safe, where=where, using=using, name=name)
+
+    def _generate_name_from_fields(self, model, fields):
+        accum = [field.column_name for field in fields]
+
+        if not accum:
+            raise ValueError('Unable to generate a name for the index, please '
+                             'explicitly specify a name.')
+
+        clean_field_names = re.sub(r'[^\w]+', '', '_'.join(accum))
+        prefix = model._meta.table_name
+        return _truncate_constraint_name('_'.join((prefix, clean_field_names)))
 
     def __sql__(self, ctx):
         context = super().__sql__(ctx)
