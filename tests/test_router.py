@@ -102,6 +102,6 @@ def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration
     db = playhouse.db_url.connect("sqlite:///:memory:")
     with mock.patch.object(db, "transaction") as mocked:
         router = get_router(resources_dir / "transaction_test", db)
-        router.run_one(migration_name, router.migrator, fake=False)
+        router.run_one(migration_name, router.migrator, change_schema=True, change_history=True)
         transaction_called = mocked.call_count == 1
         assert transaction_called is expected

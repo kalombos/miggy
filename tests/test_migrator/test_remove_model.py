@@ -15,8 +15,8 @@ def test_remove_model(patched_pg_db: PatchedPgDatabase) -> None:
         class Meta:
             table_name = "what"
 
-    assert User == migrator.orm["user"]
     migrator.run()
+    assert User == migrator.orm["user"]
 
     patched_pg_db.clear_queries()
 

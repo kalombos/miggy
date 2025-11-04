@@ -46,8 +46,8 @@ def test_change_nullable(
         name = pw.CharField()
         created_at = pw.DateField(null=null_before)
 
-    assert User == migrator.orm["user"]
     migrator.run()
+    assert User == migrator.orm["user"]
     patched_pg_db.queries.clear()
 
     migrator.change_fields("user", created_at=pw.DateTimeField(null=null_after))
@@ -93,8 +93,9 @@ def test_change_type(
         name = pw.CharField()
         field = field_before
 
-    assert User == migrator.orm["user"]
     migrator.run()
+    assert User == migrator.orm["user"]
+
     patched_pg_db.queries.clear()
 
     migrator.change_fields("user", field=field_after)
@@ -110,8 +111,8 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
         name = pw.CharField()
         created_at = pw.DateField()
 
-    assert User == migrator.orm["user"]
     migrator.run()
+    assert User == migrator.orm["user"]
     patched_pg_db.queries.clear()
 
     migrator.change_fields("user", name=pw.TextField(column_name="new_name"))
@@ -189,7 +190,6 @@ def test_change_indexes(
         name = pw.CharField(**params_before)
         created_at = pw.DateField()
 
-    assert User == migrator.orm["user"]
     migrator.run()
     patched_pg_db.queries.clear()
 

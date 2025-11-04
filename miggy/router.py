@@ -5,7 +5,6 @@ import sys
 import typing
 from functools import cached_property
 from importlib import import_module
-from unittest import mock
 
 import peewee as pw
 
@@ -142,17 +141,18 @@ class BaseRouter(object):
         raise NotImplementedError
 
     def run_one(
-            self, 
-            name: str, 
-            migrator: Migrator, 
-            change_schema: bool = False, 
-            change_history: bool = False, 
-            downgrade: bool = False
+        self,
+        name: str,
+        migrator: Migrator,
+        change_schema: bool = False,
+        change_history: bool = False,
+        downgrade: bool = False,
     ):
         """Run/emulate a migration with given name."""
         fake = not change_schema
         try:
             migration = self.read(name)
+
             def run_migrator():
                 if not downgrade:
                     self.logger.info('Migrate "%s"', name)
@@ -192,7 +192,7 @@ class BaseRouter(object):
 
         migrator = self.migrator
         for mname in diff:
-            self.run_one(mname, migrator, change_schema= not fake, change_history=True)
+            self.run_one(mname, migrator, change_schema=not fake, change_history=True)
             done.append(mname)
             if name and name == mname:
                 break

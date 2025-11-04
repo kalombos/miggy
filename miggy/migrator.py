@@ -94,28 +94,28 @@ class MigrateOperation:
 class RunPython(MigrateOperation):
     def __init__(self, func: RunPythonF) -> None:
         self.func = func
-        
+
     def state_forwards(self, state: State) -> None:
         pass
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation] | list[Callable]:
-        self.func(schema_migrator, from_state)
+        return [lambda: self.func(schema_migrator, from_state)]
 
 
 class RunSql(MigrateOperation):
     def __init__(self, sql: str, *params: Any) -> None:
         self.sql = sql
         self.params = params
-        
+
     def state_forwards(self, state: State) -> None:
         pass
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation] | list[Callable]:
-        schema_migrator.sql(self.sql, *self.params)
+        return [schema_migrator.sql(self.sql, *self.params)]
 
 
 class CreateModel(MigrateOperation):
@@ -433,23 +433,25 @@ class ChangeNullable(MigrateOperation):
 
 
 class Migration:
-    def __init__(self, state: State, schema_migrator: "SchemaMigrator") -> None:
+    def __init__(self, state: State, schema_migrator: "SchemaMigrator", schema: str | None = None) -> None:
         self.state = state
         self.schema_migrator = schema_migrator
         self.migrate_operations: list[MigrateOperation] = []
+        self.schema = schema
 
     def append(self, op: MigrateOperation) -> None:
         self.migrate_operations.append(op)
-            
 
     def apply(self, change_schema: bool) -> None:
+        if change_schema and self.schema:
+            self.schema_migrator.select_schema(self.schema).run()
         for migrate_operation in self.migrate_operations:
             self.state.create_snapshot()
             migrate_operation.state_forwards(self.state)
             from_state = self.state.pop_snapshot()
             if not change_schema:
                 continue
-            for op in migrate_operation.database_forwards(self.schema_migrator, from_state, self.state):            
+            for op in migrate_operation.database_forwards(self.schema_migrator, from_state, self.state):
                 if isinstance(op, Operation):
                     LOGGER.info("%s %s", op.method, op.args)
                     op.run()
@@ -546,6 +548,7 @@ class SchemaMigrator(ScM):
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
         model._meta.database = self.database
+        model._meta.legacy_table_names = False
         return lambda: model.create_table(safe=safe)
 
     def drop_table(self, model: ModelCls, safe: bool = False) -> Callable:
@@ -623,11 +626,11 @@ class Migrator(object):
             database = database.obj
 
         self.database = database
-        self.schema = schema
         self.state = State()
         self.schema_migrator = SchemaMigrator.from_database(self.database)
+        self.schema = schema
 
-        self.migration = Migration(self.state, self.schema_migrator)
+        self.migration = Migration(self.state, self.schema_migrator, schema=schema)
 
     def add_operation(self, op: MigrateOperation):
         self.migration.append(op)
@@ -637,10 +640,8 @@ class Migrator(object):
         # for backward compatibility
         return self.state
 
-    def run(self, change_schema: bool):
-        """Run operations."""
-        if self.schema:
-            self.migration.migrate_operations.insert(0, self.schema_migrator.select_schema(self.schema))
+    def run(self, change_schema: bool = True):
+        """Run operations."""            
         self.migration.apply(change_schema)
         self.clean()
 
