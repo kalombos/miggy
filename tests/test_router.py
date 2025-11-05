@@ -2,12 +2,14 @@ import os
 import pathlib
 from unittest import mock
 
+import peewee as pw
 import playhouse
 import pytest
+from playhouse.psycopg3_ext import Psycopg3Database
 
 from miggy.cli import get_router
 from miggy.router import Router
-from tests.conftest import PatchedPgDatabase
+from tests.conftest import POSTGRES_DSN
 
 
 def test_router_run_already_applied_ok(router: Router) -> None:
@@ -66,13 +68,22 @@ def test_router_merge(router: Router, migrations_dir: pathlib.Path):
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-def test_router_compile(tmpdir, patched_pg_db: PatchedPgDatabase):
-    migrations = tmpdir.mkdir("migrations")
-    router = get_router(str(migrations), patched_pg_db)
+@pytest.mark.parametrize(
+    ("db", "expected"),
+    [
+        (pw.PostgresqlDatabase(POSTGRES_DSN), "import playhouse.postgres_ext as pw_pext"),
+        (Psycopg3Database(POSTGRES_DSN), "import playhouse.psycopg3_ext as pw_pext"),
+    ],
+)
+def test_router_compile(tmp_path: pathlib.Path, db: pw.Database, expected: str) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = get_router(d, db)
     router.compile("test_router_compile")
 
-    with open(str(migrations.join("001_test_router_compile.py"))) as f:
+    with open(d  / "001_test_router_compile.py") as f:
         content = f.read()
+        assert expected in content
         assert "SQL = pw.SQL" in content
 
 

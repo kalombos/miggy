@@ -7,6 +7,7 @@ from functools import cached_property
 from importlib import import_module
 
 import peewee as pw
+from playhouse.psycopg3_ext import Psycopg3Database
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, diff_many
@@ -212,6 +213,14 @@ class BaseRouter(object):
         self.logger.warning("Downgraded migration: %s", name)
 
 
+def make_ext_import(database: pw.Database) -> str:
+    if isinstance(database, Psycopg3Database):
+        return "import playhouse.psycopg3_ext as pw_pext"
+    elif isinstance(database, pw.PostgresqlDatabase):
+        return "import playhouse.postgres_ext as pw_pext"
+    return ""
+
+
 class Router(BaseRouter):
     filemask = re.compile(r"[\d]{3}_[^\.]+\.py$")
 
@@ -236,7 +245,11 @@ class Router(BaseRouter):
         filename = name + ".py"
         path = os.path.join(self.migrate_dir, filename)
         with open(path, "w") as f:
-            f.write(MIGRATE_TEMPLATE.format(migrate=migrate, rollback=rollback, name=filename))
+            f.write(
+                MIGRATE_TEMPLATE.format(
+                    migrate=migrate, rollback=rollback, name=filename, ext_import=make_ext_import(self.database)
+                )
+            )
 
         return name
 

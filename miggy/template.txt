@@ -29,10 +29,7 @@ import datetime as dt
 
 import peewee as pw
 
-try:
-    import playhouse.postgres_ext as pw_pext
-except ImportError:
-    pass
+{ext_import}
 
 SQL = pw.SQL
 
