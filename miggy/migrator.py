@@ -36,14 +36,9 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
 class State:
-    def __init__(self, database: pw.Database, data: ModelDict | None = None) -> None:
-        self.database = database
+    def __init__(self, data: ModelDict | None = None) -> None:
         self.data: ModelDict = data or {}
         self._snapshot: ModelDict | None = None
-
-    def enrich_model(self, model: ModelCls) -> None:
-        model._meta.database = self.database
-        model._meta.legacy_table_names = False
 
     def normalize_key(self, key: str) -> str:
         _key = key.lower()
@@ -53,7 +48,6 @@ class State:
         return _key
 
     def __setitem__(self, key: str, val: ModelCls) -> None:
-        self.enrich_model(val)
         self.data[self.normalize_key(key)] = val
 
     def __getitem__(self, key: str) -> ModelCls:
@@ -74,7 +68,7 @@ class State:
     def pop_snapshot(self) -> "State":
         _snapshot = self._snapshot
         self._snapshot = None
-        return State(self.database, _snapshot)
+        return State(_snapshot)
 
 
 class MigrateOperation:
@@ -111,7 +105,7 @@ class RunPython(MigrateOperation):
 
 
 class RunSql(MigrateOperation):
-    def __init__(self, sql: str, *params: Any) -> None:
+    def __init__(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         self.sql = sql
         self.params = params
 
@@ -121,7 +115,7 @@ class RunSql(MigrateOperation):
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation] | list[Callable]:
-        return [schema_migrator.sql(self.sql, *self.params)]
+        return [schema_migrator.sql(self.sql, self.params)]
 
 
 class CreateModel(MigrateOperation):
@@ -134,7 +128,10 @@ class CreateModel(MigrateOperation):
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
-        return [schema_migrator.create_table(to_state[self.model._meta.name])]
+        model = to_state[self.model._meta.name]
+        model._meta.database = schema_migrator.database
+        model._meta.legacy_table_names = False
+        return [schema_migrator.create_table(model)]
 
 
 class RemoveModel(MigrateOperation):
@@ -147,7 +144,9 @@ class RemoveModel(MigrateOperation):
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
-        return [schema_migrator.drop_table(from_state[self.model_name])]
+        model = from_state[self.model_name]
+        model._meta.database = schema_migrator.database
+        return [schema_migrator.drop_table(model)]
 
 
 class AddIndex(MigrateOperation):
@@ -488,9 +487,9 @@ class SchemaMigrator(ScM):
         raise NotImplementedError()
 
     @operation
-    def sql(self, sql, *params):
+    def sql(self, sql, params: tuple[Any, ...] | None = None):
         """Execute raw SQL."""
-        return SQL(sql, *params)
+        return SQL(sql, params)
 
     @operation
     def add_column(self, table, column_name, field):
@@ -630,7 +629,7 @@ class Migrator(object):
             database = database.obj
 
         self.database = database
-        self.state = State(self.database)
+        self.state = State()
         self.schema_migrator = SchemaMigrator.from_database(self.database)
         self.schema = schema
 
@@ -653,9 +652,9 @@ class Migrator(object):
         """Run python code."""
         self.add_operation(RunPython(func))
 
-    def sql(self, sql: str, *params: Any):
+    def sql(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         """Execure raw SQL."""
-        self.add_operation(RunSql(sql, *params))
+        self.add_operation(RunSql(sql, params))
 
     def clean(self):
         """Clean the operations."""

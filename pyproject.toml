@@ -76,8 +76,7 @@ select = [
 ]
 
 [tool.poe.executor]
-type = "virtualenv"
-location = "venv"
+type = "simple"
 
 
 [tool.poe.tasks.lint]

@@ -22,8 +22,6 @@ def resources_dir() -> pathlib.Path:
     return pathlib.Path(__file__).with_name("resources")
 
 
-
-
 class PatchedPgDatabase(pw.PostgresqlDatabase):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

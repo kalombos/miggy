@@ -1,7 +1,12 @@
+from collections.abc import Callable
+
 import peewee as pw
 import pytest
+from playhouse.migrate import Operation
 
 from miggy import Migrator, types
+from miggy.migrator import MigrateOperation, SchemaMigrator, State
+from miggy.utils import delete_field
 from tests.conftest import PatchedPgDatabase
 
 
@@ -164,3 +169,104 @@ def test_migrator_schema(patched_pg_db):
 
     assert patched_pg_db.queries[0] == "SET search_path TO {}".format(schema_name)
     patched_pg_db.execute_sql("DROP SCHEMA test_schema CASCADE;")
+
+
+def test_run_python(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    def save_user(schema_migrator, state):
+        User = state["user"]
+        User(
+            first_name="First",
+            last_name="Last",
+        ).save()
+
+    migrator.python(save_user)
+
+    migrator.run()
+
+    assert patched_pg_db.queries == [
+        'INSERT INTO "user" ("first_name", "last_name") VALUES (First, Last) RETURNING "user"."id"',
+    ]
+
+
+def test_run_sql(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.sql(
+        """INSERT INTO "user" ("first_name", "last_name") VALUES ('First', 'Last')""",
+    )
+
+    migrator.run()
+
+    assert User.get(first_name="First", last_name="Last") is not None
+
+
+def test_run_sql_w_params(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.sql(
+        """INSERT INTO "user" ("first_name", "last_name") VALUES (%s, %s)""",
+        (
+            "First",
+            "Last",
+        ),
+    )
+
+    migrator.run()
+
+    assert User.get(first_name="First", last_name="Last") is not None
+
+
+def test_add_operation(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    class MyOperation(MigrateOperation):
+        def state_forwards(self, state: State) -> None:
+            model = state["user"]
+            field = model._meta.fields["last_name"]
+            delete_field(model, field)
+
+        def database_forwards(
+            self, schema_migrator: SchemaMigrator, from_state: State, to_state: State
+        ) -> list[Operation] | list[Callable]:
+            return [schema_migrator.drop_column("user", "last_name")]
+
+    migrator.add_operation(MyOperation())
+
+    migrator.run()
+
+    assert not hasattr(User, "last_name")
+    assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
