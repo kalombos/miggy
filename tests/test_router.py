@@ -81,7 +81,7 @@ def test_router_compile(tmp_path: pathlib.Path, db: pw.Database, expected: str) 
     router = get_router(d, db)
     router.compile("test_router_compile")
 
-    with open(d  / "001_test_router_compile.py") as f:
+    with open(d / "001_test_router_compile.py") as f:
         content = f.read()
         assert expected in content
         assert "SQL = pw.SQL" in content
