@@ -36,9 +36,14 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
 class State:
-    def __init__(self, data: ModelDict | None = None) -> None:
+    def __init__(self, database: pw.Database, data: ModelDict | None = None) -> None:
+        self.database = database
         self.data: ModelDict = data or {}
         self._snapshot: ModelDict | None = None
+
+    def enrich_model(self, model: ModelCls) -> None:
+        model._meta.database = self.database
+        model._meta.legacy_table_names = False
 
     def normalize_key(self, key: str) -> str:
         _key = key.lower()
@@ -48,6 +53,7 @@ class State:
         return _key
 
     def __setitem__(self, key: str, val: ModelCls) -> None:
+        self.enrich_model(val)
         self.data[self.normalize_key(key)] = val
 
     def __getitem__(self, key: str) -> ModelCls:
@@ -68,7 +74,7 @@ class State:
     def pop_snapshot(self) -> "State":
         _snapshot = self._snapshot
         self._snapshot = None
-        return State(_snapshot)
+        return State(self.database, _snapshot)
 
 
 class MigrateOperation:
@@ -547,8 +553,6 @@ class SchemaMigrator(ScM):
         return operations
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
-        model._meta.database = self.database
-        model._meta.legacy_table_names = False
         return lambda: model.create_table(safe=safe)
 
     def drop_table(self, model: ModelCls, safe: bool = False) -> Callable:
@@ -626,7 +630,7 @@ class Migrator(object):
             database = database.obj
 
         self.database = database
-        self.state = State()
+        self.state = State(self.database)
         self.schema_migrator = SchemaMigrator.from_database(self.database)
         self.schema = schema
 
@@ -641,7 +645,7 @@ class Migrator(object):
         return self.state
 
     def run(self, change_schema: bool = True):
-        """Run operations."""            
+        """Run operations."""
         self.migration.apply(change_schema)
         self.clean()
 

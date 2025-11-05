@@ -17,7 +17,6 @@ def test_migrator_sqlite_common():
     class Customer(pw.Model):
         name = pw.CharField()
 
-    
     @migrator.create_table
     class Order(pw.Model):
         number = pw.CharField()
@@ -28,19 +27,16 @@ def test_migrator_sqlite_common():
     migrator.run()
     assert Customer == migrator.orm["customer"]
     assert Order == migrator.orm["order"]
-    
 
     migrator.add_fields("order", finished=pw.BooleanField(default=False))
     migrator.run()
     assert "finished" in Order._meta.fields
-    
 
     migrator.drop_columns("order", "finished", "customer_id", "uid")
     migrator.run()
     assert "finished" not in Order._meta.fields
     assert not hasattr(Order, "customer_id")
     assert not hasattr(Order, "customer_id_id")
-    
 
     migrator.add_fields("order", customer=pw.ForeignKeyField(Customer, null=True))
     migrator.run()
@@ -49,17 +45,17 @@ def test_migrator_sqlite_common():
     assert Order.customer.name == "customer"
     assert Order.customer.name == "customer"
 
-    migrator.rename_field("Order", "number", "identifier")    
+    migrator.rename_field("Order", "number", "identifier")
     migrator.run()
 
     assert "identifier" in Order._meta.fields
 
-    migrator.drop_not_null("Order", "identifier")    
+    migrator.drop_not_null("Order", "identifier")
     migrator.run()
     assert Order._meta.fields["identifier"].null
     assert Order._meta.columns["identifier"].null
 
-    migrator.change_columns("Order", identifier=pw.IntegerField(default=0))    
+    migrator.change_columns("Order", identifier=pw.IntegerField(default=0))
     migrator.run()
 
     assert Order.identifier.field_type == "INT"
@@ -67,7 +63,7 @@ def test_migrator_sqlite_common():
     Order.create(identifier=55)
     migrator.sql('UPDATE "order" SET identifier = 77;')
     migrator.run()
-    
+
     order = Order.get()
     assert order.identifier == 77
 
@@ -94,7 +90,6 @@ def test_migrator_sqlite_common():
     migrator.rename_table("order", "order")
     migrator.run()
     assert Order._meta.table_name == "order"
-    
 
 
 @pytest.mark.parametrize(
@@ -148,7 +143,7 @@ def test_migrator_add_index(
 
 def test_migrator_schema(patched_pg_db):
     schema_name = "test_schema"
-    patched_pg_db.execute_sql("CREATE SCHEMA IF NOT EXISTS test_schema;")
+    patched_pg_db.execute_sql("CREATE SCHEMA  test_schema;")
 
     migrator = Migrator(patched_pg_db, schema=schema_name)
 
@@ -168,3 +163,4 @@ def test_migrator_schema(patched_pg_db):
     migrator.run()
 
     assert patched_pg_db.queries[0] == "SET search_path TO {}".format(schema_name)
+    patched_pg_db.execute_sql("DROP SCHEMA test_schema CASCADE;")

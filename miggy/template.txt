@@ -2,12 +2,13 @@
 
 Some examples (model - class or model name)::
 
-    > Model = migrator.orm['model_name']            # Return model in current state by name
+    # You should not run any database operations without the API calls listed below.
 
     > migrator.sql(sql)                             # Run custom SQL
-    > migrator.python(func, *args, **kwargs)        # Run python code
-    > migrator.create_model(Model: Model)                  # Create a model (could be used as decorator)
-    > migrator.remove_model(model_name: str)    # Remove a model
+    > migrator.python(func: RunPythonF)             # Run python code
+    > migrator.add_operation(op: MigrateOperation)  # Run custom MigrateOperation
+    > migrator.create_model(Model: Model)           # Create a model (could be used as decorator)
+    > migrator.remove_model(model_name: str)        # Remove a model
     > migrator.add_fields(model_name: str, **fields: pw.Field)          # Add fields to a model
     > migrator.change_fields(model_name: str, **fields: pw.Field)       # Change fields
     > migrator.remove_fields(model_name: str, *field_names: pw.Field, cascade: bool = False)

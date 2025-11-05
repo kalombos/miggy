@@ -3,8 +3,10 @@ from collections.abc import Generator
 from typing import Any
 
 import peewee as pw
-import playhouse.db_url
 import pytest
+
+from miggy.cli import get_router
+from miggy.router import Router
 
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 
@@ -20,34 +22,17 @@ def resources_dir() -> pathlib.Path:
     return pathlib.Path(__file__).with_name("resources")
 
 
-@pytest.fixture(params=["sqlite", "postgresql"])
-def database(request: pytest.FixtureRequest):
-    if request.param == "sqlite":
-        db = playhouse.db_url.connect("sqlite:///:memory:")
-    else:
-        db = playhouse.db_url.connect(POSTGRES_DSN)
-
-    with db.atomic():
-        yield db
-        db.rollback()
-
-
-@pytest.fixture()
-def router(migrations_dir, database):
-    from miggy.cli import get_router
-
-    router = get_router(migrations_dir, database)
-
-    assert router.database is database
-    assert isinstance(router.database, pw.Database)
-
-    return router
 
 
 class PatchedPgDatabase(pw.PostgresqlDatabase):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.queries: list[str] = []
+
+    def clean(self):
+        self.execute_sql("DROP SCHEMA IF EXISTS public CASCADE;")
+        self.execute_sql("CREATE SCHEMA public;")
+        self.clear_queries()
 
     def clear_queries(self) -> None:
         self.queries = []
@@ -61,11 +46,13 @@ class PatchedPgDatabase(pw.PostgresqlDatabase):
 @pytest.fixture(params=({"in_transaction": True},))
 def patched_pg_db(request: pytest.FixtureRequest) -> Generator[PatchedPgDatabase, Any, None]:
     db = PatchedPgDatabase(POSTGRES_DSN)
-    if request.param.get("in_transaction"):
-        with db.transaction() as transaction:
-            yield db
-            transaction.rollback()
-    else:
+    try:
         yield db
-    db.close()
-    db.clear_queries()
+    finally:
+        db.clean()
+        db.close()
+
+
+@pytest.fixture()
+def router(migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> Router:
+    return get_router(migrations_dir, patched_pg_db)

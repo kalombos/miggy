@@ -116,7 +116,7 @@ class BaseRouter(object):
     def merge(self, name="initial"):
         """Merge migrations into one."""
         migrator = Migrator(self.database)
-        migrate = compile_migrations(migrator, self.migrator.orm.values())
+        migrate = compile_migrations(migrator, self.migrator.state.values())
         if not migrate:
             return self.logger.error("Can't merge migrations")
 
@@ -127,7 +127,7 @@ class BaseRouter(object):
         name = self.compile(name, migrate, rollback, 0)
 
         migrator = Migrator(self.database)
-        self.run_one(name, migrator)
+        self.run_one(name, migrator, change_schema=False, change_history=True)
         self.logger.info('Migrations has been merged into "%s"', name)
 
     def clear(self):

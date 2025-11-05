@@ -8,25 +8,21 @@ from tests.conftest import PatchedPgDatabase
 
 
 @pytest.mark.parametrize(
-    ("patched_pg_db", "index_params", "expected"),
+    ("index_params", "expected"),
     [
         (
-            {"in_transaction": True},
             {"safe": False},
             """CREATE INDEX "some_name" ON "company" ("name") WHERE name='sdfsfad'""",
         ),
         (
-            {"in_transaction": True},
             {"safe": True},
             """CREATE INDEX IF NOT EXISTS "some_name" ON "company" ("name") WHERE name='sdfsfad'""",
         ),
         (
-            {"in_transaction": False},
             {"concurrently": True},
             """CREATE INDEX CONCURRENTLY "some_name" ON "company" ("name") WHERE name='sdfsfad'""",
         ),
     ],
-    indirect=["patched_pg_db"],
 )
 def test_add_index(patched_pg_db: PatchedPgDatabase, index_params: dict[str, Any], expected: str) -> None:
     migrator = Migrator(patched_pg_db)

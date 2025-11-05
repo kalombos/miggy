@@ -6,20 +6,23 @@ import playhouse
 import pytest
 
 from miggy.cli import get_router
+from miggy.router import Router
 from tests.conftest import PatchedPgDatabase
 
 
-def test_router_run_already_applied_ok(router):
+def test_router_run_already_applied_ok(router: Router) -> None:
     router.run()
-    assert router.diff == []
+    Person = router.migrator.state["person"]
 
-    with mock.patch("peewee.Database.execute_sql") as execute_sql:
-        router.run_one("004_test_insert", router.migrator, fake=True)
+    assert Person.get_or_none(email="person@example.com") is not None
 
-    assert not execute_sql.called
+    Person.delete().execute()
+
+    router.run_one("004_test_insert", router.migrator)
+    assert Person.get_or_none(email="person@example.com") is None
 
 
-def test_router_todo_diff_done(router, migrations_dir):
+def test_router_todo_diff_done(router: Router, migrations_dir: pathlib.Path):
     MigrateHistory = router.model
 
     assert router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert"]
@@ -35,7 +38,7 @@ def test_router_todo_diff_done(router, migrations_dir):
     MigrateHistory.delete().execute()
 
 
-def test_router_rollback(router):
+def test_router_rollback(router: Router):
     MigrateHistory = router.model
     router.run()
 
@@ -49,7 +52,7 @@ def test_router_rollback(router):
     assert migrations.count() == 2
 
 
-def test_router_merge(router, migrations_dir):
+def test_router_merge(router: Router, migrations_dir: pathlib.Path):
     MigrateHistory = router.model
     router.run()
 
@@ -63,13 +66,6 @@ def test_router_merge(router, migrations_dir):
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-@pytest.mark.parametrize(
-    "patched_pg_db",
-    [
-        {"in_transaction": False},
-    ],
-    indirect=["patched_pg_db"],
-)
 def test_router_compile(tmpdir, patched_pg_db: PatchedPgDatabase):
     migrations = tmpdir.mkdir("migrations")
     router = get_router(str(migrations), patched_pg_db)

@@ -75,6 +75,11 @@ select = [
     'TC'
 ]
 
+[tool.poe.executor]
+type = "virtualenv"
+location = "venv"
+
+
 [tool.poe.tasks.lint]
 help = "Run the type checker"
 cmd  = "ruff check"
