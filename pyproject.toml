@@ -75,6 +75,10 @@ select = [
     'TC'
 ]
 
+[tool.poe.executor]
+type = "simple"
+
+
 [tool.poe.tasks.lint]
 help = "Run the type checker"
 cmd  = "ruff check"

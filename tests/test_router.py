@@ -2,24 +2,29 @@ import os
 import pathlib
 from unittest import mock
 
+import peewee as pw
 import playhouse
 import pytest
+from playhouse.psycopg3_ext import Psycopg3Database
 
 from miggy.cli import get_router
-from tests.conftest import PatchedPgDatabase
+from miggy.router import Router
+from tests.conftest import POSTGRES_DSN
 
 
-def test_router_run_already_applied_ok(router):
+def test_router_run_already_applied_ok(router: Router) -> None:
     router.run()
-    assert router.diff == []
+    Person = router.migrator.state["person"]
 
-    with mock.patch("peewee.Database.execute_sql") as execute_sql:
-        router.run_one("004_test_insert", router.migrator, fake=True)
+    assert Person.get_or_none(email="person@example.com") is not None
 
-    assert not execute_sql.called
+    Person.delete().execute()
+
+    router.run_one("004_test_insert", router.migrator)
+    assert Person.get_or_none(email="person@example.com") is None
 
 
-def test_router_todo_diff_done(router, migrations_dir):
+def test_router_todo_diff_done(router: Router, migrations_dir: pathlib.Path):
     MigrateHistory = router.model
 
     assert router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert"]
@@ -35,7 +40,7 @@ def test_router_todo_diff_done(router, migrations_dir):
     MigrateHistory.delete().execute()
 
 
-def test_router_rollback(router):
+def test_router_rollback(router: Router):
     MigrateHistory = router.model
     router.run()
 
@@ -49,7 +54,7 @@ def test_router_rollback(router):
     assert migrations.count() == 2
 
 
-def test_router_merge(router, migrations_dir):
+def test_router_merge(router: Router, migrations_dir: pathlib.Path):
     MigrateHistory = router.model
     router.run()
 
@@ -64,19 +69,21 @@ def test_router_merge(router, migrations_dir):
 
 
 @pytest.mark.parametrize(
-    "patched_pg_db",
+    ("db", "expected"),
     [
-        {"in_transaction": False},
+        (pw.PostgresqlDatabase(POSTGRES_DSN), "import playhouse.postgres_ext as pw_pext"),
+        (Psycopg3Database(POSTGRES_DSN), "import playhouse.psycopg3_ext as pw_pext"),
     ],
-    indirect=["patched_pg_db"],
 )
-def test_router_compile(tmpdir, patched_pg_db: PatchedPgDatabase):
-    migrations = tmpdir.mkdir("migrations")
-    router = get_router(str(migrations), patched_pg_db)
+def test_router_compile(tmp_path: pathlib.Path, db: pw.Database, expected: str) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = get_router(d, db)
     router.compile("test_router_compile")
 
-    with open(str(migrations.join("001_test_router_compile.py"))) as f:
+    with open(d / "001_test_router_compile.py") as f:
         content = f.read()
+        assert expected in content
         assert "SQL = pw.SQL" in content
 
 
@@ -102,6 +109,6 @@ def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration
     db = playhouse.db_url.connect("sqlite:///:memory:")
     with mock.patch.object(db, "transaction") as mocked:
         router = get_router(resources_dir / "transaction_test", db)
-        router.run_one(migration_name, router.migrator, fake=False)
+        router.run_one(migration_name, router.migrator, change_schema=True, change_history=True)
         transaction_called = mocked.call_count == 1
         assert transaction_called is expected

@@ -1,7 +1,12 @@
+from collections.abc import Callable
+
 import peewee as pw
 import pytest
+from playhouse.migrate import Operation
 
 from miggy import Migrator, types
+from miggy.migrator import MigrateOperation, SchemaMigrator, State
+from miggy.utils import delete_field
 from tests.conftest import PatchedPgDatabase
 
 
@@ -17,8 +22,6 @@ def test_migrator_sqlite_common():
     class Customer(pw.Model):
         name = pw.CharField()
 
-    assert Customer == migrator.orm["customer"]
-
     @migrator.create_table
     class Order(pw.Model):
         number = pw.CharField()
@@ -26,41 +29,46 @@ def test_migrator_sqlite_common():
 
         customer_id = pw.ForeignKeyField(Customer, column_name="customer_id")
 
-    assert Order == migrator.orm["order"]
     migrator.run()
+    assert Customer == migrator.orm["customer"]
+    assert Order == migrator.orm["order"]
 
     migrator.add_fields("order", finished=pw.BooleanField(default=False))
-    assert "finished" in Order._meta.fields
     migrator.run()
+    assert "finished" in Order._meta.fields
 
     migrator.drop_columns("order", "finished", "customer_id", "uid")
+    migrator.run()
     assert "finished" not in Order._meta.fields
     assert not hasattr(Order, "customer_id")
     assert not hasattr(Order, "customer_id_id")
-    migrator.run()
 
     migrator.add_fields("order", customer=pw.ForeignKeyField(Customer, null=True))
+    migrator.run()
+
     assert "customer" in Order._meta.fields
     assert Order.customer.name == "customer"
-    migrator.run()
     assert Order.customer.name == "customer"
 
     migrator.rename_field("Order", "number", "identifier")
-    assert "identifier" in Order._meta.fields
     migrator.run()
+
+    assert "identifier" in Order._meta.fields
 
     migrator.drop_not_null("Order", "identifier")
+    migrator.run()
     assert Order._meta.fields["identifier"].null
     assert Order._meta.columns["identifier"].null
-    migrator.run()
 
     migrator.change_columns("Order", identifier=pw.IntegerField(default=0))
-    assert Order.identifier.field_type == "INT"
     migrator.run()
+
+    assert Order.identifier.field_type == "INT"
 
     Order.create(identifier=55)
     migrator.sql('UPDATE "order" SET identifier = 77;')
     migrator.run()
+
     order = Order.get()
     assert order.identifier == 77
 
@@ -85,8 +93,8 @@ def test_migrator_sqlite_common():
     migrator.run()
     assert Order._meta.table_name == "new_name"
     migrator.rename_table("order", "order")
-    assert Order._meta.table_name == "order"
     migrator.run()
+    assert Order._meta.table_name == "order"
 
 
 @pytest.mark.parametrize(
@@ -140,7 +148,7 @@ def test_migrator_add_index(
 
 def test_migrator_schema(patched_pg_db):
     schema_name = "test_schema"
-    patched_pg_db.execute_sql("CREATE SCHEMA IF NOT EXISTS test_schema;")
+    patched_pg_db.execute_sql("CREATE SCHEMA  test_schema;")
 
     migrator = Migrator(patched_pg_db, schema=schema_name)
 
@@ -160,3 +168,105 @@ def test_migrator_schema(patched_pg_db):
     migrator.run()
 
     assert patched_pg_db.queries[0] == "SET search_path TO {}".format(schema_name)
+    patched_pg_db.execute_sql("DROP SCHEMA test_schema CASCADE;")
+
+
+def test_run_python(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    def save_user(schema_migrator, state):
+        User = state["user"]
+        User(
+            first_name="First",
+            last_name="Last",
+        ).save()
+
+    migrator.python(save_user)
+
+    migrator.run()
+
+    assert patched_pg_db.queries == [
+        'INSERT INTO "user" ("first_name", "last_name") VALUES (First, Last) RETURNING "user"."id"',
+    ]
+
+
+def test_run_sql(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.sql(
+        """INSERT INTO "user" ("first_name", "last_name") VALUES ('First', 'Last')""",
+    )
+
+    migrator.run()
+
+    assert User.get(first_name="First", last_name="Last") is not None
+
+
+def test_run_sql_w_params(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.sql(
+        """INSERT INTO "user" ("first_name", "last_name") VALUES (%s, %s)""",
+        (
+            "First",
+            "Last",
+        ),
+    )
+
+    migrator.run()
+
+    assert User.get(first_name="First", last_name="Last") is not None
+
+
+def test_add_operation(patched_pg_db: PatchedPgDatabase):
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    class MyOperation(MigrateOperation):
+        def state_forwards(self, state: State) -> None:
+            model = state["user"]
+            field = model._meta.fields["last_name"]
+            delete_field(model, field)
+
+        def database_forwards(
+            self, schema_migrator: SchemaMigrator, from_state: State, to_state: State
+        ) -> list[Operation] | list[Callable]:
+            return [schema_migrator.drop_column("user", "last_name")]
+
+    migrator.add_operation(MyOperation())
+
+    migrator.run()
+
+    assert not hasattr(User, "last_name")
+    assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'

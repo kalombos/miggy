@@ -108,7 +108,9 @@ def test_index_meta_extractor__resolve_where() -> None:
 )
 def test_index_meta_extractor__resolve_where__exceptions(where: Any, expected_match: str) -> None:
     with pytest.raises(NotImplementedError, match=expected_match):
-        IndexMetaExtractor(_DoesNotMatter, ModelIndex(_DoesNotMatter, ("first_name",))).resolve_where(where)
+        IndexMetaExtractor(_DoesNotMatter, ModelIndex(_DoesNotMatter, (_DoesNotMatter.first_name,))).resolve_where(
+            where
+        )
 
 
 def test_extract_index_meta__tuple() -> None:

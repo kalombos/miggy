@@ -23,14 +23,21 @@ def migrate(migrator, database, **kwargs):
     > migrator.add_default(Model, field_name, default)
 
     """
-    Person = migrator.orm["person"]
-    Person(
-        first_name="First",
-        last_name="Last",
-        email="person@example.com",
-    ).save()
+
+    def save_person(schema_migrator, state):
+        Person = state["person"]
+        Person(
+            first_name="First",
+            last_name="Last",
+            email="person@example.com",
+        ).save()
+
+    migrator.python(save_person)
 
 
 def rollback(migrator, database, **kwargs):
-    Person = migrator.orm["person"]
-    Person.delete().where(Person.email == "person@example.com").execute()
+    def delete_person(schema_migrator, state):
+        Person = state["person"]
+        Person.delete().where(Person.email == "person@example.com").execute()
+
+    migrator.python(delete_person)

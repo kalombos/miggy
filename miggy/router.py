@@ -5,9 +5,9 @@ import sys
 import typing
 from functools import cached_property
 from importlib import import_module
-from unittest import mock
 
 import peewee as pw
+from playhouse.psycopg3_ext import Psycopg3Database
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, diff_many
@@ -101,7 +101,7 @@ class BaseRouter(object):
                 models = [m for m in models if m._meta.name not in self.ignore]
 
             for migration in self.diff:
-                self.run_one(migration, self.migrator, fake=True)
+                self.run_one(migration, self.migrator)
 
             migrate = compile_migrations(self.migrator, models)
             if not migrate:
@@ -117,7 +117,7 @@ class BaseRouter(object):
     def merge(self, name="initial"):
         """Merge migrations into one."""
         migrator = Migrator(self.database)
-        migrate = compile_migrations(migrator, self.migrator.orm.values())
+        migrate = compile_migrations(migrator, self.migrator.state.values())
         if not migrate:
             return self.logger.error("Can't merge migrations")
 
@@ -128,7 +128,7 @@ class BaseRouter(object):
         name = self.compile(name, migrate, rollback, 0)
 
         migrator = Migrator(self.database)
-        self.run_one(name, migrator, fake=True, force=True)
+        self.run_one(name, migrator, change_schema=False, change_history=True)
         self.logger.info('Migrations has been merged into "%s"', name)
 
     def clear(self):
@@ -141,35 +141,32 @@ class BaseRouter(object):
     def read(self, name):
         raise NotImplementedError
 
-    def run_one(self, name, migrator, fake=True, downgrade=False, force=False):
+    def run_one(
+        self,
+        name: str,
+        migrator: Migrator,
+        change_schema: bool = False,
+        change_history: bool = False,
+        downgrade: bool = False,
+    ):
         """Run/emulate a migration with given name."""
+        fake = not change_schema
         try:
             migration = self.read(name)
-            if fake:
-                cursor_mock = mock.Mock()
-                cursor_mock.fetch_one.return_value = None
-                with mock.patch("peewee.Model.select"):
-                    with mock.patch("peewee.Database.execute_sql", return_value=cursor_mock):
-                        migration.migrate(migrator, self.database, fake=fake)
-
-                if force:
-                    self.model.create(name=name)
-                    self.logger.info("Done %s", name)
-
-                migrator.clean()
-                return
 
             def run_migrator():
                 if not downgrade:
                     self.logger.info('Migrate "%s"', name)
                     migration.migrate(migrator, self.database, fake=fake)
-                    migrator.run()
-                    self.model.create(name=name)
+                    migrator.run(change_schema)
+                    if change_history:
+                        self.model.create(name=name)
                 else:
                     self.logger.info("Rolling back %s", name)
                     migration.rollback(migrator, self.database, fake=fake)
-                    migrator.run()
-                    self.model.delete().where(self.model.name == name).execute()
+                    migrator.run(change_schema)
+                    if change_history:
+                        self.model.delete().where(self.model.name == name).execute()
 
                 self.logger.info("Done %s", name)
 
@@ -196,7 +193,7 @@ class BaseRouter(object):
 
         migrator = self.migrator
         for mname in diff:
-            self.run_one(mname, migrator, fake=fake, force=fake)
+            self.run_one(mname, migrator, change_schema=not fake, change_history=True)
             done.append(mname)
             if name and name == mname:
                 break
@@ -212,8 +209,16 @@ class BaseRouter(object):
             raise RuntimeError("Only last migration can be canceled.")
 
         migrator = self.migrator
-        self.run_one(name, migrator, False, True)
+        self.run_one(name, migrator, change_schema=True, downgrade=True, change_history=True)
         self.logger.warning("Downgraded migration: %s", name)
+
+
+def make_ext_import(database: pw.Database) -> str:
+    if isinstance(database, Psycopg3Database):
+        return "import playhouse.psycopg3_ext as pw_pext"
+    elif isinstance(database, pw.PostgresqlDatabase):
+        return "import playhouse.postgres_ext as pw_pext"
+    return ""
 
 
 class Router(BaseRouter):
@@ -240,7 +245,11 @@ class Router(BaseRouter):
         filename = name + ".py"
         path = os.path.join(self.migrate_dir, filename)
         with open(path, "w") as f:
-            f.write(MIGRATE_TEMPLATE.format(migrate=migrate, rollback=rollback, name=filename))
+            f.write(
+                MIGRATE_TEMPLATE.format(
+                    migrate=migrate, rollback=rollback, name=filename, ext_import=make_ext_import(self.database)
+                )
+            )
 
         return name
 
