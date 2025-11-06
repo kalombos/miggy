@@ -216,7 +216,7 @@ def rebuild_indexes(model_cls: ModelCls) -> None:
     model_cls._meta.indexes = []
 
 
-def diff_indexes_from_meta(current: type[pw.Model], prev: type[pw.Model]) -> tuple[list[str], list[str]]:
+def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str], list[str]]:
     create_changes = []
     drop_changes = []
     current_indexes = extract_index_meta(current)
@@ -229,14 +229,17 @@ def diff_indexes_from_meta(current: type[pw.Model], prev: type[pw.Model]) -> tup
     return create_changes, drop_changes
 
 
-def diff_one(model1: type[pw.Model], model2: type[pw.Model]) -> list[str]:
+def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     """Find difference between given peewee models."""
     changes = []
 
-    fields1 = model1._meta.fields
-    fields2 = model2._meta.fields
+    fields1 = current._meta.fields
+    fields2 = prev._meta.fields
 
-    create_index_changes, drop_index_changes = diff_indexes_from_meta(model1, model2)
+    if current._meta.table_name != prev._meta.table_name:
+        changes.append(rename_table(prev, current._meta.table_name))
+
+    create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
 
     # Drop non-field indexes before dropping and creating fields
     changes.extend(drop_index_changes)
@@ -245,12 +248,12 @@ def diff_one(model1: type[pw.Model], model2: type[pw.Model]) -> list[str]:
     names1 = set(fields1) - set(fields2)
     if names1:
         fields = [fields1[name] for name in names1]
-        changes.append(create_fields(model1, *fields))
+        changes.append(create_fields(current, *fields))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)
     if names2:
-        changes.append(drop_fields(model1, *names2))
+        changes.append(drop_fields(current, *names2))
 
     # Change fields
     fields_ = []
@@ -260,7 +263,7 @@ def diff_one(model1: type[pw.Model], model2: type[pw.Model]) -> list[str]:
             fields_.append(field1)
 
     if fields_:
-        changes.append(change_fields(model1, *fields_))
+        changes.append(change_fields(current, *fields_))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
@@ -268,42 +271,42 @@ def diff_one(model1: type[pw.Model], model2: type[pw.Model]) -> list[str]:
     return changes
 
 
-def diff_many(models, state_models, reverse=False):
+def diff_many(current_models, prev_models, reverse=False):
     """Calculate changes for migrations from models2 to models1."""
     if reverse:
-        state_models, models = models, state_models
-    models = pw.sort_models(models)
-    state_models = pw.sort_models(state_models)
+        prev_models, current_models = current_models, prev_models
+    current_models = pw.sort_models(current_models)
+    prev_models = pw.sort_models(prev_models)
 
     if reverse:
-        models = reversed(models)
-        state_models = reversed(state_models)
+        current_models = reversed(current_models)
+        prev_models = reversed(prev_models)
 
-    models = collections.OrderedDict([(m._meta.name, m) for m in models])
-    state_models = collections.OrderedDict([(m._meta.name, m) for m in state_models])
+    current_models = collections.OrderedDict([(m._meta.name, m) for m in current_models])
+    prev_models = collections.OrderedDict([(m._meta.name, m) for m in prev_models])
 
     changes = []
 
-    for name, model1 in models.items():
-        if name not in state_models:
+    for name, model1 in current_models.items():
+        if name not in prev_models:
             continue
-        changes += diff_one(model1, state_models[name])
+        changes += diff_one(model1, prev_models[name])
 
     # Add models
-    for name in [m for m in models if m not in state_models]:
-        index_meta = extract_index_meta(models[name])
-        changes.append(create_model(models[name]))
+    for name in [m for m in current_models if m not in prev_models]:
+        index_meta = extract_index_meta(current_models[name])
+        changes.append(create_model(current_models[name]))
         for i in index_meta:
             changes.append(add_index(i))
 
     # Remove models
-    for name in [m for m in state_models if m not in models]:
-        changes.append(remove_model(state_models[name]))
+    for name in [m for m in prev_models if m not in current_models]:
+        changes.append(remove_model(prev_models[name]))
 
     return changes
 
 
-def model_to_code(Model):
+def model_to_code(Model) -> str:
     template = """class {classname}(pw.Model):
 {fields}
 
@@ -333,15 +336,15 @@ def model_to_code(Model):
     return template.format(classname=Model.__name__, fields=fields, meta=meta)
 
 
-def create_model(Model):
+def create_model(Model) -> str:
     return "@migrator.create_model\n" + model_to_code(Model)
 
 
-def remove_model(Model):
+def remove_model(Model) -> str:
     return "migrator.remove_model('%s')" % Model._meta.table_name
 
 
-def create_fields(Model, *fields):
+def create_fields(Model, *fields) -> str:
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         Model._meta.table_name,
@@ -353,14 +356,14 @@ def drop_fields(Model, *fields) -> str:
     return "migrator.remove_fields('%s', %s)" % (Model._meta.table_name, ", ".join(map(repr, fields)))
 
 
-def change_fields(Model, *fields):
+def change_fields(Model, *fields) -> str:
     return "migrator.change_fields('%s', %s)" % (
         Model._meta.table_name,
         ("," + NEWLINE).join([field_to_code(f, False) for f in fields]),
     )
 
 
-def change_not_null(Model, name, null):
+def change_not_null(Model, name, null) -> str:
     operation = "drop_not_null" if null else "add_not_null"
     return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
 
@@ -377,3 +380,8 @@ def add_index(index_meta: IndexMeta) -> str:
 def drop_index(model: ModelCls, name: str) -> str:
     operation = "drop_index"
     return "migrator.%s('%s', '%s')" % (operation, model._meta.name, name)
+
+
+def rename_table(model: ModelCls, new_name: str) -> str:
+    operation = "rename_table"
+    return "migrator.%s('%s', '%s')" % (operation, model._meta.name, new_name)

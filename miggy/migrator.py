@@ -229,12 +229,7 @@ class RenameTable(MigrateOperation):
         ops = [schema_migrator.rename_table(old_model._meta.table_name, self.new_table_name)]
         for old_field in old_model._meta.sorted_fields:
             new_field = getattr(new_model, old_field.name)
-            ops.append(
-                schema_migrator.resolve_single_index_name(
-                    old_field,
-                    new_field
-                )
-            )
+            ops.append(schema_migrator.resolve_single_index_name(old_field, new_field))
         return ops
 
 
@@ -552,7 +547,6 @@ class SchemaMigrator(ScM):
     def rename_index(self, old_name: str, new_name: str):
         ctx = self.make_context()
         return ctx.literal("ALTER INDEX ").sql(pw.Entity(old_name)).literal(" RENAME TO ").sql(pw.Entity(new_name))
-    
 
     @operation
     def resolve_single_index_name(self, old_field: pw.Field, new_field: pw.Field):
@@ -561,7 +555,6 @@ class SchemaMigrator(ScM):
             new_single_index = make_single_index(new_field)
             operations.append(self.rename_index(old_model_index._name, new_single_index._name))
         return operations
-
 
     @operation
     def rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):

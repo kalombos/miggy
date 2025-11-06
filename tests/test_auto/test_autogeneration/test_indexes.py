@@ -4,6 +4,7 @@ import peewee as pw
 import pytest
 
 from miggy.auto import diff_one
+from miggy.types import ModelCls
 from miggy.utils import ModelIndex
 
 
@@ -67,13 +68,13 @@ def test_field_index(
     after_params: dict[str, Any],
     changes: list[str],
 ) -> None:
-    class _Test(pw.Model):
-        first_name = pw.CharField(**before_params)
+    def create_model(params: dict[str, Any]) -> ModelCls:
+        class Test(pw.Model):
+            first_name = pw.CharField(**params)
 
-    class Test(pw.Model):
-        first_name = pw.CharField(**after_params)
+        return Test
 
-    assert diff_one(Test, _Test) == changes
+    assert diff_one(create_model(after_params), create_model(before_params)) == changes
 
 
 @pytest.mark.parametrize(

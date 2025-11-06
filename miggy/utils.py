@@ -119,6 +119,7 @@ def get_single_index(field: pw.Field) -> pw.Model:
         return make_single_index(field)
     return None
 
+
 def indexes_state(model_cls: pw.Model) -> dict[str, ModelIndex]:
     if not hasattr(model_cls._meta, "indexes_state"):
         model_cls._meta.indexes_state = {}
