@@ -24,11 +24,11 @@ from miggy.utils import (
     delete_field,
     get_default_constraint,
     get_default_constraint_value,
+    get_single_index,
     get_single_index_name,
-    get_single_model_index,
     has_single_index,
     indexes_state,
-    make_single_model_index,
+    make_single_index,
 )
 
 ModelDict = dict[str, ModelCls]
@@ -224,8 +224,13 @@ class RenameTable(MigrateOperation):
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
         """Rename table in database."""
-        model = from_state[self.model_name]
-        return [schema_migrator.rename_table(model._meta.table_name, self.new_table_name)]
+        old_model = from_state[self.model_name]
+        new_model = to_state[self.model_name]
+        ops = [schema_migrator.rename_table(old_model._meta.table_name, self.new_table_name)]
+        for old_field in old_model._meta.sorted_fields:
+            new_field = getattr(new_model, old_field.name)
+            ops.append(schema_migrator.resolve_single_index_name(old_field, new_field))
+        return ops
 
 
 class AddFields(MigrateOperation):
@@ -270,7 +275,7 @@ class ChangeFields(MigrateOperation):
         if has_single_index(old_field):
             # We have already renamed the column so create name from the new field
             _ops.append(schema_migrator.drop_index(table_name, get_single_index_name(_field)))
-        if model_index := get_single_model_index(_field):
+        if model_index := get_single_index(_field):
             _ops.append(schema_migrator.add_model_index(model_index))
         return _ops
 
@@ -529,7 +534,7 @@ class SchemaMigrator(ScM):
                 )
             )
 
-        if model_index := get_single_model_index(field):
+        if model_index := get_single_index(field):
             operations.append(self.add_model_index(model_index))
         return operations
 
@@ -544,11 +549,17 @@ class SchemaMigrator(ScM):
         return ctx.literal("ALTER INDEX ").sql(pw.Entity(old_name)).literal(" RENAME TO ").sql(pw.Entity(new_name))
 
     @operation
+    def resolve_single_index_name(self, old_field: pw.Field, new_field: pw.Field):
+        operations = []
+        if old_model_index := get_single_index(old_field):
+            new_single_index = make_single_index(new_field)
+            operations.append(self.rename_index(old_model_index._name, new_single_index._name))
+        return operations
+
+    @operation
     def rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):
         operations = [self.rename_column(table, old_field.column_name, new_field.column_name)]
-        if old_model_index := get_single_model_index(old_field):
-            new_single_model_index = make_single_model_index(new_field)
-            operations.append(self.rename_index(old_model_index._name, new_single_model_index._name))
+        operations.append(self.resolve_single_index_name(old_field, new_field))
         return operations
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:

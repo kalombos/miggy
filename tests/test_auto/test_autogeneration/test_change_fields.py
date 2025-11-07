@@ -89,12 +89,11 @@ def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, ex
     ],
 )
 def test_change_field__no_changes(field_before: pw.Field, field_after: pw.Field) -> None:
-    class OldTest(pw.Model):
-        first_name = pw.CharField()
-        age = field_before
+    def create_model(field: pw.Field):
+        class Test(pw.Model):
+            first_name = pw.CharField()
+            age = field
 
-    class Test(pw.Model):
-        first_name = pw.CharField()
-        age = field_after
+        return Test
 
-    assert diff_one(Test, OldTest) == []
+    assert diff_one(create_model(field_after), create_model(field_before)) == []

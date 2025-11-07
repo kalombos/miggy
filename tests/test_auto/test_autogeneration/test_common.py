@@ -2,9 +2,11 @@ import datetime as dt
 from pathlib import Path
 
 import peewee as pw
+import pytest
 
 from miggy.auto import create_model, diff_many, diff_one, model_to_code
 from miggy.cli import get_router
+from miggy.types import ModelCls
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -93,3 +95,26 @@ def test_create_model() -> None:
     assert changes[1] == "migrator.add_index('test', 'i1', 'i2', name='test_i1_i2', unique=True)"
     assert changes[2] == "migrator.add_index('test', 'i1', 'i2', name='i3')"
     assert """constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in create_model_code
+
+
+@pytest.mark.parametrize(
+    ("name_before", "name_after", "expected"),
+    [
+        (None, "new_name", ["migrator.rename_table('test', 'new_name')"]),
+        (None, "test", []),
+        (None, None, []),
+        ("new_name", None, ["migrator.rename_table('test', 'test')"]),
+    ],
+)
+def test_rename_table(name_before: str | None, name_after: str | None, expected: list[str]) -> None:
+    def create_model(_table_name: str | None) -> ModelCls:
+        class Test(pw.Model):
+            i1 = pw.IntegerField()
+
+            class Meta:
+                table_name = _table_name
+
+        return Test
+
+    changes = diff_one(create_model(name_after), create_model(name_before))
+    assert changes == expected

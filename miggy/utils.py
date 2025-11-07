@@ -106,17 +106,17 @@ def has_single_index(field: pw.Field) -> bool:
     return field.index or field.unique
 
 
-def make_single_model_index(field: pw.Field) -> ModelIndex:
+def make_single_index(field: pw.Field) -> ModelIndex:
     return ModelIndex(field.model, (field,), unique=field.unique, safe=False, using=field.index_type)
 
 
 def get_single_index_name(field: pw.Field) -> str:
-    return make_single_model_index(field)._name
+    return make_single_index(field)._name
 
 
-def get_single_model_index(field: pw.Field) -> pw.Model:
+def get_single_index(field: pw.Field) -> pw.Model:
     if has_single_index(field):
-        return make_single_model_index(field)
+        return make_single_index(field)
     return None
 
 

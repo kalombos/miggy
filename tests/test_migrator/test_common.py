@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import peewee as pw
 import pytest
+from playhouse.db_url import connect
 from playhouse.migrate import Operation
 
 from miggy import Migrator, types
@@ -11,10 +12,6 @@ from tests.conftest import PatchedPgDatabase
 
 
 def test_migrator_sqlite_common():
-    from playhouse.db_url import connect
-
-    from miggy import Migrator
-
     database = connect("sqlite:///:memory:")
     migrator = Migrator(database)
 
@@ -242,7 +239,7 @@ def test_run_sql_w_params(patched_pg_db: PatchedPgDatabase):
     assert User.get(first_name="First", last_name="Last") is not None
 
 
-def test_add_operation(patched_pg_db: PatchedPgDatabase):
+def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
     @migrator.create_table
@@ -270,3 +267,29 @@ def test_add_operation(patched_pg_db: PatchedPgDatabase):
 
     assert not hasattr(User, "last_name")
     assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
+
+
+def test_rename_table(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField(unique=True)
+        last_name = pw.CharField(index=True)
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    migrator.rename_table("user", "new_name")
+    migrator.run()
+
+    assert User._meta.table_name == "new_name"
+
+    _, _, rename_table, _, rename_seq, rename_index1, rename_index2 = patched_pg_db.queries
+
+    assert [rename_table, rename_seq, rename_index1, rename_index2] == [
+        'ALTER TABLE "user" RENAME TO "new_name"',
+        'ALTER TABLE "user_id_seq" RENAME TO "new_name_id_seq"',
+        'ALTER INDEX "user_first_name" RENAME TO "new_name_first_name"',
+        'ALTER INDEX "user_last_name" RENAME TO "new_name_last_name"',
+    ]
