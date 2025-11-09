@@ -36,6 +36,9 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
 class State:
+    """
+    Current state containing historical models that match the operation’s place in the project history.
+    """
     def __init__(self, data: ModelDict | None = None) -> None:
         self.data: ModelDict = data or {}
         self._snapshot: ModelDict | None = None
@@ -72,6 +75,9 @@ class State:
 
 
 class MigrateOperation:
+    """
+    Base class for a migrate operation
+    """
     def state_forwards(self, state: State) -> None:
         """
         Take the state from the previous migration, and mutate it
@@ -86,12 +92,27 @@ class MigrateOperation:
         """
         Perform the mutation on the database schema in the normal
         (forwards) direction.
-        state params MUST NOT be changed
+        The method MUST NOT mutate provided states.
         """
         raise NotImplementedError
 
 
 class RunPython(MigrateOperation):
+    """
+    Runs custom Python code. **func** should be callable object that accept two arguments; 
+    the first is an instance of :class:`SchemaMigrator` and the second  is an instance of :class:`State`
+
+    Example::
+
+        def save_user(schema_migrator: SchemaMigrator, current_state: State):
+            User = state["user"]
+            User(
+                first_name="First",
+                last_name="Last",
+            ).save()
+        
+        migrator.add_operaion(RunPython(save_user))
+    """
     def __init__(self, func: RunPythonF) -> None:
         self.func = func
 
@@ -129,8 +150,6 @@ class CreateModel(MigrateOperation):
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
         model = to_state[self.model._meta.name]
-        model._meta.database = schema_migrator.database
-        model._meta.legacy_table_names = False
         return [schema_migrator.create_table(model)]
 
 
@@ -145,7 +164,6 @@ class RemoveModel(MigrateOperation):
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
         model = from_state[self.model_name]
-        model._meta.database = schema_migrator.database
         return [schema_migrator.drop_table(model)]
 
 
@@ -473,7 +491,7 @@ class Migration:
 
 
 class SchemaMigrator(ScM):
-    """Implement migrations."""
+    """Extended **playhouse.migrate.SchemaMigrator** from **peewee**"""
 
     @classmethod
     def from_database(cls, database):
@@ -545,6 +563,7 @@ class SchemaMigrator(ScM):
 
     @operation
     def rename_index(self, old_name: str, new_name: str):
+        """Change index name"""
         ctx = self.make_context()
         return ctx.literal("ALTER INDEX ").sql(pw.Entity(old_name)).literal(" RENAME TO ").sql(pw.Entity(new_name))
 
@@ -563,9 +582,17 @@ class SchemaMigrator(ScM):
         return operations
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
+        """
+        Create table from model class
+        """
+        model._meta.database = self.database
+        model._meta.legacy_table_names = False
         return lambda: model.create_table(safe=safe)
 
     def drop_table(self, model: ModelCls, safe: bool = False) -> Callable:
+        """
+        Drop model table    
+        """
         model._meta.database = self.database
         return lambda: model.drop_table(safe=safe)
 

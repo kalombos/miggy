@@ -9,3 +9,20 @@ miggy
 
 
 Miggy is a migration engine for Peewee.
+
+
+Contents
+--------
+
+.. toctree::
+   :maxdepth: 2
+
+   api
+
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
