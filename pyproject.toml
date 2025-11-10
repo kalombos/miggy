@@ -59,11 +59,15 @@ module-name = "miggy"
 module-root = ""
 
 [tool.mypy]
-exclude = "(venv|migrations)"
+exclude = "(venv|migrations|docs)"
 ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120
+exclude = [
+    "docs",
+]
+
 [tool.ruff.lint]
 select = [
     'A',
@@ -76,6 +80,7 @@ select = [
     'UP035',
     'TC'
 ]
+
 
 [tool.poe.executor]
 type = "simple"

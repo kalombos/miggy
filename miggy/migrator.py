@@ -38,7 +38,15 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 class State:
     """
     Current state containing historical models that match the operation’s place in the project history.
+    This is a dict-like class that stores data in the format model_name: model_class. 
+    The model_name is case-insensitive.
+
+    Example::
+
+        User = state["user"]
+        User.get(id=1)
     """
+
     def __init__(self, data: ModelDict | None = None) -> None:
         self.data: ModelDict = data or {}
         self._snapshot: ModelDict | None = None
@@ -78,6 +86,7 @@ class MigrateOperation:
     """
     Base class for a migrate operation
     """
+
     def state_forwards(self, state: State) -> None:
         """
         Take the state from the previous migration, and mutate it
@@ -99,7 +108,7 @@ class MigrateOperation:
 
 class RunPython(MigrateOperation):
     """
-    Runs custom Python code. **func** should be callable object that accept two arguments; 
+    Allows to run custom Python code. **func** should be callable object that accept two arguments;
     the first is an instance of :class:`SchemaMigrator` and the second  is an instance of :class:`State`
 
     Example::
@@ -110,9 +119,10 @@ class RunPython(MigrateOperation):
                 first_name="First",
                 last_name="Last",
             ).save()
-        
+
         migrator.add_operaion(RunPython(save_user))
     """
+
     def __init__(self, func: RunPythonF) -> None:
         self.func = func
 
@@ -126,6 +136,22 @@ class RunPython(MigrateOperation):
 
 
 class RunSql(MigrateOperation):
+    """
+    Allows running of arbitrary SQL on the database - 
+    useful for more advanced features of database backends that Miggy doesn’t support directly.
+
+    Example::
+
+        migrator.add_operation(
+            RunSql(
+                'INSERT INTO "user" ("first_name", "last_name") VALUES (%s, %s)',
+                (
+                    "First",
+                    "Last",
+                ),
+            )
+        )
+    """
     def __init__(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         self.sql = sql
         self.params = params
@@ -140,6 +166,9 @@ class RunSql(MigrateOperation):
 
 
 class CreateModel(MigrateOperation):
+    """
+    Creates a new model in the :class:`State` and a corresponding table in the database to match it.
+    """
     def __init__(self, model: ModelCls) -> None:
         self.model = model
 
@@ -154,6 +183,9 @@ class CreateModel(MigrateOperation):
 
 
 class RemoveModel(MigrateOperation):
+    """
+    Deletes the model from the :class:`State` and its table from the database.
+    """
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
 
@@ -168,6 +200,11 @@ class RemoveModel(MigrateOperation):
 
 
 class AddIndex(MigrateOperation):
+    """
+    Creates an index in the database table for the model with model_name.
+    The index will be saved in **Model._meta.indexes_state** dict
+    """
+
     def __init__(
         self,
         model_name: str,
@@ -214,6 +251,9 @@ class AddIndex(MigrateOperation):
 
 
 class DropIndex(MigrateOperation):
+    """
+    Removes the index named name from the model with model_name.
+    """
     def __init__(self, model_name: str, name: str) -> None:
         self.model_name = model_name
         self.name = name
@@ -230,6 +270,10 @@ class DropIndex(MigrateOperation):
 
 
 class RenameTable(MigrateOperation):
+    """
+    Renames the model from an old name to a new one. 
+    It also renames all single-column indexes if they exist.
+    """
     def __init__(self, model_name: str, new_table_name: str) -> None:
         self.model_name = model_name
         self.new_table_name = new_table_name
@@ -591,7 +635,7 @@ class SchemaMigrator(ScM):
 
     def drop_table(self, model: ModelCls, safe: bool = False) -> Callable:
         """
-        Drop model table    
+        Drop model table
         """
         model._meta.database = self.database
         return lambda: model.drop_table(safe=safe)
