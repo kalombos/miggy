@@ -148,7 +148,7 @@ class BaseRouter(object):
         change_schema: bool = False,
         change_history: bool = False,
         downgrade: bool = False,
-    ):
+    ) -> None:
         """Run/emulate a migration with given name."""
         fake = not change_schema
         try:

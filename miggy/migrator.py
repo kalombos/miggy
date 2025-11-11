@@ -271,8 +271,14 @@ class DropIndex(MigrateOperation):
 
 class RenameTable(MigrateOperation):
     """
-    Renames the model from an old name to a new one. 
-    It also renames all single-column indexes if they exist.
+    Renames the model from the old name to a new one. 
+    It also renames all single-column indexes, if they exist.
+
+    **Warning:**
+
+    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.  
+    You should explicitly specify index names if you plan to use this operation.  
+    Otherwise, you will be prompted to recreate the indexes with a new name in the next migration.
     """
     def __init__(self, model_name: str, new_table_name: str) -> None:
         self.model_name = model_name
@@ -296,7 +302,10 @@ class RenameTable(MigrateOperation):
 
 
 class AddFields(MigrateOperation):
-    def __init__(self, model_name: str, **fields: Any) -> None:
+    """
+    Adds fields to a model.
+    """
+    def __init__(self, model_name: str, **fields: pw.Field) -> None:
         self.model_name = model_name
         self.fields = fields
 
@@ -315,6 +324,9 @@ class AddFields(MigrateOperation):
 
 
 class ChangeFields(MigrateOperation):
+    """
+    Change fields to a model.
+    """
     def __init__(self, model_name: str, **fields: pw.Field) -> None:
         self.model_name = model_name
         self.fields = fields
@@ -417,6 +429,9 @@ class ChangeFields(MigrateOperation):
 
 
 class RemoveFields(MigrateOperation):
+    """
+    Removes fields from a model
+    """
     def __init__(self, model_name: str, *names: str, cascade: bool = False) -> None:
         self.model_name = model_name
         self.cascade = cascade
@@ -445,6 +460,17 @@ def fk_postfix(name: str) -> str:
 
 
 class RenameField(MigrateOperation):
+    """
+    Changes a field’s name (and, unless **column_name** is set, its column name).
+    It also renames a single-column indexe, if it exists.
+
+    **Warning:**
+
+    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.  
+    You should explicitly specify index names if you plan to use this operation.  
+    Otherwise, you will be prompted to recreate the index with a new name in the next migration.
+    """
+
     def __init__(self, model_name: str, old_name: str, new_name: str) -> None:
         self.model_name = model_name
         self.old_field_name = old_name
@@ -703,7 +729,9 @@ class SqliteMigrator(SchemaMigrator, SqM):
 
 
 class Migrator(object):
-    """Provide migrations."""
+    """
+    A class that provides shortcuts for adding migration operations.
+    """
 
     def __init__(self, database, schema=None):
         """Initialize the migrator."""
@@ -717,7 +745,10 @@ class Migrator(object):
 
         self.migration = Migration(self.state, self.schema_migrator, schema=schema)
 
-    def add_operation(self, op: MigrateOperation):
+    def add_operation(self, op: MigrateOperation) -> None:
+        """
+        Adds a migrate operation
+        """
         self.migration.append(op)
 
     @property
@@ -726,16 +757,15 @@ class Migrator(object):
         return self.state
 
     def run(self, change_schema: bool = True):
-        """Run operations."""
         self.migration.apply(change_schema)
         self.clean()
 
     def python(self, func: RunPythonF):
-        """Run python code."""
+        """A shortcut for adding a :class:`RunPython` operation."""
         self.add_operation(RunPython(func))
 
     def sql(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
-        """Execure raw SQL."""
+        """A shortcut for adding a :class:`RunSql` operation."""
         self.add_operation(RunSql(sql, params))
 
     def clean(self):
@@ -743,52 +773,51 @@ class Migrator(object):
         self.migration.clean()
 
     def create_model(self, model: ModelCls) -> ModelCls:
-        """Create model and table in database.
+        """A shortcut for adding a :class:`CreateModel` operation."""
 
-        >> migrator.create_model(model)
-        """
         self.add_operation(CreateModel(model))
         return model
 
     create_table = create_model
 
     def remove_model(self, model_name: str) -> None:
-        """Drop model and table from database.
-
-        >> migrator.remove_model(model)
-        """
+        """A shortcut for adding a :class:`RemoveModel` operation."""
 
         self.add_operation(RemoveModel(model_name))
 
     drop_table = remove_model
 
     def add_fields(self, model_name: str, **fields: Any) -> None:
-        """Create new fields."""
+        """A shortcut for adding a :class:`AddFields` operation."""
+
         self.add_operation(AddFields(model_name, **fields))
 
     add_columns = add_fields
 
     def change_fields(self, model_name: str, **fields: pw.Field) -> None:
-        """Change fields."""
+        """A shortcut for adding a :class:`ChangeFields` operation."""
 
         return self.add_operation(ChangeFields(model_name, **fields))
 
     change_columns = change_fields
 
     def remove_fields(self, model_name: str, *names: str, cascade: bool = False) -> None:
-        """Remove fields from model."""
+        """A shortcut for adding a :class:`RemoveFields` operation."""
+
         self.add_operation(RemoveFields(model_name, *names, cascade=cascade))
 
     drop_columns = remove_fields
 
     def rename_field(self, model_name: str, old_name: str, new_name: str) -> None:
-        """Rename field in model."""
+        """A shortcut for adding a :class:`RenameField` operation."""
 
         self.add_operation(RenameField(model_name, old_name, new_name))
 
     rename_column = rename_field
 
     def rename_table(self, model_name: str, new_table_name: str) -> None:
+        """A shortcut for adding a :class:`RenameTable` operation."""
+
         self.add_operation(RenameTable(model_name, new_table_name))
 
     rename_model = rename_table
@@ -803,17 +832,18 @@ class Migrator(object):
         safe: bool = False,
         concurrently: bool = False,
     ) -> None:
-        """Create indexes."""
+        """A shortcut for adding a :class:`AddIndex` operation."""
+
         self.add_operation(
             AddIndex(model_name, *fields, name=name, unique=unique, where=where, safe=safe, concurrently=concurrently)
         )
 
     def drop_index(self, model_name: str, name: str) -> None:
-        """Drop indexes."""
+        """A shortcut for adding a :class:`DropIndex` operation."""
+
         self.add_operation(DropIndex(model_name, name))
 
     def add_not_null(self, model_name: str, *names: str) -> None:
-        """Add not null."""
         self.add_operation(ChangeNullable(model_name, *names, is_null=False))
 
     def drop_not_null(self, model_name: str, *names: str) -> None:

@@ -20,3 +20,13 @@ Migrate operations
 .. autoclass:: miggy.migrator::AddIndex
 .. autoclass:: miggy.migrator::DropIndex    
 .. autoclass:: miggy.migrator::RenameTable
+.. autoclass:: miggy.migrator::AddFields
+.. autoclass:: miggy.migrator::ChangeFields
+.. autoclass:: miggy.migrator::RemoveFields
+.. autoclass:: miggy.migrator::RenameField
+
+Migrator
+++++++++++++++++++
+.. autoclass:: miggy.migrator::Migrator
+    :members: python,sql,create_model,remove_model,add_fields,change_fields,remove_fields,rename_field,rename_table,add_index,drop_index
+    :member-order: bysource
