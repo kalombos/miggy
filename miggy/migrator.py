@@ -36,6 +36,17 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
 class State:
+    """
+    Current state containing historical models that match the operation’s place in the project history.
+    This is a dict-like class that stores data in the format model_name: model_class.
+    The model_name is case-insensitive.
+
+    Example::
+
+        User = state["user"]
+        User.get(id=1)
+    """
+
     def __init__(self, data: ModelDict | None = None) -> None:
         self.data: ModelDict = data or {}
         self._snapshot: ModelDict | None = None
@@ -72,6 +83,10 @@ class State:
 
 
 class MigrateOperation:
+    """
+    Base class for a migrate operation
+    """
+
     def state_forwards(self, state: State) -> None:
         """
         Take the state from the previous migration, and mutate it
@@ -86,12 +101,28 @@ class MigrateOperation:
         """
         Perform the mutation on the database schema in the normal
         (forwards) direction.
-        state params MUST NOT be changed
+        The method MUST NOT mutate provided states.
         """
         raise NotImplementedError
 
 
 class RunPython(MigrateOperation):
+    """
+    Allows to run custom Python code. **func** should be callable object that accept two arguments;
+    the first is an instance of :class:`SchemaMigrator` and the second  is an instance of :class:`State`
+
+    Example::
+
+        def save_user(schema_migrator: SchemaMigrator, current_state: State):
+            User = state["user"]
+            User(
+                first_name="First",
+                last_name="Last",
+            ).save()
+
+        migrator.add_operaion(RunPython(save_user))
+    """
+
     def __init__(self, func: RunPythonF) -> None:
         self.func = func
 
@@ -105,6 +136,23 @@ class RunPython(MigrateOperation):
 
 
 class RunSql(MigrateOperation):
+    """
+    Allows running of arbitrary SQL on the database -
+    useful for more advanced features of database backends that Miggy doesn’t support directly.
+
+    Example::
+
+        migrator.add_operation(
+            RunSql(
+                'INSERT INTO "user" ("first_name", "last_name") VALUES (%s, %s)',
+                (
+                    "First",
+                    "Last",
+                ),
+            )
+        )
+    """
+
     def __init__(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         self.sql = sql
         self.params = params
@@ -119,6 +167,10 @@ class RunSql(MigrateOperation):
 
 
 class CreateModel(MigrateOperation):
+    """
+    Creates a new model in the :class:`State` and a corresponding table in the database to match it.
+    """
+
     def __init__(self, model: ModelCls) -> None:
         self.model = model
 
@@ -129,12 +181,14 @@ class CreateModel(MigrateOperation):
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
         model = to_state[self.model._meta.name]
-        model._meta.database = schema_migrator.database
-        model._meta.legacy_table_names = False
         return [schema_migrator.create_table(model)]
 
 
 class RemoveModel(MigrateOperation):
+    """
+    Deletes the model from the :class:`State` and its table from the database.
+    """
+
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
 
@@ -145,11 +199,15 @@ class RemoveModel(MigrateOperation):
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
         model = from_state[self.model_name]
-        model._meta.database = schema_migrator.database
         return [schema_migrator.drop_table(model)]
 
 
 class AddIndex(MigrateOperation):
+    """
+    Creates an index in the database table for the model with model_name.
+    The index will be saved in **Model._meta.indexes_state** dict
+    """
+
     def __init__(
         self,
         model_name: str,
@@ -196,6 +254,10 @@ class AddIndex(MigrateOperation):
 
 
 class DropIndex(MigrateOperation):
+    """
+    Removes the index named name from the model with model_name.
+    """
+
     def __init__(self, model_name: str, name: str) -> None:
         self.model_name = model_name
         self.name = name
@@ -212,6 +274,17 @@ class DropIndex(MigrateOperation):
 
 
 class RenameTable(MigrateOperation):
+    """
+    Renames the model from the old name to a new one.
+    It also renames all single-column indexes, if they exist.
+
+    **Warning:**
+
+    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.
+    You should explicitly specify index names if you plan to use this operation.
+    Otherwise, you will be prompted to recreate the indexes with a new name in the next migration.
+    """
+
     def __init__(self, model_name: str, new_table_name: str) -> None:
         self.model_name = model_name
         self.new_table_name = new_table_name
@@ -234,7 +307,11 @@ class RenameTable(MigrateOperation):
 
 
 class AddFields(MigrateOperation):
-    def __init__(self, model_name: str, **fields: Any) -> None:
+    """
+    Adds fields to a model.
+    """
+
+    def __init__(self, model_name: str, **fields: pw.Field) -> None:
         self.model_name = model_name
         self.fields = fields
 
@@ -253,6 +330,10 @@ class AddFields(MigrateOperation):
 
 
 class ChangeFields(MigrateOperation):
+    """
+    Change fields to a model.
+    """
+
     def __init__(self, model_name: str, **fields: pw.Field) -> None:
         self.model_name = model_name
         self.fields = fields
@@ -355,6 +436,10 @@ class ChangeFields(MigrateOperation):
 
 
 class RemoveFields(MigrateOperation):
+    """
+    Removes fields from a model
+    """
+
     def __init__(self, model_name: str, *names: str, cascade: bool = False) -> None:
         self.model_name = model_name
         self.cascade = cascade
@@ -383,6 +468,17 @@ def fk_postfix(name: str) -> str:
 
 
 class RenameField(MigrateOperation):
+    """
+    Changes a field’s name (and, unless **column_name** is set, its column name).
+    It also renames a single-column indexe, if it exists.
+
+    **Warning:**
+
+    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.
+    You should explicitly specify index names if you plan to use this operation.
+    Otherwise, you will be prompted to recreate the index with a new name in the next migration.
+    """
+
     def __init__(self, model_name: str, old_name: str, new_name: str) -> None:
         self.model_name = model_name
         self.old_field_name = old_name
@@ -473,7 +569,7 @@ class Migration:
 
 
 class SchemaMigrator(ScM):
-    """Implement migrations."""
+    """Extended **playhouse.migrate.SchemaMigrator** from **peewee**"""
 
     @classmethod
     def from_database(cls, database):
@@ -545,6 +641,7 @@ class SchemaMigrator(ScM):
 
     @operation
     def rename_index(self, old_name: str, new_name: str):
+        """Change index name"""
         ctx = self.make_context()
         return ctx.literal("ALTER INDEX ").sql(pw.Entity(old_name)).literal(" RENAME TO ").sql(pw.Entity(new_name))
 
@@ -563,9 +660,17 @@ class SchemaMigrator(ScM):
         return operations
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
+        """
+        Create table from model class
+        """
+        model._meta.database = self.database
+        model._meta.legacy_table_names = False
         return lambda: model.create_table(safe=safe)
 
     def drop_table(self, model: ModelCls, safe: bool = False) -> Callable:
+        """
+        Drop model table
+        """
         model._meta.database = self.database
         return lambda: model.drop_table(safe=safe)
 
@@ -632,7 +737,9 @@ class SqliteMigrator(SchemaMigrator, SqM):
 
 
 class Migrator(object):
-    """Provide migrations."""
+    """
+    A class that provides shortcuts for adding migration operations.
+    """
 
     def __init__(self, database, schema=None):
         """Initialize the migrator."""
@@ -646,7 +753,10 @@ class Migrator(object):
 
         self.migration = Migration(self.state, self.schema_migrator, schema=schema)
 
-    def add_operation(self, op: MigrateOperation):
+    def add_operation(self, op: MigrateOperation) -> None:
+        """
+        Adds a migrate operation
+        """
         self.migration.append(op)
 
     @property
@@ -655,16 +765,15 @@ class Migrator(object):
         return self.state
 
     def run(self, change_schema: bool = True):
-        """Run operations."""
         self.migration.apply(change_schema)
         self.clean()
 
     def python(self, func: RunPythonF):
-        """Run python code."""
+        """A shortcut for adding a :class:`RunPython` operation."""
         self.add_operation(RunPython(func))
 
     def sql(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
-        """Execure raw SQL."""
+        """A shortcut for adding a :class:`RunSql` operation."""
         self.add_operation(RunSql(sql, params))
 
     def clean(self):
@@ -672,52 +781,51 @@ class Migrator(object):
         self.migration.clean()
 
     def create_model(self, model: ModelCls) -> ModelCls:
-        """Create model and table in database.
+        """A shortcut for adding a :class:`CreateModel` operation."""
 
-        >> migrator.create_model(model)
-        """
         self.add_operation(CreateModel(model))
         return model
 
     create_table = create_model
 
     def remove_model(self, model_name: str) -> None:
-        """Drop model and table from database.
-
-        >> migrator.remove_model(model)
-        """
+        """A shortcut for adding a :class:`RemoveModel` operation."""
 
         self.add_operation(RemoveModel(model_name))
 
     drop_table = remove_model
 
     def add_fields(self, model_name: str, **fields: Any) -> None:
-        """Create new fields."""
+        """A shortcut for adding a :class:`AddFields` operation."""
+
         self.add_operation(AddFields(model_name, **fields))
 
     add_columns = add_fields
 
     def change_fields(self, model_name: str, **fields: pw.Field) -> None:
-        """Change fields."""
+        """A shortcut for adding a :class:`ChangeFields` operation."""
 
         return self.add_operation(ChangeFields(model_name, **fields))
 
     change_columns = change_fields
 
     def remove_fields(self, model_name: str, *names: str, cascade: bool = False) -> None:
-        """Remove fields from model."""
+        """A shortcut for adding a :class:`RemoveFields` operation."""
+
         self.add_operation(RemoveFields(model_name, *names, cascade=cascade))
 
     drop_columns = remove_fields
 
     def rename_field(self, model_name: str, old_name: str, new_name: str) -> None:
-        """Rename field in model."""
+        """A shortcut for adding a :class:`RenameField` operation."""
 
         self.add_operation(RenameField(model_name, old_name, new_name))
 
     rename_column = rename_field
 
     def rename_table(self, model_name: str, new_table_name: str) -> None:
+        """A shortcut for adding a :class:`RenameTable` operation."""
+
         self.add_operation(RenameTable(model_name, new_table_name))
 
     rename_model = rename_table
@@ -732,17 +840,18 @@ class Migrator(object):
         safe: bool = False,
         concurrently: bool = False,
     ) -> None:
-        """Create indexes."""
+        """A shortcut for adding a :class:`AddIndex` operation."""
+
         self.add_operation(
             AddIndex(model_name, *fields, name=name, unique=unique, where=where, safe=safe, concurrently=concurrently)
         )
 
     def drop_index(self, model_name: str, name: str) -> None:
-        """Drop indexes."""
+        """A shortcut for adding a :class:`DropIndex` operation."""
+
         self.add_operation(DropIndex(model_name, name))
 
     def add_not_null(self, model_name: str, *names: str) -> None:
-        """Add not null."""
         self.add_operation(ChangeNullable(model_name, *names, is_null=False))
 
     def drop_not_null(self, model_name: str, *names: str) -> None:

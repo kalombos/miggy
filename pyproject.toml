@@ -36,6 +36,8 @@ dev = [
     "ruff==0.14.3",
     "poethepoet==0.37.0",
     "mypy==1.18.2",
+    "Sphinx==8.1.3",
+    "sphinx-rtd-theme==3.0.2"
 ]
 
 
@@ -57,11 +59,15 @@ module-name = "miggy"
 module-root = ""
 
 [tool.mypy]
-exclude = "(venv|migrations)"
+exclude = "(venv|migrations|docs)"
 ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120
+exclude = [
+    "docs",
+]
+
 [tool.ruff.lint]
 select = [
     'A',
@@ -74,6 +80,7 @@ select = [
     'UP035',
     'TC'
 ]
+
 
 [tool.poe.executor]
 type = "simple"
