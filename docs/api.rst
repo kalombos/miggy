@@ -28,5 +28,5 @@ Migrate operations
 Migrator
 ++++++++++++++++++
 .. autoclass:: miggy.migrator::Migrator
-    :members: python,sql,create_model,remove_model,add_fields,change_fields,remove_fields,rename_field,rename_table,add_index,drop_index
+    :members: add_operation,python,sql,create_model,remove_model,add_fields,change_fields,remove_fields,rename_field,rename_table,add_index,drop_index
     :member-order: bysource

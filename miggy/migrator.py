@@ -38,7 +38,7 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 class State:
     """
     Current state containing historical models that match the operation’s place in the project history.
-    This is a dict-like class that stores data in the format model_name: model_class. 
+    This is a dict-like class that stores data in the format model_name: model_class.
     The model_name is case-insensitive.
 
     Example::
@@ -137,7 +137,7 @@ class RunPython(MigrateOperation):
 
 class RunSql(MigrateOperation):
     """
-    Allows running of arbitrary SQL on the database - 
+    Allows running of arbitrary SQL on the database -
     useful for more advanced features of database backends that Miggy doesn’t support directly.
 
     Example::
@@ -152,6 +152,7 @@ class RunSql(MigrateOperation):
             )
         )
     """
+
     def __init__(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         self.sql = sql
         self.params = params
@@ -169,6 +170,7 @@ class CreateModel(MigrateOperation):
     """
     Creates a new model in the :class:`State` and a corresponding table in the database to match it.
     """
+
     def __init__(self, model: ModelCls) -> None:
         self.model = model
 
@@ -186,6 +188,7 @@ class RemoveModel(MigrateOperation):
     """
     Deletes the model from the :class:`State` and its table from the database.
     """
+
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
 
@@ -254,6 +257,7 @@ class DropIndex(MigrateOperation):
     """
     Removes the index named name from the model with model_name.
     """
+
     def __init__(self, model_name: str, name: str) -> None:
         self.model_name = model_name
         self.name = name
@@ -271,15 +275,16 @@ class DropIndex(MigrateOperation):
 
 class RenameTable(MigrateOperation):
     """
-    Renames the model from the old name to a new one. 
+    Renames the model from the old name to a new one.
     It also renames all single-column indexes, if they exist.
 
     **Warning:**
 
-    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.  
-    You should explicitly specify index names if you plan to use this operation.  
+    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.
+    You should explicitly specify index names if you plan to use this operation.
     Otherwise, you will be prompted to recreate the indexes with a new name in the next migration.
     """
+
     def __init__(self, model_name: str, new_table_name: str) -> None:
         self.model_name = model_name
         self.new_table_name = new_table_name
@@ -305,6 +310,7 @@ class AddFields(MigrateOperation):
     """
     Adds fields to a model.
     """
+
     def __init__(self, model_name: str, **fields: pw.Field) -> None:
         self.model_name = model_name
         self.fields = fields
@@ -327,6 +333,7 @@ class ChangeFields(MigrateOperation):
     """
     Change fields to a model.
     """
+
     def __init__(self, model_name: str, **fields: pw.Field) -> None:
         self.model_name = model_name
         self.fields = fields
@@ -432,6 +439,7 @@ class RemoveFields(MigrateOperation):
     """
     Removes fields from a model
     """
+
     def __init__(self, model_name: str, *names: str, cascade: bool = False) -> None:
         self.model_name = model_name
         self.cascade = cascade
@@ -466,8 +474,8 @@ class RenameField(MigrateOperation):
 
     **Warning:**
 
-    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.  
-    You should explicitly specify index names if you plan to use this operation.  
+    This operation does not rename indexes created via the **Meta** class or the **add_index()** method.
+    You should explicitly specify index names if you plan to use this operation.
     Otherwise, you will be prompted to recreate the index with a new name in the next migration.
     """
 
