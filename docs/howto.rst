@@ -5,6 +5,10 @@ How-To Guides
 How to start with an existing database schema
 ----------------------------------------------
 
+* Run **miggy makemigrations**.
+* Review and adjust the generated migrations if necessary.
+* Run **miggy migrate --fake**.
+
 
 
 How to merge migrations
