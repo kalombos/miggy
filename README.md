@@ -26,6 +26,11 @@ Installation
 ------------
     pip install miggy
 
+
+Documentation
+-------------
+https://miggy.readthedocs.io
+
 Usage
 -----
 
