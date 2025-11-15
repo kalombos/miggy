@@ -33,7 +33,7 @@ dependencies = [
 dev = [
     "pytest==9.0.1",
     "psycopg2-binary>=2.8.1",
-    "ruff==0.14.4",
+    "ruff==0.14.5",
     "poethepoet==0.37.0",
     "mypy==1.18.2",
 
