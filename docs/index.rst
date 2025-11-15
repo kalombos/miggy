@@ -4,11 +4,26 @@
    contain the root `toctree` directive.
 
 
-miggy
+Miggy
 ======
 
 
-Miggy is a migration engine for Peewee.
+**Miggy** is a migration engine for Peewee.
+
+* Works on Python 3.10+
+* Has support for all Peewee database backends
+* Inspired by Django migrations
+
+The source code is hosted on `GitHub`_.
+
+.. _GitHub: https://github.com/kalombos/miggy
+
+
+Related projects
+----------------
+
+* `peewee <https://github.com/coleifer/peewee/>`_ - the ORM that **Miggy** is designed to work with.
+* `peewee-async <https://github.com/05bit/peewee-async/>`_ - an asynchronous version of peewee.
 
 
 Contents
@@ -17,6 +32,9 @@ Contents
 .. toctree::
    :maxdepth: 2
 
+   quickstart
+   howto
+   cli
    api
 
 
