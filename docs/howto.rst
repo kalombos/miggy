@@ -5,10 +5,11 @@ How-To Guides
 How to start with an existing database schema
 ----------------------------------------------
 
-* Run **miggy makemigrations**.
-* Review and adjust the generated migrations if necessary.
-* Run **miggy migrate --fake**.
+If you already have a project with an existing schema, you can easily integrate Miggy:
 
+1. Run **miggy makemigrations**.
+2. Review and adjust the generated migration if necessary.
+3. **Run miggy migrate --fake** to mark the migration as applied.
 
 
 How to merge migrations
@@ -23,7 +24,7 @@ as projects often contain custom migrations—whether they add data or
 are written with custom SQL because Miggy’s capabilities may be limited. 
 In such cases, migrations can be merged manually:
 
-* Delete all migration files.
-* Run **miggy makemigrations**.
-* Review and adjust the generated migrations if necessary.
-* Run **miggy migrate --fake**.
+1. Delete all migration files.
+2. Run **miggy makemigrations**.
+3. Review and adjust the generated migration if necessary.
+4. Manually update the migratehistory table. It should contain only the migration created in step 2
