@@ -4,7 +4,6 @@ from playhouse.postgres_ext import DateTimeTZField, PostgresqlExtDatabase
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 
 
-
 database = PostgresqlExtDatabase(POSTGRES_DSN)
 
 

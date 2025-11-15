@@ -15,12 +15,12 @@ Some examples (model - class or model name)::
     > migrator.rename_field(model_name: str, old_name: str, new_name: str)
     > migrator.rename_table(model_name: str, new_table_name: str)
     > migrator.add_index(
-            model_name: str, 
-            *fields: str, 
-            name: str, 
-            unique: bool = False, 
-            where: pw.SQL | None = None,         
-            safe: bool = False, 
+            model_name: str,
+            *fields: str,
+            name: str,
+            unique: bool = False,
+            where: pw.SQL | None = None,
+            safe: bool = False,
             concurrently: bool = False
       )
     > migrator.drop_index(model_name: str, name: str)
@@ -29,11 +29,7 @@ Some examples (model - class or model name)::
 
 """
 
-import datetime as dt
-
 import peewee as pw
-
-import playhouse.postgres_ext as pw_pext
 
 SQL = pw.SQL
 
@@ -45,17 +41,14 @@ __ATOMIC = True
 def migrate(migrator, database, fake=False):
     """Write your migrations here."""
 
-    migrator.add_fields(
-        'user',
+    migrator.add_fields("user", age=pw.IntegerField(null=True))
 
-        age=pw.IntegerField(null=True))
-
-    migrator.change_fields('user', last_name=pw.CharField(index=True, max_length=255))
+    migrator.change_fields("user", last_name=pw.CharField(index=True, max_length=255))
 
 
 def rollback(migrator, database, fake=False):
     """Write your rollback migrations here."""
 
-    migrator.remove_fields('user', 'age')
+    migrator.remove_fields("user", "age")
 
-    migrator.change_fields('user', last_name=pw.CharField(max_length=255))
+    migrator.change_fields("user", last_name=pw.CharField(max_length=255))
