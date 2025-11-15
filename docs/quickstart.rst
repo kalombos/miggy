@@ -121,4 +121,4 @@ It has worked again!
 
 If you need the source code of the example you can find it on `GitHub`_.
 
-.. _GitHub: https://github.com/kalombos/miggy/examples/quickstart
+.. _GitHub: https://github.com/kalombos/miggy/tree/master/examples/quickstart
