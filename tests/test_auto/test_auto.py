@@ -15,13 +15,19 @@ from playhouse.postgres_ext import (
 from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
+    add_fields,
     add_index,
+    change_fields,
+    change_not_null,
     extract_index_meta,
     field_to_code,
     fields_not_equal,
     model_to_code,
+    remove_fields,
+    remove_model,
 )
 from miggy.utils import ModelIndex
+from tests.helpers import to_one_line
 
 
 class _M1(pw.Model):
@@ -223,3 +229,68 @@ def test_model_to_code_indexes():
 )
 def test_add_index(index_meta: IndexMeta, expected: str) -> None:
     assert add_index(index_meta) == expected
+
+
+def test_remove_model() -> None:
+    class MyTestModel(pw.Model):
+        i1 = pw.IntegerField()
+
+        class Meta:
+            table_name = "another_name"
+
+    assert remove_model(MyTestModel) == "migrator.remove_model('mytestmodel')"
+
+def test_add_fields() -> None:
+    class MyTestModel(pw.Model):
+        i1 = pw.IntegerField()
+
+        class Meta:
+            table_name = "another_name"
+    f = pw.CharField()
+    f.name = "name"
+    assert to_one_line(add_fields(MyTestModel, f)) == (
+        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name='None', max_length=255))"
+    )
+
+def test_remove_fields() -> None:
+    class MyTestModel(pw.Model):
+        i1 = pw.IntegerField()
+
+        class Meta:
+            table_name = "another_name"
+    assert remove_fields(MyTestModel, "i1") == "migrator.remove_fields('mytestmodel', 'i1')"
+
+
+def test_change_fields() -> None:
+    class MyTestModel(pw.Model):
+        i1 = pw.IntegerField()
+
+        class Meta:
+            table_name = "another_name"
+    f = pw.CharField()
+    f.name = "name"
+    assert to_one_line(change_fields(MyTestModel, f)) == (
+        "migrator.change_fields('mytestmodel', name=pw.CharField(column_name='None', max_length=255))"
+    )
+
+
+@pytest.mark.parametrize(
+    ("is_null", "expected"),
+    [
+        (
+            True,
+            "migrator.drop_not_null('mytestmodel', 'i1')"
+        ),
+        (
+            False,
+            "migrator.add_not_null('mytestmodel', 'i1')"
+        ),
+    ],
+)
+def test_change_not_null(is_null: bool, expected: str) -> None:
+    class MyTestModel(pw.Model):
+        i1 = pw.IntegerField()
+
+        class Meta:
+            table_name = "another_name"
+    assert change_not_null(MyTestModel, "i1", is_null) == expected
