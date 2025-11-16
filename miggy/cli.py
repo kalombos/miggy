@@ -82,7 +82,7 @@ def makemigrations(name=None, database=None, auto=True, auto_source=False, direc
     Similar to `create` command, but `auto` is True by default, and `name` not required
     """
     if name is None:
-        name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())
+        name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
 
     router = get_router(directory, database, schema, verbose)
     if auto and auto_source:
