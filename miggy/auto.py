@@ -248,12 +248,12 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     names1 = set(fields1) - set(fields2)
     if names1:
         fields = [fields1[name] for name in names1]
-        changes.append(create_fields(current, *fields))
+        changes.append(add_fields(current, *fields))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)
     if names2:
-        changes.append(drop_fields(current, *names2))
+        changes.append(remove_fields(current, *names2))
 
     # Change fields
     fields_ = []
@@ -336,36 +336,36 @@ def model_to_code(Model) -> str:
     return template.format(classname=Model.__name__, fields=fields, meta=meta)
 
 
-def create_model(Model) -> str:
-    return "@migrator.create_model\n" + model_to_code(Model)
+def create_model(model: ModelCls) -> str:
+    return "@migrator.create_model\n" + model_to_code(model)
 
 
-def remove_model(Model) -> str:
-    return "migrator.remove_model('%s')" % Model._meta.table_name
+def remove_model(model: ModelCls) -> str:
+    return "migrator.remove_model('%s')" % model._meta.name
 
 
-def create_fields(Model, *fields) -> str:
+def add_fields(model: ModelCls, *fields) -> str:
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
-        Model._meta.table_name,
+        model._meta.name,
         NEWLINE + ("," + NEWLINE).join([field_to_code(field, False) for field in fields]),
     )
 
 
-def drop_fields(Model, *fields) -> str:
-    return "migrator.remove_fields('%s', %s)" % (Model._meta.table_name, ", ".join(map(repr, fields)))
+def remove_fields(model: ModelCls, *fields) -> str:
+    return "migrator.remove_fields('%s', %s)" % (model._meta.name, ", ".join(map(repr, fields)))
 
 
-def change_fields(Model, *fields) -> str:
+def change_fields(model: ModelCls, *fields) -> str:
     return "migrator.change_fields('%s', %s)" % (
-        Model._meta.table_name,
+        model._meta.name,
         ("," + NEWLINE).join([field_to_code(f, False) for f in fields]),
     )
 
 
-def change_not_null(Model, name, null) -> str:
+def change_not_null(model: ModelCls, name, null) -> str:
     operation = "drop_not_null" if null else "add_not_null"
-    return "migrator.%s('%s', %s)" % (operation, Model._meta.table_name, repr(name))
+    return "migrator.%s('%s', %s)" % (operation, model._meta.name, repr(name))
 
 
 def add_index(index_meta: IndexMeta) -> str:

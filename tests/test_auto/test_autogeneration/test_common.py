@@ -118,3 +118,14 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
 
     changes = diff_one(create_model(name_after), create_model(name_before))
     assert changes == expected
+
+
+def test_remove_model() -> None:
+    class MyTestModel(pw.Model):
+        i1 = pw.IntegerField()
+
+        class Meta:
+            table_name = "another_name"
+
+    changes = diff_many([], [MyTestModel])
+    assert changes[0] == "migrator.remove_model('mytestmodel')"

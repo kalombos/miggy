@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from miggy.auto import create_fields, diff_one
+from miggy.auto import add_fields, diff_one
 
 
 class _M1(pw.Model):
@@ -47,5 +47,5 @@ def test_add_fields(test_field: pw.Field, expected: str) -> None:
             table_name = "test"
 
     code = diff_one(Test, OldTest)[0]
-    assert code == create_fields(Test, Test.field)
+    assert code == add_fields(Test, Test.field)
     assert expected in code
