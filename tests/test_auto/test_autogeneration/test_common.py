@@ -118,4 +118,3 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
 
     changes = diff_one(create_model(name_after), create_model(name_before))
     assert changes == expected
-
