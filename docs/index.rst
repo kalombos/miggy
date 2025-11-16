@@ -36,6 +36,7 @@ Contents
    howto
    cli
    api
+   ext
 
 
 Indices and tables

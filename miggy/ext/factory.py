@@ -66,7 +66,32 @@ def model_factory(
     fill_nullable_values: bool = False,
     **kwargs: Any,
 ) -> pw.Model:
-    """Функция для быстрого создания моделей."""
+    """
+    Create and save an instance of a Peewee model, automatically populating
+    all required fields.
+
+    Parameters
+    ----------
+    model : type[pw.Model]
+        The Peewee model class to instantiate.
+    custom_field_type_map : FieldMap | None, optional
+        A mapping that allows customizing factory functions for specific
+        field types. If ``None``, default handlers are used.
+    fill_nullable_values : bool, optional
+        Whether to automatically fill nullable fields as well.
+    \*\*kwargs : Any
+        ``field_name=value`` pairs that override or provide values for particular
+        model fields.
+
+    Returns
+    -------
+    pw.Model
+        The newly created and saved model instance.
+
+    Example
+    -------
+    >>> book = model_factory(Book, name="mytestname")
+    """
     _field_type_map = field_type_map.copy()
     if custom_field_type_map is not None:
         _field_type_map.update(custom_field_type_map)
