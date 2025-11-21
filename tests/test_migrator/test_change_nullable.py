@@ -21,8 +21,8 @@ def test_add_not_null(patched_pg_db: PatchedPgDatabase) -> None:
         'ALTER TABLE "user" ALTER COLUMN "name" SET NOT NULL',
         'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL',
     ]
-    assert not migrator.orm["user"].name.null
-    assert not migrator.orm["user"].created_at.null
+    assert not migrator.state["user"].name.null
+    assert not migrator.state["user"].created_at.null
 
 
 def test_drop_not_null(patched_pg_db: PatchedPgDatabase) -> None:
@@ -42,5 +42,5 @@ def test_drop_not_null(patched_pg_db: PatchedPgDatabase) -> None:
         'ALTER TABLE "user" ALTER COLUMN "name" DROP NOT NULL',
         'ALTER TABLE "user" ALTER COLUMN "created_at" DROP NOT NULL',
     ]
-    assert migrator.orm["user"].name.null
-    assert migrator.orm["user"].created_at.null
+    assert migrator.state["user"].name.null
+    assert migrator.state["user"].created_at.null

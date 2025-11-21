@@ -26,8 +26,8 @@ def test_remove_fields(patched_pg_db: PatchedPgDatabase) -> None:
     ]
 
     assert alter_queries == ['ALTER TABLE "user" DROP COLUMN "name"', 'ALTER TABLE "user" DROP COLUMN "created_at"']
-    assert not hasattr(migrator.orm["user"], "name")
-    assert not hasattr(migrator.orm["user"], "created_at")
+    assert not hasattr(migrator.state["user"], "name")
+    assert not hasattr(migrator.state["user"], "created_at")
 
 
 @pytest.mark.parametrize("object_id_name", [None, "some_name"])
@@ -54,6 +54,6 @@ def test_remove_fk_field(patched_pg_db: PatchedPgDatabase, object_id_name: str |
 
     _, alter_query = patched_pg_db.queries
     assert alter_query == 'ALTER TABLE "book" DROP COLUMN "author_id"'
-    assert not hasattr(migrator.orm["book"], "author")
-    assert not hasattr(migrator.orm["book"], actual_object_id_name)
-    assert not hasattr(migrator.orm["user"], "books")
+    assert not hasattr(migrator.state["book"], "author")
+    assert not hasattr(migrator.state["book"], actual_object_id_name)
+    assert not hasattr(migrator.state["user"], "books")

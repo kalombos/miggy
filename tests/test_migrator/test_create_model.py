@@ -62,5 +62,5 @@ def test_create_model__state(name: str, patched_pg_db: PatchedPgDatabase) -> Non
             table_name = name
 
     migrator.run()
-    assert Company == migrator.orm["company"]
-    assert migrator.orm["company"]._meta.table_name == name
+    assert Company == migrator.state["company"]
+    assert migrator.state["company"]._meta.table_name == name

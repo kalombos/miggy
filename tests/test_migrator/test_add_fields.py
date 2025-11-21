@@ -30,12 +30,12 @@ def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
         'ALTER TABLE "some_name" ADD COLUMN "age" INTEGER',
     ]
 
-    last_name = migrator.orm["user"].last_name
+    last_name = migrator.state["user"].last_name
     assert isinstance(last_name, pw.CharField)
     assert last_name.unique
     assert last_name.null
 
-    age = migrator.orm["user"].age
+    age = migrator.state["user"].age
     assert isinstance(age, pw.IntegerField)
     assert age.null
 

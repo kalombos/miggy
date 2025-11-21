@@ -34,9 +34,9 @@ def test_rename_field(
     migrator.run()
 
     assert patched_pg_db.queries == expected_queries
-    assert not hasattr(migrator.orm["user"], "name")
-    assert isinstance(migrator.orm["user"].new_name, pw.CharField)
-    assert migrator.orm["user"].new_name.column_name == expected_column_name
+    assert not hasattr(migrator.state["user"], "name")
+    assert isinstance(migrator.state["user"].new_name, pw.CharField)
+    assert migrator.state["user"].new_name.column_name == expected_column_name
 
 
 @pytest.mark.parametrize(
@@ -88,9 +88,9 @@ def test_rename_fk_field(
     migrator.run()
 
     assert patched_pg_db.queries == expected_queries
-    assert not hasattr(migrator.orm["book"], "author")
-    assert isinstance(migrator.orm["book"].new_author, pw.ForeignKeyField)
-    assert migrator.orm["book"].new_author.column_name == expected_column_name
+    assert not hasattr(migrator.state["book"], "author")
+    assert isinstance(migrator.state["book"].new_author, pw.ForeignKeyField)
+    assert migrator.state["book"].new_author.column_name == expected_column_name
 
 
 @pytest.mark.parametrize("object_id_name", [None, "some_other_name"])
@@ -116,8 +116,8 @@ def test_rename_fk_field__object_id_name(patched_pg_db: PatchedPgDatabase, objec
         'ALTER TABLE "book" RENAME COLUMN "author_id" TO "new_author_id"',
         'ALTER INDEX "book_author_id" RENAME TO "book_new_author_id"',
     ]
-    assert not hasattr(migrator.orm["book"], "author")
-    assert isinstance(migrator.orm["book"].new_author, pw.ForeignKeyField)
+    assert not hasattr(migrator.state["book"], "author")
+    assert isinstance(migrator.state["book"].new_author, pw.ForeignKeyField)
 
     # object_id_name should stay the same
     actual_object_id_name = object_id_name if object_id_name else "author_id"
