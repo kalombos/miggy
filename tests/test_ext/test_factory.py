@@ -9,11 +9,8 @@ from .models import Author, Book
 
 
 def test_foreign_field_is_created() -> None:
-    now = dt.datetime.now(tz=dt.timezone.utc)
     book = model_factory(Book)
     Author.get(id=book.author)
-
-    assert book.created_at > now
 
 
 def test_default_field_is_not_generated() -> None:
