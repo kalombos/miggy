@@ -47,15 +47,15 @@ def test_change_nullable(
         created_at = pw.DateField(null=null_before)
 
     migrator.run()
-    assert User == migrator.orm["user"]
+    assert User == migrator.state["user"]
     patched_pg_db.queries.clear()
 
     migrator.change_fields("user", created_at=pw.DateTimeField(null=null_after))
     migrator.run()
     assert patched_pg_db.queries == expected
 
-    assert migrator.orm["user"].created_at.null == null_after
-    assert isinstance(migrator.orm["user"].created_at, pw.DateTimeField)
+    assert migrator.state["user"].created_at.null == null_after
+    assert isinstance(migrator.state["user"].created_at, pw.DateTimeField)
 
 
 @pytest.mark.parametrize(
@@ -94,7 +94,7 @@ def test_change_type(
         field = field_before
 
     migrator.run()
-    assert User == migrator.orm["user"]
+    assert User == migrator.state["user"]
 
     patched_pg_db.queries.clear()
 
@@ -112,7 +112,7 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
         created_at = pw.DateField()
 
     migrator.run()
-    assert User == migrator.orm["user"]
+    assert User == migrator.state["user"]
     patched_pg_db.queries.clear()
 
     migrator.change_fields("user", name=pw.TextField(column_name="new_name"))
@@ -198,7 +198,7 @@ def test_change_indexes(
     assert patched_pg_db.queries == expected
 
     has_index = params_after.get("unique", False) or params_after.get("index", False)
-    assert has_single_index(migrator.orm["user"].name) == has_index
+    assert has_single_index(migrator.state["user"].name) == has_index
 
 
 class _M1(pw.Model):

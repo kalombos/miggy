@@ -114,7 +114,7 @@ class RunPython(MigrateOperation):
     Example::
 
         def save_user(schema_migrator: SchemaMigrator, current_state: State):
-            User = state["user"]
+            User = current_state["user"]
             User(
                 first_name="First",
                 last_name="Last",
@@ -542,30 +542,33 @@ class Migration:
     def __init__(self, state: State, schema_migrator: "SchemaMigrator", schema: str | None = None) -> None:
         self.state = state
         self.schema_migrator = schema_migrator
-        self.migrate_operations: list[MigrateOperation] = []
         self.schema = schema
+        self.operations: list[Operation | Callable] = []
 
     def append(self, op: MigrateOperation) -> None:
-        self.migrate_operations.append(op)
+        self.state.create_snapshot()
+        op.state_forwards(self.state)
+        from_state = self.state.pop_snapshot()
+        self.operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
 
     def apply(self, change_schema: bool) -> None:
-        if change_schema and self.schema:
-            self.schema_migrator.select_schema(self.schema).run()
-        for migrate_operation in self.migrate_operations:
-            self.state.create_snapshot()
-            migrate_operation.state_forwards(self.state)
-            from_state = self.state.pop_snapshot()
-            if not change_schema:
-                continue
-            for op in migrate_operation.database_forwards(self.schema_migrator, from_state, self.state):
-                if isinstance(op, Operation):
-                    LOGGER.info("%s %s", op.method, op.args)
-                    op.run()
-                else:
-                    op()
+        if not change_schema:
+            return
+
+        if self.schema:
+            _ops = [self.schema_migrator.select_schema(self.schema), *self.operations]
+        else:
+            _ops = [*self.operations]
+
+        for op in _ops:
+            if isinstance(op, Operation):
+                LOGGER.info("%s %s", op.method, op.args)
+                op.run()
+            else:
+                op()
 
     def clean(self) -> None:
-        self.migrate_operations = []
+        self.operations = []
 
 
 class SchemaMigrator(ScM):
@@ -758,11 +761,6 @@ class Migrator(object):
         Adds a migrate operation
         """
         self.migration.append(op)
-
-    @property
-    def orm(self) -> State:
-        # for backward compatibility
-        return self.state
 
     def run(self, change_schema: bool = True):
         self.migration.apply(change_schema)

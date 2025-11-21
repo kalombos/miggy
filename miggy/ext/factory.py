@@ -40,7 +40,7 @@ def json_field_factory(field: pw.Field) -> dict[str, Any]:
 field_type_map = {
     pw.DateField: lambda _: dt.date.today(),  # noqa: DTZ011
     pw.DateTimeField: lambda _: dt.datetime.now(),  # noqa: DTZ005
-    DateTimeTZField: lambda _: dt.datetime.now(tz=dt.timezone.utc).date(),
+    DateTimeTZField: lambda _: dt.datetime.now(tz=dt.timezone.utc),
     pw.CharField: char_field_factory,
     pw.TextField: char_field_factory,
     pw.IntegerField: integer_field_factory,

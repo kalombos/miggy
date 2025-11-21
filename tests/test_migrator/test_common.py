@@ -27,8 +27,8 @@ def test_migrator_sqlite_common():
         customer_id = pw.ForeignKeyField(Customer, column_name="customer_id")
 
     migrator.run()
-    assert Customer == migrator.orm["customer"]
-    assert Order == migrator.orm["order"]
+    assert Customer == migrator.state["customer"]
+    assert Order == migrator.state["order"]
 
     migrator.add_fields("order", finished=pw.BooleanField(default=False))
     migrator.run()

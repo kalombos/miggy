@@ -1,4 +1,5 @@
 import peewee as pw
+from playhouse.postgres_ext import DateTimeTZField
 
 from tests.conftest import POSTGRES_DSN
 
@@ -12,6 +13,7 @@ class Author(pw.Model):
     name = pw.CharField()
     last_name = pw.CharField()
     age = pw.IntegerField()
+    created_at = DateTimeTZField()
 
 
 class Book(pw.Model):

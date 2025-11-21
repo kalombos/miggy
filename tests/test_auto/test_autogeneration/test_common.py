@@ -13,9 +13,9 @@ def test_on_real_migrations(migrations_dir: Path):
     router = get_router(migrations_dir, "sqlite:///:memory:")
     router.run()
     migrator = router.migrator
-    models = migrator.orm.values()
-    Person_ = migrator.orm["person"]
-    Tag_ = migrator.orm["tag"]
+    models = migrator.state.values()
+    Person_ = migrator.state["person"]
+    Tag_ = migrator.state["tag"]
 
     code = model_to_code(Person_)
     assert code
