@@ -34,7 +34,7 @@ dev = [
     "pytest==9.0.2",
     "psycopg2-binary>=2.8.1",
     "ruff==0.14.9",
-    "poethepoet==0.37.0",
+    "poethepoet==0.38.0",
     "mypy==1.19.0",
 
 ]
