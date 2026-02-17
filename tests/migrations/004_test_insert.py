@@ -4,7 +4,7 @@
 def migrate(migrator, database, **kwargs):
     """Write your migrations here.
 
-    > Model = migrator.orm['name']
+    > Model = migrator.state['name']
 
     > migrator.sql(sql)
     > migrator.python(func, *args, **kwargs)
