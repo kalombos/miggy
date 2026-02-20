@@ -154,3 +154,27 @@ def delete_field(model: ModelCls, field: pw.Field) -> None:
     if isinstance(field, pw.ForeignKeyField):
         delattr(model, field.object_id_name)
         delattr(field.rel_model, field.backref)
+
+
+def disable_fk_checks(database):
+    match database:
+        case pw.SqliteDatabase():
+            database.pragma("foreign_keys", value=0)
+        case pw.PostgresqlDatabase():
+            database.execute_sql("SET FOREIGN_KEY_CHECKS = 0;")
+        case pw.MySQLDatabase():
+            database.execute_sql("SET FOREIGN_KEY_CHECKS = 0;")
+        case _:
+            pass
+
+
+def enable_fk_checks(database):
+    match database:
+        case pw.SqliteDatabase():
+            database.pragma("foreign_keys", value=1)
+        case pw.PostgresqlDatabase():
+            database.execute_sql("SET FOREIGN_KEY_CHECKS = 1;")
+        case pw.MySQLDatabase():
+            database.execute_sql("SET FOREIGN_KEY_CHECKS = 1;")
+        case _:
+            pass

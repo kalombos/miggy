@@ -12,7 +12,7 @@ from playhouse.psycopg3_ext import Psycopg3Database
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, diff_many
 from miggy.migrator import Migrator
-from miggy.utils import exec_in
+from miggy.utils import exec_in, disable_fk_checks, enable_fk_checks
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
 CURDIR = os.getcwd()
@@ -172,7 +172,13 @@ class BaseRouter(object):
 
             if migration.atomic:
                 with self.database.transaction():
+                    # Disable Foreign Key checks during migration
+                    disable_fk_checks(database)
+
                     run_migrator()
+
+                    # Re-enable Foreign Key checks
+                    enable_fk_checks(database)
             else:
                 run_migrator()
 
@@ -211,6 +217,12 @@ class BaseRouter(object):
         migrator = self.migrator
         self.run_one(name, migrator, change_schema=True, downgrade=True, change_history=True)
         self.logger.warning("Downgraded migration: %s", name)
+
+    def disable_fk_checks(self, database):
+        return
+
+    def enable_fk_checks(self, database):
+        return
 
 
 def make_ext_import(database: pw.Database) -> str:
