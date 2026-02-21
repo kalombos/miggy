@@ -10,11 +10,9 @@ from tests.conftest import POSTGRES_DSN
 db = pw.PostgresqlDatabase(POSTGRES_DSN)
 
 
-
 class Status(StrEnum):
     active = "active"
     inactive = "inactive"
-
 
 
 class Author(pw.Model):
@@ -32,6 +30,7 @@ class Rating(IntEnum):
     low = 1
     middle = 2
     high = 3
+
 
 class Book(pw.Model):
     class Meta:
