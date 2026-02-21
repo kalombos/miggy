@@ -11,8 +11,8 @@ db = pw.PostgresqlDatabase(POSTGRES_DSN)
 
 
 class Status(StrEnum):
-    active = "active"
-    inactive = "inactive"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
 
 
 class Author(pw.Model):
@@ -27,9 +27,9 @@ class Author(pw.Model):
 
 
 class Rating(IntEnum):
-    low = 1
-    middle = 2
-    high = 3
+    LOW = 1
+    MIDDLE = 2
+    HIGH = 3
 
 
 class Book(pw.Model):
