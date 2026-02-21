@@ -7,6 +7,8 @@ from typing import Any
 import peewee as pw
 from playhouse.postgres_ext import BinaryJSONField, DateTimeTZField
 
+from miggy.ext.fields import CharEnumField, IntEnumField
+
 
 class Counter(collections.Counter):
     def inc(self, element: str) -> int:
@@ -48,6 +50,8 @@ field_type_map = {
     pw.BooleanField: lambda _: False,
     pw.BigIntegerField: lambda _: random.randint(1, 9999999),
     BinaryJSONField: json_field_factory,
+    CharEnumField: lambda f: list(f._enum)[0].value,
+    IntEnumField: lambda f: list(f._enum)[0].value,
 }
 
 _missing = object()
