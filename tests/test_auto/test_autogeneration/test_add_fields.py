@@ -26,7 +26,7 @@ class _M1(pw.Model):
             pw.ForeignKeyField(_M1, on_delete="CASCADE", null=True),
             (
                 "pw.ForeignKeyField(backref='test_set', column_name='field_id', "
-                "field='id', model=migrator.orm['_m1'], null=True, on_delete='CASCADE')"
+                "field='id', model=migrator.state['_m1'], null=True, on_delete='CASCADE')"
             ),
             id="add_fk",
         ),

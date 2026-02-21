@@ -1,6 +1,6 @@
 [project]
 name = "miggy"
-version = "2.1.0"
+version = "2.1.1"
 authors = [
   {name = "Gorshkov Nikolay", email = "nogamemorebrain@gmail.com"},
   {name = "Kirill Klenov"},
@@ -34,14 +34,14 @@ dependencies = [
 dev = [
     "pytest==9.0.2",
     "psycopg2-binary>=2.8.1",
-    "ruff==0.14.9",
-    "poethepoet==0.37.0",
+    "ruff==0.15.2",
+    "poethepoet==0.41.0",
     "mypy==1.19.0",
 
 ]
 docs = [
     "Sphinx==8.1.3",
-    "sphinx-rtd-theme==3.0.2",
+    "sphinx-rtd-theme==3.1.0",
     "sphinx-click==6.1.0"
 ]
 
@@ -56,7 +56,7 @@ Issues = "https://github.com/kalombos/miggy/issues"
 miggy = "miggy.cli:cli"
 
 [build-system]
-requires = ["uv_build>=0.9.6,<0.10.0"]
+requires = ["uv_build>=0.9.6,<0.11.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

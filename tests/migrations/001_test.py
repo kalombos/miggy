@@ -2,7 +2,7 @@
 
 Some examples (model - class or model name)::
 
-    > Model = migrator.orm['model_name']            # Return model in current state by name
+    > Model = migrator.state['model_name']            # Return model in current state by name
 
     > migrator.sql(sql)                             # Run custom SQL
     > migrator.python(func, *args, **kwargs)        # Run python code
