@@ -1,7 +1,9 @@
-from enum import Enum, IntEnum, StrEnum
+from enum import Enum, IntEnum
 from typing import Any
 
 import peewee as pw
+
+from miggy.ext.utils import StrEnum
 
 
 class BaseEnumField(pw.Field):
@@ -14,10 +16,6 @@ class BaseEnumField(pw.Field):
         super().__init__(choices=choices, **kwargs)
 
     def db_value(self, value: Any) -> Any:
-        # assert type(value) in [
-        #     self._enum,
-        #     type(None),
-        # ], f"Expected enum {self._enum} or Nonetype object, got {type(value)}"
         if value is None:
             return value
 
