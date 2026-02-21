@@ -1,4 +1,3 @@
-
 import pytest
 
 from miggy.ext import model_factory
@@ -30,10 +29,13 @@ def test_intenumfield__error_on_get() -> None:
     db.execute_sql(
         """
         INSERT INTO "book" ("title", "author_id", "requests", "rating") VALUES ('title1', %s, 0, 5)
-    """, params=[author.id])
+    """,
+        params=[author.id],
+    )
 
     with pytest.raises(ValueError):
         Book.get()
+
 
 def test_charenumfield() -> None:
     model_factory(Author, status=Status.ACTIVE)
