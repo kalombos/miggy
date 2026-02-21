@@ -29,7 +29,6 @@ class BaseEnumField(pw.Field):
             return value
 
         return self._enum(value)
-        
 
 
 class CharEnumField(BaseEnumField, pw.CharField):
