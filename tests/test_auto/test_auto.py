@@ -1,3 +1,4 @@
+from enum import IntEnum
 from typing import Any
 
 import peewee as pw
@@ -26,6 +27,9 @@ from miggy.auto import (
     remove_fields,
     remove_model,
 )
+from miggy.ext import IntEnumField
+from miggy.ext.fields import CharEnumField
+from miggy.ext.utils import StrEnum
 from miggy.utils import ModelIndex
 from tests.helpers import to_one_line
 
@@ -46,11 +50,29 @@ class _DoesNotMatter(pw.Model):
 
 
 def test_field_serializer_to_code() -> None:
+    class Status(StrEnum):
+        ACTIVE = "active"
+        INACTIVE = "inactive"
+
+    class Rating(IntEnum):
+        LOW = 1
+        MIDDLE = 2
+        HIGH = 3
+
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
+        status = CharEnumField(Status, null=True, max_length=100)
+        rating = IntEnumField(Rating)
+
 
     assert FieldSerializer.to_code(SomeModel.name) == (
         """name = pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
+    )
+    assert FieldSerializer.to_code(SomeModel.status) == (
+        """status = pw.CharField(max_length=100, null=True)"""
+    )
+    assert FieldSerializer.to_code(SomeModel.rating) == (
+        """rating = pw.SmallIntegerField()"""
     )
 
 
