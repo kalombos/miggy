@@ -13,6 +13,8 @@ from playhouse.postgres_ext import (
 )
 
 from miggy.auto import (
+    FieldComparer,
+    FieldSerializer,
     IndexMeta,
     IndexMetaExtractor,
     add_fields,
@@ -20,8 +22,6 @@ from miggy.auto import (
     change_fields,
     change_not_null,
     extract_index_meta,
-    field_to_code,
-    fields_not_equal,
     model_to_code,
     remove_fields,
     remove_model,
@@ -45,11 +45,11 @@ class _DoesNotMatter(pw.Model):
         table_name = "table_name"
 
 
-def test_field_to_code() -> None:
+def test_field_serializer_to_code() -> None:
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
 
-    assert field_to_code(SomeModel.name) == (
+    assert FieldSerializer.to_code(SomeModel.name) == (
         """name = pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
 
@@ -87,7 +87,7 @@ def test_field_to_code() -> None:
     ],
 )
 def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
-    assert fields_not_equal(f1, f2) is expected
+    assert FieldComparer.not_equal(f1, f2) is expected
 
 
 def test_index_meta_extractor__resolve_where() -> None:

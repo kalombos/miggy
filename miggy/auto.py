@@ -11,77 +11,81 @@ from .types import ModelCls
 
 INDENT = "    "
 NEWLINE = "\n" + INDENT
-FIELD_MODULES_MAP = {
-    "ArrayField": "pw_pext",
-    "BinaryJSONField": "pw_pext",
-    "DateTimeTZField": "pw_pext",
-    "HStoreField": "pw_pext",
-    "IntervalField": "pw_pext",
-    "JSONField": "pw_pext",
-    "TSVectorField": "pw_pext",
-}
 
 
-def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
-    params = {"model": field.rel_model._meta.name}
-    if field.on_delete is not None:
-        params["on_delete"] = "'%s'" % field.on_delete
-    if field.on_update is not None:
-        params["on_update"] = "'%s'" % field.on_update
-    if field.constraint_name is not None:
-        params["constraint_name"] = "'%s'" % field.constraint_name
-    return params
+class FieldComparer:
+    TYPE_PARAMS = {
+        pw.CharField: lambda f: {"max_length": f.max_length},
+        pw.DecimalField: lambda f: {
+            "max_digits": f.max_digits,
+            "decimal_places": f.decimal_places,
+        },
+    }
 
+    def __init__(self, field: pw.Field) -> None:
+        self.field = field
 
-TYPE_PARAMS = {
-    pw.CharField: lambda f: {"max_length": f.max_length},
-    pw.DecimalField: lambda f: {
-        "max_digits": f.max_digits,
-        "decimal_places": f.decimal_places,
-    },
-}
+    def _get_default(self, field: pw.Field) -> Any:
+        if field.default is not None and not callable(field.default):
+            return field.default
+        return None
 
+    @staticmethod
+    def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
+        params = {"model": field.rel_model._meta.name}
+        if field.on_delete is not None:
+            params["on_delete"] = "'%s'" % field.on_delete
+        if field.on_update is not None:
+            params["on_update"] = "'%s'" % field.on_update
+        if field.constraint_name is not None:
+            params["constraint_name"] = "'%s'" % field.constraint_name
+        return params
 
-def get_type_params(field: pw.Field) -> dict[str, Any]:
-    field_type = type(field)
-    params = TYPE_PARAMS.get(field_type, lambda f: {})(field)
-    return params
+    def get_type_params(self) -> dict[str, Any]:
+        field = self.field
+        field_type = type(field)
+        params = self.TYPE_PARAMS.get(field_type, lambda f: {})(field)
+        return params
 
+    def get_field_params(self) -> dict[str, Any]:
+        params = self.get_type_params()
+        field = self.field
+        if isinstance(field, pw.ForeignKeyField):
+            params.update(self.fk_to_params(field))
+        return params
 
-def get_field_params(field: pw.Field) -> dict[str, Any]:
-    params = get_type_params(field)
-    if isinstance(field, pw.ForeignKeyField):
-        params.update(fk_to_params(field))
-    return params
+    def to_params(self) -> dict[str, Any]:
+        field = self.field
+        params = self.get_field_params()
+        params["type"] = type(field)
+        params["null"] = field.null
+        params["column_name"] = field.column_name
+        params["default"] = self._get_default(field)
+        params["default_constraint"] = get_default_constraint_value(field)
+        params["index"] = field.index and not field.unique, field.unique
+        return params
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, FieldComparer):
+            return False
+        return self.to_params() == other.to_params()
 
-def field_to_code(field, space=True) -> str:
-    serializer = FieldSerializer(field)
-    return serializer.serialize(" " if space else "")
-
-
-def _get_default(field: pw.Field) -> Any:
-    if field.default is not None and not callable(field.default):
-        return field.default
-    return None
-
-
-def field_to_params(field: pw.Field) -> dict[str, Any]:
-    params = get_field_params(field)
-    params["type"] = type(field)
-    params["null"] = field.null
-    params["column_name"] = field.column_name
-    params["default"] = _get_default(field)
-    params["default_constraint"] = get_default_constraint_value(field)
-    params["index"] = field.index and not field.unique, field.unique
-    return params
-
-
-def fields_not_equal(field1: pw.Field, field2: pw.Field) -> bool:
-    return field_to_params(field1) != field_to_params(field2)
+    @classmethod
+    def not_equal(cls, field1: pw.Field, field2: pw.Field) -> bool:
+        return cls(field1) != cls(field2)
 
 
 class FieldSerializer(ColumnSerializer):
+    FIELD_MODULES_MAP = {
+        "ArrayField": "pw_pext",
+        "BinaryJSONField": "pw_pext",
+        "DateTimeTZField": "pw_pext",
+        "HStoreField": "pw_pext",
+        "IntervalField": "pw_pext",
+        "JSONField": "pw_pext",
+        "TSVectorField": "pw_pext",
+    }
+
     def __init__(self, field: pw.Field) -> None:
         self.field = field
         super(FieldSerializer, self).__init__(
@@ -98,7 +102,7 @@ class FieldSerializer(ColumnSerializer):
         if field.default is not None and not callable(field.default):
             self.default = repr(field.default)
 
-        self.extra_parameters.update(get_field_params(field))
+        self.extra_parameters.update(FieldComparer(field).get_field_params())
 
         self.rel_model = None
         self.related_name = None
@@ -124,9 +128,14 @@ class FieldSerializer(ColumnSerializer):
     def serialize(self, space=" ") -> str:
         # Generate the field definition for this column.
         field = self.get_field()
-        module = FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
+        module = self.FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
         name, _, field = [s and s.strip() for s in field.partition("=")]
         return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
+
+    @classmethod
+    def to_code(cls, field, space=True) -> str:
+        serializer = cls(field)
+        return serializer.serialize(" " if space else "")
 
 
 class IndexMeta(NamedTuple):
@@ -259,7 +268,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     fields_ = []
     for name in set(fields1) - names1 - names2:
         field1, field2 = fields1[name], fields2[name]
-        if fields_not_equal(field1, field2):
+        if FieldComparer.not_equal(field1, field2):
             fields_.append(field1)
 
     if fields_:
@@ -314,7 +323,7 @@ def model_to_code(Model) -> str:
 """
     fields = INDENT + NEWLINE.join(
         [
-            field_to_code(field)
+            FieldSerializer.to_code(field)
             for field in Model._meta.sorted_fields
             if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
         ]
@@ -348,7 +357,7 @@ def add_fields(model: ModelCls, *fields) -> str:
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         model._meta.name,
-        NEWLINE + ("," + NEWLINE).join([field_to_code(field, False) for field in fields]),
+        NEWLINE + ("," + NEWLINE).join([FieldSerializer.to_code(field, False) for field in fields]),
     )
 
 
@@ -359,7 +368,7 @@ def remove_fields(model: ModelCls, *fields) -> str:
 def change_fields(model: ModelCls, *fields) -> str:
     return "migrator.change_fields('%s', %s)" % (
         model._meta.name,
-        ("," + NEWLINE).join([field_to_code(f, False) for f in fields]),
+        ("," + NEWLINE).join([FieldSerializer.to_code(f, False) for f in fields]),
     )
 
 
