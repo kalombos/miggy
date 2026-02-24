@@ -4,7 +4,7 @@ from pathlib import Path
 import peewee as pw
 import pytest
 
-from miggy.auto import create_model, diff_many, diff_one, model_to_code
+from miggy.auto import add_fields, create_model, diff_many, diff_one, model_to_code
 from miggy.cli import get_router
 from miggy.types import ModelCls
 
@@ -118,3 +118,31 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
 
     changes = diff_one(create_model(name_after), create_model(name_before))
     assert changes == expected
+
+
+def test_proper_order_for_fk() -> None:
+
+    def prev_models() -> list[ModelCls]:
+        class Users(pw.Model):
+            name = pw.TextField()
+
+        return [Users]
+
+    def current_models() -> list[ModelCls]:
+        class Test(pw.Model):
+            name = pw.TextField()
+
+        class Users(pw.Model):
+            name = pw.TextField()
+            test = pw.ForeignKeyField(Test, null=True, backref="users")
+
+        return [Test, Users]
+
+    test_model, user_model = current_models()
+
+    assert diff_many(current_models(), prev_models()) == [
+        # we create model first
+        create_model(test_model),
+        # we add fk to it after
+        add_fields(user_model, user_model.test),
+    ]

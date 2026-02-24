@@ -16,7 +16,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from miggy import LOGGER
-from miggy.auto import fk_to_params, get_type_params, resolve_field
+from miggy.auto import FieldComparer, resolve_field
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
@@ -366,7 +366,11 @@ class ChangeFields(MigrateOperation):
         _ops: list[Operation] = []
         is_old_field_fk = isinstance(old_field, pw.ForeignKeyField)
         is_new_field_fk = isinstance(new_field, pw.ForeignKeyField)
-        if is_old_field_fk and is_new_field_fk and fk_to_params(old_field) == fk_to_params(new_field):
+        if (
+            is_old_field_fk
+            and is_new_field_fk
+            and FieldComparer.fk_to_params(old_field) == FieldComparer.fk_to_params(new_field)
+        ):
             # Nothing's changed for fk
             return _ops
         table_name = old_field.model._meta.table_name
@@ -407,7 +411,10 @@ class ChangeFields(MigrateOperation):
     def handle_type(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
-        if type(old_field) is not type(new_field) or get_type_params(old_field) != get_type_params(new_field):
+        if (
+            type(old_field) is not type(new_field)
+            or FieldComparer(old_field).get_type_params() != FieldComparer(new_field).get_type_params()
+        ):
             table_name = old_field.model._meta.table_name
             return [schema_migrator.alter_column_type(table_name, new_field.column_name, new_field)]
         return []
