@@ -296,17 +296,17 @@ def diff_many(current_models, prev_models, reverse=False):
 
     changes = []
 
-    for name, model1 in current_models.items():
+    for name, current_model in current_models.items():
+        # Add new models
         if name not in prev_models:
-            continue
-        changes += diff_one(model1, prev_models[name])
-
-    # Add models
-    for name in [m for m in current_models if m not in prev_models]:
-        index_meta = extract_index_meta(current_models[name])
-        changes.append(create_model(current_models[name]))
-        for i in index_meta:
-            changes.append(add_index(i))
+            index_meta = extract_index_meta(current_models[name])
+            changes.append(create_model(current_models[name]))
+            for i in index_meta:
+                changes.append(add_index(i))
+        # Change existing models
+        else:
+            prev_model = prev_models[name]
+            changes += diff_one(current_model, prev_model)
 
     # Remove models
     for name in [m for m in prev_models if m not in current_models]:
