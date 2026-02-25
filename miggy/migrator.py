@@ -411,9 +411,11 @@ class ChangeFields(MigrateOperation):
     def handle_type(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
+        old_field_comparer = FieldComparer(old_field)
+        new_field_comparer = FieldComparer(new_field)
         if (
-            type(old_field) is not type(new_field)
-            or FieldComparer(old_field).get_type_params() != FieldComparer(new_field).get_type_params()
+            old_field_comparer.get_type() is not new_field_comparer.get_type()
+            or old_field_comparer.get_type_params() != new_field_comparer.get_type_params()
         ):
             table_name = old_field.model._meta.table_name
             return [schema_migrator.alter_column_type(table_name, new_field.column_name, new_field)]

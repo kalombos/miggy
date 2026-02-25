@@ -64,16 +64,11 @@ def test_field_serializer_to_code() -> None:
         status = CharEnumField(Status, null=True, max_length=100)
         rating = IntEnumField(Rating)
 
-
     assert FieldSerializer.to_code(SomeModel.name) == (
         """name = pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
-    assert FieldSerializer.to_code(SomeModel.status) == (
-        """status = pw.CharField(max_length=100, null=True)"""
-    )
-    assert FieldSerializer.to_code(SomeModel.rating) == (
-        """rating = pw.SmallIntegerField()"""
-    )
+    assert FieldSerializer.to_code(SomeModel.status) == ("""status = pw.CharField(max_length=100, null=True)""")
+    assert FieldSerializer.to_code(SomeModel.rating) == ("""rating = pw.SmallIntegerField()""")
 
 
 @pytest.mark.parametrize(
