@@ -16,17 +16,15 @@ NEWLINE = "\n" + INDENT
 
 class FieldComparer:
     TYPE_PARAMS = {
-        pw.CharField: lambda f: {"max_length": f.max_length},
-        pw.DecimalField: lambda f: {
-            "max_digits": f.max_digits,
-            "decimal_places": f.decimal_places,
-        },
+        pw.CharField: ["max_length"],
+        pw.DecimalField: ["max_digits", "decimal_places"],
     }
 
     def __init__(self, field: pw.Field) -> None:
         self.field = field
 
-    def get_type(self) -> type[pw.Field]:
+    @property
+    def field_type(self) -> type[pw.Field]:
         if isinstance(self.field, CharEnumField):
             return pw.CharField
         elif isinstance(self.field, IntEnumField):
@@ -50,20 +48,22 @@ class FieldComparer:
         return params
 
     def get_type_params(self) -> dict[str, Any]:
-        params = self.TYPE_PARAMS.get(self.get_type(), lambda f: {})(self.field)
+        params = {}
+        attributes = self.TYPE_PARAMS.get(self.field_type, [])
+        for attribute in attributes:
+            params[attribute] = getattr(self.field, attribute)
         return params
 
     def get_field_params(self) -> dict[str, Any]:
         params = self.get_type_params()
-        field = self.field
-        if isinstance(field, pw.ForeignKeyField):
-            params.update(self.fk_to_params(field))
+        if self.field_type is pw.ForeignKeyField:
+            params.update(self.fk_to_params(self.field))
         return params
 
     def to_params(self) -> dict[str, Any]:
         field = self.field
         params = self.get_field_params()
-        params["type"] = self.get_type()
+        params["type"] = self.field_type
         params["null"] = field.null
         params["column_name"] = field.column_name
         params["default"] = self._get_default(field)
@@ -96,7 +96,7 @@ class FieldSerializer(ColumnSerializer):
         self.field_comparer = FieldComparer(field)
         super(FieldSerializer, self).__init__(
             field.name,
-            self.field_comparer.get_type(),
+            self.field_comparer.field_type,
             field.field_type,
             field.null,
             primary_key=field.primary_key,

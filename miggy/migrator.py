@@ -414,7 +414,7 @@ class ChangeFields(MigrateOperation):
         old_field_comparer = FieldComparer(old_field)
         new_field_comparer = FieldComparer(new_field)
         if (
-            old_field_comparer.get_type() is not new_field_comparer.get_type()
+            old_field_comparer.field_type is not new_field_comparer.field_type
             or old_field_comparer.get_type_params() != new_field_comparer.get_type_params()
         ):
             table_name = old_field.model._meta.table_name
