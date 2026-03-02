@@ -27,7 +27,7 @@ Example::
     from miggy.ext import CharEnumField, IntEnumField
 
 
-    class Status(enum.Enum):
+    class Status(enum.StrEnum):
         NEW = "new"
         IN_PROGRESS = "in_progress"
         DONE = "done"
