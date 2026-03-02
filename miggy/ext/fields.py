@@ -7,7 +7,6 @@ from miggy.ext.utils import StrEnum
 
 
 class BaseEnumField(pw.Field):
-
     """
     Base field for working with Enum values
     """
@@ -36,6 +35,7 @@ class CharEnumField(BaseEnumField, pw.CharField):
     """
     Field for working with StrEnum values
     """
+
     def __init__(self, enum: type[StrEnum], **kwargs: Any) -> None:
         super().__init__(enum=enum, **kwargs)
 
@@ -44,5 +44,6 @@ class IntEnumField(BaseEnumField, pw.SmallIntegerField):
     """
     Field for working with IntEnum values
     """
+
     def __init__(self, enum: type[IntEnum], **kwargs: Any) -> None:
         super().__init__(enum=enum, **kwargs)
