@@ -37,6 +37,7 @@ dev = [
     "ruff==0.15.4",
     "poethepoet==0.42.1",
     "mypy==1.19.0",
+    "commitizen>=4.13.8,<5"
 
 ]
 docs = [
@@ -66,6 +67,13 @@ module-root = ""
 [tool.mypy]
 exclude = "(venv|migrations|docs)"
 ignore_missing_imports = true
+
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_scheme = "semver"
+version_provider = "pep621"
 
 [tool.ruff]
 line-length = 120
