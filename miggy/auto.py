@@ -5,6 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
+from miggy.ext.fields import CharEnumField, IntEnumField
 from miggy.utils import ModelIndex, get_default_constraint, get_default_constraint_value, indexes_state
 
 from .types import ModelCls
@@ -15,15 +16,20 @@ NEWLINE = "\n" + INDENT
 
 class FieldComparer:
     TYPE_PARAMS = {
-        pw.CharField: lambda f: {"max_length": f.max_length},
-        pw.DecimalField: lambda f: {
-            "max_digits": f.max_digits,
-            "decimal_places": f.decimal_places,
-        },
+        pw.CharField: ["max_length"],
+        pw.DecimalField: ["max_digits", "decimal_places"],
     }
 
     def __init__(self, field: pw.Field) -> None:
         self.field = field
+
+    @property
+    def field_type(self) -> type[pw.Field]:
+        if isinstance(self.field, CharEnumField):
+            return pw.CharField
+        elif isinstance(self.field, IntEnumField):
+            return pw.SmallIntegerField
+        return type(self.field)
 
     def _get_default(self, field: pw.Field) -> Any:
         if field.default is not None and not callable(field.default):
@@ -42,22 +48,22 @@ class FieldComparer:
         return params
 
     def get_type_params(self) -> dict[str, Any]:
-        field = self.field
-        field_type = type(field)
-        params = self.TYPE_PARAMS.get(field_type, lambda f: {})(field)
+        params = {}
+        attributes = self.TYPE_PARAMS.get(self.field_type, [])
+        for attribute in attributes:
+            params[attribute] = getattr(self.field, attribute)
         return params
 
     def get_field_params(self) -> dict[str, Any]:
         params = self.get_type_params()
-        field = self.field
-        if isinstance(field, pw.ForeignKeyField):
-            params.update(self.fk_to_params(field))
+        if self.field_type is pw.ForeignKeyField:
+            params.update(self.fk_to_params(self.field))
         return params
 
     def to_params(self) -> dict[str, Any]:
         field = self.field
         params = self.get_field_params()
-        params["type"] = type(field)
+        params["type"] = self.field_type
         params["null"] = field.null
         params["column_name"] = field.column_name
         params["default"] = self._get_default(field)
@@ -87,10 +93,10 @@ class FieldSerializer(ColumnSerializer):
     }
 
     def __init__(self, field: pw.Field) -> None:
-        self.field = field
+        self.field_comparer = FieldComparer(field)
         super(FieldSerializer, self).__init__(
             field.name,
-            type(field),
+            self.field_comparer.field_type,
             field.field_type,
             field.null,
             primary_key=field.primary_key,
@@ -102,7 +108,7 @@ class FieldSerializer(ColumnSerializer):
         if field.default is not None and not callable(field.default):
             self.default = repr(field.default)
 
-        self.extra_parameters.update(FieldComparer(field).get_field_params())
+        self.extra_parameters.update(self.field_comparer.get_field_params())
 
         self.rel_model = None
         self.related_name = None
@@ -117,8 +123,9 @@ class FieldSerializer(ColumnSerializer):
         params = super(FieldSerializer, self).get_field_parameters()
         # original method put value from default in constraints so override this logic
         params.pop("constraints", None)
-        if self.field.constraints:
-            default_constraint = get_default_constraint(self.field)
+        field = self.field_comparer.field
+        if field.constraints:
+            default_constraint = get_default_constraint(field)
             if default_constraint is not None:
                 params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
         if self.default is not None:

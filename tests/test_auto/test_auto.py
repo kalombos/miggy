@@ -1,3 +1,4 @@
+from enum import IntEnum
 from typing import Any
 
 import peewee as pw
@@ -26,6 +27,9 @@ from miggy.auto import (
     remove_fields,
     remove_model,
 )
+from miggy.ext import IntEnumField
+from miggy.ext.fields import CharEnumField
+from miggy.ext.utils import StrEnum
 from miggy.utils import ModelIndex
 from tests.helpers import to_one_line
 
@@ -45,13 +49,54 @@ class _DoesNotMatter(pw.Model):
         table_name = "table_name"
 
 
+class Status(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class Rating(IntEnum):
+    LOW = 1
+    MIDDLE = 2
+    HIGH = 3
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        (pw.CharField(max_length=55), {"max_length": 55}),
+        (pw.IntegerField(), {}),
+        (pw.DecimalField(decimal_places=3), {"decimal_places": 3, "max_digits": 10}),
+    ],
+)
+def test_field_comparer_get_type_params(field: pw.Field, expected: type[pw.Field]) -> None:
+    assert FieldComparer(field).get_type_params() == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        (CharEnumField(Status), pw.CharField),
+        (IntEnumField(Rating), pw.SmallIntegerField),
+        (pw.CharField(), pw.CharField),
+        (pw.SmallIntegerField(), pw.SmallIntegerField),
+        (pw.IntegerField(), pw.IntegerField),
+    ],
+)
+def test_field_comparer_get_type(field: pw.Field, expected: type[pw.Field]) -> None:
+    assert FieldComparer(field).field_type is expected
+
+
 def test_field_serializer_to_code() -> None:
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
+        status = CharEnumField(Status, null=True, max_length=100)
+        rating = IntEnumField(Rating)
 
     assert FieldSerializer.to_code(SomeModel.name) == (
         """name = pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
+    assert FieldSerializer.to_code(SomeModel.status) == ("""status = pw.CharField(max_length=100, null=True)""")
+    assert FieldSerializer.to_code(SomeModel.rating) == ("""rating = pw.SmallIntegerField()""")
 
 
 @pytest.mark.parametrize(
@@ -189,11 +234,13 @@ def test_model_to_code_postgresext():
         interval_field = IntervalField()
         json_field = JSONField()
         ts_vector_field = TSVectorField()
+        rating = IntEnumField(Rating, null=True)
 
     code = model_to_code(Object)
     assert code
     assert "json_field = pw_pext.JSONField()" in code
     assert "hstore_field = pw_pext.HStoreField(index=True)" in code
+    assert "rating = pw.SmallIntegerField(null=True)" in code
 
 
 def test_model_to_code_indexes():
@@ -252,6 +299,11 @@ def test_add_fields() -> None:
     f.name = "name"
     assert to_one_line(add_fields(MyTestModel, f)) == (
         "migrator.add_fields('mytestmodel',name=pw.CharField(column_name='None', max_length=255))"
+    )
+    status = CharEnumField(Status, max_length=5)
+    status.name = "name"
+    assert to_one_line(add_fields(MyTestModel, status)) == (
+        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name='None', max_length=5))"
     )
 
 

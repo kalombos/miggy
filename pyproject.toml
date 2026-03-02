@@ -26,7 +26,8 @@ license = "BSD-4-Clause"
 
 dependencies = [
     "peewee>=3.17.9,<4.0",
-    "click>=8.3.1"
+    "click>=8.3.1",
+    "StrEnum; python_version < '3.11'"
 ]
 
 [project.optional-dependencies]
