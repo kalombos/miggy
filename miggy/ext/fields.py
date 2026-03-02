@@ -7,7 +7,10 @@ from miggy.ext.utils import StrEnum
 
 
 class BaseEnumField(pw.Field):
-    """Поле для Enum для моделей peewee ORM."""
+
+    """
+    Base field for working with Enum values
+    """
 
     def __init__(self, enum: type[Enum], **kwargs: Any) -> None:
         self._enum = enum
@@ -30,10 +33,16 @@ class BaseEnumField(pw.Field):
 
 
 class CharEnumField(BaseEnumField, pw.CharField):
+    """
+    Field for working with StrEnum values
+    """
     def __init__(self, enum: type[StrEnum], **kwargs: Any) -> None:
         super().__init__(enum=enum, **kwargs)
 
 
 class IntEnumField(BaseEnumField, pw.SmallIntegerField):
+    """
+    Field for working with IntEnum values
+    """
     def __init__(self, enum: type[IntEnum], **kwargs: Any) -> None:
         super().__init__(enum=enum, **kwargs)
