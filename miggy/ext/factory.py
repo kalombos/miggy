@@ -80,11 +80,11 @@ def model_factory(
         The Peewee model class to instantiate.
     custom_field_type_map : FieldMap | None, optional
         A mapping that allows customizing factory functions for specific
-        field types. If ``None``, default handlers are used.
+        field types. If None, default handlers are used.
     fill_nullable_values : bool, optional
         Whether to automatically fill nullable fields as well.
-    \*\*kwargs : Any
-        ``field_name=value`` pairs that override or provide values for particular
+    kwargs : Any
+        field_name=value pairs that override or provide values for particular
         model fields.
 
     Returns
