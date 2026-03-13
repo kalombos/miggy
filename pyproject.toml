@@ -34,7 +34,7 @@ dependencies = [
 dev = [
     "pytest==9.0.2",
     "psycopg2-binary>=2.8.1",
-    "ruff==0.15.4",
+    "ruff==0.15.6",
     "poethepoet==0.42.1",
     "mypy==1.19.0",
     "commitizen>=4.13.8,<5"
