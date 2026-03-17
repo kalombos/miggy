@@ -143,7 +143,7 @@ def test_migrator_add_index(
     assert patched_pg_db.queries == [expected]
 
 
-def test_migrator_schema(patched_pg_db):
+def test_migrator_schema(patched_pg_db: PatchedPgDatabase):
     schema_name = "test_schema"
     patched_pg_db.execute_sql("CREATE SCHEMA  test_schema;")
 
@@ -158,13 +158,13 @@ def test_migrator_schema(patched_pg_db):
 
     migrator.run()
 
-    assert patched_pg_db.queries[0] == "SET search_path TO {}".format(schema_name)
+    assert patched_pg_db.queries[0] == f'SET search_path TO "{schema_name}"'
 
     patched_pg_db.clear_queries()
     migrator.change_fields("user", created_at=pw.DateTimeField())
     migrator.run()
 
-    assert patched_pg_db.queries[0] == "SET search_path TO {}".format(schema_name)
+    assert patched_pg_db.queries[0] == f'SET search_path TO "{schema_name}"'
     patched_pg_db.execute_sql("DROP SCHEMA test_schema CASCADE;")
 
 

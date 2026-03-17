@@ -5,7 +5,7 @@ from unittest import mock
 import peewee as pw
 import playhouse
 import pytest
-from playhouse.psycopg3_ext import Psycopg3Database
+from playhouse.postgres_ext import Psycopg3Database
 
 from miggy.cli import get_router
 from miggy.router import Router
@@ -72,7 +72,8 @@ def test_router_merge(router: Router, migrations_dir: pathlib.Path):
     ("db", "expected"),
     [
         (pw.PostgresqlDatabase(POSTGRES_DSN), "import playhouse.postgres_ext as pw_pext"),
-        (Psycopg3Database(POSTGRES_DSN), "import playhouse.psycopg3_ext as pw_pext"),
+        (Psycopg3Database(POSTGRES_DSN), "import playhouse.postgres_ext as pw_pext"),
+        (pw.SqliteDatabase("sqlite:///:memory:"), ""),
     ],
 )
 def test_router_compile(tmp_path: pathlib.Path, db: pw.Database, expected: str) -> None:
