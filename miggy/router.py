@@ -7,7 +7,6 @@ from functools import cached_property
 from importlib import import_module
 
 import peewee as pw
-from playhouse.psycopg3_ext import Psycopg3Database
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, diff_many
@@ -214,9 +213,14 @@ class BaseRouter(object):
 
 
 def make_ext_import(database: pw.Database) -> str:
-    if isinstance(database, Psycopg3Database):
-        return "import playhouse.psycopg3_ext as pw_pext"
-    elif isinstance(database, pw.PostgresqlDatabase):
+    try:
+        from playhouse.psycopg3_ext import Psycopg3Database
+    except ModuleNotFoundError:
+        pass
+    else:
+        if isinstance(database, Psycopg3Database):
+            return "import playhouse.psycopg3_ext as pw_pext"
+    if isinstance(database, pw.PostgresqlDatabase):
         return "import playhouse.postgres_ext as pw_pext"
     return ""
 

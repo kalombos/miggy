@@ -35,10 +35,10 @@ class PatchedPgDatabase(pw.PostgresqlDatabase):
     def clear_queries(self) -> None:
         self.queries = []
 
-    def execute_sql(self, sql, params=None, commit=None) -> Any:
+    def execute_sql(self, sql, params=None) -> Any:
         _sql = sql if params is None else sql % tuple(params)
         self.queries.append(_sql)
-        return super().execute_sql(sql, params, commit)
+        return super().execute_sql(sql, params)
 
 
 @pytest.fixture(params=({"in_transaction": True},))
