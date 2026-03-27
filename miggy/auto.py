@@ -6,6 +6,7 @@ import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
 from miggy.ext.fields import CharEnumField, IntEnumField
+from miggy.serializer import serialize_value
 from miggy.utils import ModelIndex, get_default_constraint, get_default_constraint_value, indexes_state
 
 from .types import ModelCls
@@ -104,9 +105,8 @@ class FieldSerializer(ColumnSerializer):
             index=field.index,
             unique=field.unique,
             extra_parameters={},
+            default=field.default
         )
-        if field.default is not None and not callable(field.default):
-            self.default = repr(field.default)
 
         self.extra_parameters.update(self.field_comparer.get_field_params())
 
@@ -119,8 +119,12 @@ class FieldSerializer(ColumnSerializer):
             self.related_name = field.backref
             self.rel_model = "migrator.state['%s']" % field.rel_model._meta.name
 
-    def get_field_parameters(self) -> dict[str, Any]:
-        params = super(FieldSerializer, self).get_field_parameters()
+    def handle_default(self, params: dict[str, Any]) -> None:
+        default = self.default
+        if default is not None and not callable(default):
+            params["default": serialize_value(default)]
+
+    def handle_constraints(self, params: dict[str, Any]) -> None:
         # original method put value from default in constraints so override this logic
         params.pop("constraints", None)
         field = self.field_comparer.field
@@ -128,8 +132,11 @@ class FieldSerializer(ColumnSerializer):
             default_constraint = get_default_constraint(field)
             if default_constraint is not None:
                 params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
-        if self.default is not None:
-            params["default"] = self.default
+        
+    def get_field_parameters(self) -> dict[str, Any]:
+        params = super(FieldSerializer, self).get_field_parameters()
+        self.handle_constraints(params)
+        self.handle_default(params)
         return params
 
     def serialize(self, space=" ") -> str:
