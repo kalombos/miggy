@@ -121,7 +121,6 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
 
 
 def test_proper_order_for_fk() -> None:
-
     def prev_models() -> list[ModelCls]:
         class Users(pw.Model):
             name = pw.TextField()

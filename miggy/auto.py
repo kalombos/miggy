@@ -105,7 +105,7 @@ class FieldSerializer(ColumnSerializer):
             index=field.index,
             unique=field.unique,
             extra_parameters={},
-            default=field.default
+            default=field.default,
         )
 
         self.extra_parameters.update(self.field_comparer.get_field_params())
@@ -122,7 +122,7 @@ class FieldSerializer(ColumnSerializer):
     def handle_default(self, params: dict[str, Any]) -> None:
         default = self.default
         if default is not None and not callable(default):
-            params["default": serialize_value(default)]
+            params["default" : serialize_value(default)]
 
     def handle_constraints(self, params: dict[str, Any]) -> None:
         # original method put value from default in constraints so override this logic
@@ -132,7 +132,7 @@ class FieldSerializer(ColumnSerializer):
             default_constraint = get_default_constraint(field)
             if default_constraint is not None:
                 params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
-        
+
     def get_field_parameters(self) -> dict[str, Any]:
         params = super(FieldSerializer, self).get_field_parameters()
         self.handle_constraints(params)

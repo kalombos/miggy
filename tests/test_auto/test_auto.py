@@ -1,4 +1,3 @@
-from enum import IntEnum
 from typing import Any
 
 import peewee as pw
@@ -29,9 +28,8 @@ from miggy.auto import (
 )
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
-from miggy.ext.utils import StrEnum
 from miggy.utils import ModelIndex
-from tests.helpers import to_one_line
+from tests.helpers import Rating, Status, to_one_line
 
 
 class _M1(pw.Model):
@@ -47,17 +45,6 @@ class _DoesNotMatter(pw.Model):
 
     class Meta:
         table_name = "table_name"
-
-
-class Status(StrEnum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-
-
-class Rating(IntEnum):
-    LOW = 1
-    MIDDLE = 2
-    HIGH = 3
 
 
 @pytest.mark.parametrize(

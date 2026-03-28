@@ -1,6 +1,4 @@
-import types
 import enum
-
 
 
 class BaseSerializer:
@@ -9,12 +7,11 @@ class BaseSerializer:
 
     def serialize(self) -> str:
         return repr(self.value)
-    
+
 
 class EnumSerializer(BaseSerializer):
     def serialize(self) -> str:
         return repr(self.value.value)
-
 
 
 def serialize_value(value):
