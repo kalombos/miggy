@@ -36,7 +36,7 @@ dev = [
     "psycopg2-binary>=2.8.1",
     "ruff==0.15.10",
     "poethepoet==0.42.1",
-    "mypy==1.19.0",
+    "mypy==1.20.0",
     "commitizen>=4.13.8,<5"
 
 ]
