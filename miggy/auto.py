@@ -322,6 +322,16 @@ def diff_many(current_models, prev_models, reverse=False):
     return changes
 
 
+class MigrationAutodetector:
+    def __init__(self, from_state: list[ModelCls], to_state: list[ModelCls], reverse: bool = False) -> None:
+        self.from_state = from_state
+        self.to_state = to_state
+        self.reverse = reverse
+
+    def changes(self):
+        return diff_many(self.to_state, self.from_state, reverse=self.reverse)
+
+
 def model_to_code(Model) -> str:
     template = """class {classname}(pw.Model):
 {fields}
