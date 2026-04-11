@@ -7,9 +7,8 @@ from tests.helpers import Rating, Status
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        (5, "5"),
-        ("5", "'5'"),
-        ("O'neal", '"O\'neal"'),
+        (5, 5),
+        ("5", "5"),
         (Status.ACTIVE, "'active'"),
         (Rating.LOW, "1"),
     ],

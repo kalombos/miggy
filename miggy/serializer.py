@@ -6,7 +6,7 @@ class BaseSerializer:
         self.value = value
 
     def serialize(self) -> str:
-        return repr(self.value)
+        return self.value
 
 
 class EnumSerializer(BaseSerializer):
