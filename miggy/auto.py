@@ -122,7 +122,7 @@ class FieldSerializer(ColumnSerializer):
     def handle_default(self, params: dict[str, Any]) -> None:
         default = self.default
         if default is not None and not callable(default):
-            params["default" : serialize_value(default)]
+            params["default"] = serialize_value(default)
 
     def handle_constraints(self, params: dict[str, Any]) -> None:
         # original method put value from default in constraints so override this logic
