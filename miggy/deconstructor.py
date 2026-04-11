@@ -43,13 +43,14 @@ class FieldDeconstructor:
         params = self.get_type_modifiers()
         if self.field_type is pw.ForeignKeyField:
             params.update(self.fk_to_params(self.field))
+        if self.field.null:
+            params["null"] = True
         return params
 
     def deconstruct(self) -> dict[str, Any]:
         field = self.field
         params = self.get_field_params()
         params["type"] = self.field_type
-        params["null"] = field.null
         params["column_name"] = field.column_name
         params["default"] = self._get_default(field)
         params["default_constraint"] = get_default_constraint_value(field)
