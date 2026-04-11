@@ -4,7 +4,7 @@ from typing import Any
 import peewee as pw
 from playhouse.reflection import Column as ColumnSerializer
 
-from miggy.deconstructor import FieldDeconstructor
+from miggy.deconstructor import deconstructor_factory
 from miggy.utils import get_default_constraint
 
 
@@ -13,7 +13,7 @@ class BaseSerializer:
         self.value = value
 
     def serialize(self) -> str:
-        return self.value
+        return repr(self.value)
 
 
 class EnumSerializer(BaseSerializer):
@@ -39,10 +39,10 @@ class FieldSerializer(ColumnSerializer):
     }
 
     def __init__(self, field: pw.Field) -> None:
-        self.field_comparer = FieldDeconstructor(field)
+        self.field_deconstructor = deconstructor_factory(field)
         super(FieldSerializer, self).__init__(
             field.name,
-            self.field_comparer.field_type,
+            self.field_deconstructor.field_type,
             field.field_type,
             field.null,
             primary_key=field.primary_key,
@@ -51,10 +51,7 @@ class FieldSerializer(ColumnSerializer):
             unique=field.unique,
             extra_parameters={},
         )
-
-        if field.default is not None and not callable(field.default):
-            self.default = repr(field.default)
-        self.extra_parameters.update(self.field_comparer.get_field_params())
+        self.extra_parameters.update(self.field_deconstructor.get_field_params())
 
         self.rel_model = None
         self.related_name = None
@@ -66,14 +63,15 @@ class FieldSerializer(ColumnSerializer):
             self.rel_model = "migrator.state['%s']" % field.rel_model._meta.name
 
     def handle_default(self, params: dict[str, Any]) -> None:
-        default = self.default
+        field = self.field_deconstructor.field
+        default = field.default
         if default is not None and not callable(default):
             params["default"] = serialize_value(default)
 
     def handle_constraints(self, params: dict[str, Any]) -> None:
         # original method put value from default in constraints so override this logic
         params.pop("constraints", None)
-        field = self.field_comparer.field
+        field = self.field_deconstructor.field
         if field.constraints:
             default_constraint = get_default_constraint(field)
             if default_constraint is not None:

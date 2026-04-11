@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 import peewee as pw
@@ -7,11 +9,6 @@ from miggy.utils import get_default_constraint_value
 
 
 class FieldDeconstructor:
-    TYPE_PARAMS = {
-        pw.CharField: ["max_length"],
-        pw.DecimalField: ["max_digits", "decimal_places"],
-    }
-
     def __init__(self, field: pw.Field) -> None:
         self.field = field
 
@@ -39,20 +36,16 @@ class FieldDeconstructor:
             params["constraint_name"] = "'%s'" % field.constraint_name
         return params
 
-    def get_type_params(self) -> dict[str, Any]:
-        params = {}
-        attributes = self.TYPE_PARAMS.get(self.field_type, [])
-        for attribute in attributes:
-            params[attribute] = getattr(self.field, attribute)
-        return params
+    def get_type_modifiers(self) -> dict[str, Any]:
+        return {}
 
     def get_field_params(self) -> dict[str, Any]:
-        params = self.get_type_params()
+        params = self.get_type_modifiers()
         if self.field_type is pw.ForeignKeyField:
             params.update(self.fk_to_params(self.field))
         return params
 
-    def to_params(self) -> dict[str, Any]:
+    def deconstruct(self) -> dict[str, Any]:
         field = self.field
         params = self.get_field_params()
         params["type"] = self.field_type
@@ -63,11 +56,20 @@ class FieldDeconstructor:
         params["index"] = field.index and not field.unique, field.unique
         return params
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, FieldDeconstructor):
-            return False
-        return self.to_params() == other.to_params()
 
-    @classmethod
-    def not_equal(cls, field1: pw.Field, field2: pw.Field) -> bool:
-        return cls(field1) != cls(field2)
+class CharFieldDeconstructor(FieldDeconstructor):
+    def get_type_modifiers(self) -> dict[str, Any]:
+        return {"max_length": self.field.max_length}
+
+
+class DecimalFieldDeconstructor(FieldDeconstructor):
+    def get_type_modifiers(self) -> dict[str, Any]:
+        return {"max_digits": self.field.max_digits, "decimal_places": self.field.decimal_places}
+
+
+def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstructor:
+    if isinstance(f, pw.CharField):
+        return CharFieldDeconstructor(f)
+    if isinstance(f, pw.DecimalField):
+        return DecimalFieldDeconstructor(f)
+    return FieldDeconstructor(f)

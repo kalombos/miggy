@@ -17,7 +17,7 @@ from playhouse.migrate import SqliteMigrator as SqM
 
 from miggy import LOGGER
 from miggy.auto import resolve_field
-from miggy.deconstructor import FieldDeconstructor
+from miggy.deconstructor import FieldDeconstructor, deconstructor_factory
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
@@ -412,11 +412,11 @@ class ChangeFields(MigrateOperation):
     def handle_type(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
-        old_field_comparer = FieldDeconstructor(old_field)
-        new_field_comparer = FieldDeconstructor(new_field)
+        old_field_deconstructor = deconstructor_factory(old_field)
+        new_field_deconstructor = deconstructor_factory(new_field)
         if (
-            old_field_comparer.field_type is not new_field_comparer.field_type
-            or old_field_comparer.get_type_params() != new_field_comparer.get_type_params()
+            old_field_deconstructor.field_type is not new_field_deconstructor.field_type
+            or old_field_deconstructor.get_type_modifiers() != new_field_deconstructor.get_type_modifiers()
         ):
             table_name = old_field.model._meta.table_name
             return [schema_migrator.alter_column_type(table_name, new_field.column_name, new_field)]

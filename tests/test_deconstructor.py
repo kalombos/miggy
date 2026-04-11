@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from miggy.deconstructor import FieldDeconstructor
+from miggy.deconstructor import FieldDeconstructor, deconstructor_factory
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from tests.helpers import Rating, Status
@@ -23,8 +23,8 @@ class _M2(pw.Model):
         (pw.DecimalField(decimal_places=3), {"decimal_places": 3, "max_digits": 10}),
     ],
 )
-def test_field_comparer_get_type_params(field: pw.Field, expected: type[pw.Field]) -> None:
-    assert FieldDeconstructor(field).get_type_params() == expected
+def test_deconstructor_get_type_params(field: pw.Field, expected: type[pw.Field]) -> None:
+    assert deconstructor_factory(field).get_type_modifiers() == expected
 
 
 @pytest.mark.parametrize(
@@ -37,7 +37,7 @@ def test_field_comparer_get_type_params(field: pw.Field, expected: type[pw.Field
         (pw.IntegerField(), pw.IntegerField),
     ],
 )
-def test_field_comparer_get_type(field: pw.Field, expected: type[pw.Field]) -> None:
+def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> None:
     assert FieldDeconstructor(field).field_type is expected
 
 
@@ -74,4 +74,5 @@ def test_field_comparer_get_type(field: pw.Field, expected: type[pw.Field]) -> N
     ],
 )
 def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
-    assert FieldDeconstructor.not_equal(f1, f2) is expected
+    not_equal = deconstructor_factory(f1).deconstruct() != deconstructor_factory(f2).deconstruct()
+    assert not_equal is expected
