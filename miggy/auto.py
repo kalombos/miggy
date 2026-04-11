@@ -105,9 +105,10 @@ class FieldSerializer(ColumnSerializer):
             index=field.index,
             unique=field.unique,
             extra_parameters={},
-            default=field.default,
         )
 
+        if field.default is not None and not callable(field.default):
+            self.default = repr(field.default)
         self.extra_parameters.update(self.field_comparer.get_field_params())
 
         self.rel_model = None
