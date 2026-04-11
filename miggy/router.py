@@ -9,8 +9,9 @@ from importlib import import_module
 import peewee as pw
 
 from miggy import LOGGER, MigrateHistory
-from miggy.auto import NEWLINE, diff_many
+from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
+from miggy.types import ModelCls
 from miggy.utils import exec_in
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
@@ -78,35 +79,43 @@ class BaseRouter(object):
             self.run_one(name, migrator)
         return migrator
 
+    @property
+    def migration_state(self) -> list[ModelCls]:
+        """Create migrator and setup it with fake migrations."""
+        return list(self.migrator.state.values())
+
+    def load_project_state(self, auto) -> list[ModelCls]:
+        # Need to append the CURDIR to the path for import to work.
+        sys.path.append(CURDIR)
+        modules = [auto]
+        if isinstance(auto, bool):
+            modules = [m for _, m, ispkg in pkgutil.iter_modules([CURDIR]) if ispkg]
+
+        models = [m for module in modules for m in load_models(module)]
+
+        if self.ignore:
+            models = [m for m in models if m._meta.name not in self.ignore]
+        return models
+
     def create(self, name="auto", auto=False):
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
         migrate = rollback = ""
         if auto:
-            # Need to append the CURDIR to the path for import to work.
-            sys.path.append(CURDIR)
             try:
-                modules = [auto]
-                if isinstance(auto, bool):
-                    modules = [m for _, m, ispkg in pkgutil.iter_modules([CURDIR]) if ispkg]
-
-                models = [m for module in modules for m in load_models(module)]
-
+                project_state = self.load_project_state(auto)
             except ImportError:
                 return self.logger.exception("Can't import models module")
-
-            if self.ignore:
-                models = [m for m in models if m._meta.name not in self.ignore]
 
             for migration in self.diff:
                 self.run_one(migration, self.migrator)
 
-            migrate = compile_migrations(self.migrator, models)
+            migrate = compile_migrations(self.migration_state, project_state)
             if not migrate:
                 return self.logger.warning("No changes found.")
 
-            rollback = compile_migrations(self.migrator, models, reverse=True)
+            rollback = compile_migrations(self.migration_state, project_state, reverse=True)
 
         self.logger.info('Creating migration "%s"', name)
         name = self.compile(name, migrate, rollback)
@@ -116,14 +125,14 @@ class BaseRouter(object):
     def merge(self, name="initial"):
         """Merge migrations into one."""
         migrator = Migrator(self.database)
-        migrate = compile_migrations(migrator, self.migrator.state.values())
+        migrate = compile_migrations(migrator.state.values(), self.migration_state)
         if not migrate:
             return self.logger.error("Can't merge migrations")
 
         self.clear()
 
         self.logger.info('Merge migrations into "%s"', name)
-        rollback = compile_migrations(self.migrator, [])
+        rollback = compile_migrations(self.migrator.state.values(), [])
         name = self.compile(name, migrate, rollback, 0)
 
         migrator = Migrator(self.database)
@@ -326,12 +335,14 @@ def _check_model(obj, models=None):
     return isinstance(obj, type) and issubclass(obj, pw.Model) and hasattr(obj, "_meta")
 
 
-def compile_migrations(migrator, models, reverse=False):
+def compile_migrations(
+    from_state: list[ModelCls], to_state: list[ModelCls], reverse: bool = False
+) -> str | typing.Literal[False]:
     """Compile migrations for given models."""
 
-    migrations = diff_many(models, migrator.state.values(), reverse=reverse)
-    if not migrations:
+    changes = MigrationAutodetector(from_state, to_state, reverse).changes()
+    if not changes:
         return False
 
-    migrations = NEWLINE + NEWLINE.join("\n\n".join(migrations).split("\n"))
-    return CLEAN_RE.sub("\n", migrations)
+    changes = NEWLINE + NEWLINE.join("\n\n".join(changes).split("\n"))
+    return CLEAN_RE.sub("\n", changes)
