@@ -66,7 +66,7 @@ class FieldSerializer:
             default_constraint = get_default_constraint(field)
             if default_constraint is not None:
                 params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
-    
+
     def get_field_parameters(self):
         params = {}
         if self.extra_parameters is not None:
@@ -74,26 +74,26 @@ class FieldSerializer:
 
         # Set up default attributes.
         if self.nullable:
-            params['null'] = True
+            params["null"] = True
         if self.field_class is pw.ForeignKeyField or self.name != self.column_name:
-            params['column_name'] = "'%s'" % self.column_name
+            params["column_name"] = "'%s'" % self.column_name
         if self.primary_key and not issubclass(self.field_class, pw.AutoField):
-            params['primary_key'] = True
+            params["primary_key"] = True
 
         # Handle ForeignKeyField-specific attributes.
         if self.is_foreign_key():
-            params['model'] = self.rel_model
+            params["model"] = self.rel_model
             if self.to_field:
-                params['field'] = "'%s'" % self.to_field
+                params["field"] = "'%s'" % self.to_field
             if self.related_name:
-                params['backref'] = "'%s'" % self.related_name
+                params["backref"] = "'%s'" % self.related_name
 
         # Handle indexes on column.
         if not self.is_primary_key():
             if self.unique:
-                params['unique'] = 'True'
+                params["unique"] = "True"
             elif self.index and not self.is_foreign_key():
-                params['index'] = 'True'
+                params["index"] = "True"
         self.handle_constraints(params)
         self.handle_default(params)
         return params
@@ -103,7 +103,7 @@ class FieldSerializer:
 
     def is_foreign_key(self) -> bool:
         return self.field_class is pw.ForeignKeyField
-    
+
     def get_field(self) -> str:
         # Generate the field definition for this column.
         field_params = {}
@@ -112,12 +112,8 @@ class FieldSerializer:
                 value = value.__name__
             field_params[key] = value
 
-        param_str = ', '.join('%s=%s' % (k, v)
-                              for k, v in sorted(field_params.items()))
-        field = '%s = %s(%s)' % (
-            self.name,
-            self.field_class.__name__,
-            param_str)
+        param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
+        field = "%s = %s(%s)" % (self.name, self.field_class.__name__, param_str)
 
         return field
 
