@@ -132,7 +132,7 @@ class BaseRouter(object):
         self.clear()
 
         self.logger.info('Merge migrations into "%s"', name)
-        rollback = compile_migrations(self.migrator.state.values(), [])
+        rollback = compile_migrations(self.migration_state, [])
         name = self.compile(name, migrate, rollback, 0)
 
         migrator = Migrator(self.database)
