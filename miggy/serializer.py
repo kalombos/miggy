@@ -4,7 +4,7 @@ from typing import Any
 import peewee as pw
 
 from miggy.deconstructor import deconstructor_factory
-from miggy.utils import get_default_constraint
+from miggy.utils import Default, get_default_constraint
 
 
 class BaseSerializer:
@@ -20,9 +20,31 @@ class EnumSerializer(BaseSerializer):
         return repr(self.value.value)
 
 
-def serialize_value(value):
+class ListSerializer(BaseSerializer):
+    def _format(self) -> str:
+        return "[%s]"
+
+    def serialize(self):
+        strings = []
+        for item in self.value:
+            strings.append(serialize_value(item))
+        value = self._format()
+        return value % (", ".join(strings))
+
+
+class DefaultSerializer(BaseSerializer):
+    def serialize(self) -> str:
+        default_constraint = self.value
+        return 'pw.SQL("DEFAULT %s")' % default_constraint.value.replace('"', '\\"')
+
+
+def serialize_value(value) -> str:
     if isinstance(value, enum.Enum):
         return EnumSerializer(value).serialize()
+    if isinstance(value, list):
+        return ListSerializer(value).serialize()
+    if isinstance(value, Default):
+        return DefaultSerializer(value).serialize()
     return BaseSerializer(value=value).serialize()
 
 
@@ -65,7 +87,7 @@ class FieldSerializer:
         if field.constraints:
             default_constraint = get_default_constraint(field)
             if default_constraint is not None:
-                params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
+                params["constraints"] = serialize_value([default_constraint])
 
     def get_field_parameters(self):
         params = {}
@@ -115,14 +137,9 @@ class FieldSerializer:
 
         return field
 
-    def serialize(self, space=" ") -> str:
+    def serialize(self, space="") -> str:
         # Generate the field definition for this column.
         field = self.get_field()
         module = self.FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
         name, _, field = [s and s.strip() for s in field.partition("=")]
         return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
-
-    @classmethod
-    def to_code(cls, field, space=True) -> str:
-        serializer = cls(field)
-        return serializer.serialize(" " if space else "")
