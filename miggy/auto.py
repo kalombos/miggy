@@ -3,154 +3,15 @@ from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 import peewee as pw
-from playhouse.reflection import Column as ColumnSerializer
 
-from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.serializer import serialize_value
-from miggy.utils import ModelIndex, get_default_constraint, get_default_constraint_value, indexes_state
+from miggy.deconstructor import deconstructor_factory
+from miggy.serializer import FieldSerializer
+from miggy.utils import ModelIndex, indexes_state
 
 from .types import ModelCls
 
 INDENT = "    "
 NEWLINE = "\n" + INDENT
-
-
-class FieldComparer:
-    TYPE_PARAMS = {
-        pw.CharField: ["max_length"],
-        pw.DecimalField: ["max_digits", "decimal_places"],
-    }
-
-    def __init__(self, field: pw.Field) -> None:
-        self.field = field
-
-    @property
-    def field_type(self) -> type[pw.Field]:
-        if isinstance(self.field, CharEnumField):
-            return pw.CharField
-        elif isinstance(self.field, IntEnumField):
-            return pw.SmallIntegerField
-        return type(self.field)
-
-    def _get_default(self, field: pw.Field) -> Any:
-        if field.default is not None and not callable(field.default):
-            return field.default
-        return None
-
-    @staticmethod
-    def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
-        params = {"model": field.rel_model._meta.name}
-        if field.on_delete is not None:
-            params["on_delete"] = "'%s'" % field.on_delete
-        if field.on_update is not None:
-            params["on_update"] = "'%s'" % field.on_update
-        if field.constraint_name is not None:
-            params["constraint_name"] = "'%s'" % field.constraint_name
-        return params
-
-    def get_type_params(self) -> dict[str, Any]:
-        params = {}
-        attributes = self.TYPE_PARAMS.get(self.field_type, [])
-        for attribute in attributes:
-            params[attribute] = getattr(self.field, attribute)
-        return params
-
-    def get_field_params(self) -> dict[str, Any]:
-        params = self.get_type_params()
-        if self.field_type is pw.ForeignKeyField:
-            params.update(self.fk_to_params(self.field))
-        return params
-
-    def to_params(self) -> dict[str, Any]:
-        field = self.field
-        params = self.get_field_params()
-        params["type"] = self.field_type
-        params["null"] = field.null
-        params["column_name"] = field.column_name
-        params["default"] = self._get_default(field)
-        params["default_constraint"] = get_default_constraint_value(field)
-        params["index"] = field.index and not field.unique, field.unique
-        return params
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, FieldComparer):
-            return False
-        return self.to_params() == other.to_params()
-
-    @classmethod
-    def not_equal(cls, field1: pw.Field, field2: pw.Field) -> bool:
-        return cls(field1) != cls(field2)
-
-
-class FieldSerializer(ColumnSerializer):
-    FIELD_MODULES_MAP = {
-        "ArrayField": "pw_pext",
-        "BinaryJSONField": "pw_pext",
-        "DateTimeTZField": "pw_pext",
-        "HStoreField": "pw_pext",
-        "IntervalField": "pw_pext",
-        "JSONField": "pw_pext",
-        "TSVectorField": "pw_pext",
-    }
-
-    def __init__(self, field: pw.Field) -> None:
-        self.field_comparer = FieldComparer(field)
-        super(FieldSerializer, self).__init__(
-            field.name,
-            self.field_comparer.field_type,
-            field.field_type,
-            field.null,
-            primary_key=field.primary_key,
-            column_name=field.column_name,
-            index=field.index,
-            unique=field.unique,
-            extra_parameters={},
-        )
-
-        if field.default is not None and not callable(field.default):
-            self.default = repr(field.default)
-        self.extra_parameters.update(self.field_comparer.get_field_params())
-
-        self.rel_model = None
-        self.related_name = None
-        self.to_field = None
-
-        if isinstance(field, pw.ForeignKeyField):
-            self.to_field = field.rel_field.name
-            self.related_name = field.backref
-            self.rel_model = "migrator.state['%s']" % field.rel_model._meta.name
-
-    def handle_default(self, params: dict[str, Any]) -> None:
-        default = self.default
-        if default is not None and not callable(default):
-            params["default"] = serialize_value(default)
-
-    def handle_constraints(self, params: dict[str, Any]) -> None:
-        # original method put value from default in constraints so override this logic
-        params.pop("constraints", None)
-        field = self.field_comparer.field
-        if field.constraints:
-            default_constraint = get_default_constraint(field)
-            if default_constraint is not None:
-                params["constraints"] = '[pw.SQL("DEFAULT %s")]' % default_constraint.value.replace('"', '\\"')
-
-    def get_field_parameters(self) -> dict[str, Any]:
-        params = super(FieldSerializer, self).get_field_parameters()
-        self.handle_constraints(params)
-        self.handle_default(params)
-        return params
-
-    def serialize(self, space=" ") -> str:
-        # Generate the field definition for this column.
-        field = self.get_field()
-        module = self.FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
-        name, _, field = [s and s.strip() for s in field.partition("=")]
-        return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
-
-    @classmethod
-    def to_code(cls, field, space=True) -> str:
-        serializer = cls(field)
-        return serializer.serialize(" " if space else "")
 
 
 class IndexMeta(NamedTuple):
@@ -283,7 +144,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     fields_ = []
     for name in set(fields1) - names1 - names2:
         field1, field2 = fields1[name], fields2[name]
-        if FieldComparer.not_equal(field1, field2):
+        if deconstructor_factory(field1).deconstruct() != deconstructor_factory(field2).deconstruct():
             fields_.append(field1)
 
     if fields_:
@@ -348,7 +209,7 @@ def model_to_code(Model) -> str:
 """
     fields = INDENT + NEWLINE.join(
         [
-            FieldSerializer.to_code(field)
+            FieldSerializer(field).serialize(" ")
             for field in Model._meta.sorted_fields
             if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
         ]
@@ -382,7 +243,7 @@ def add_fields(model: ModelCls, *fields) -> str:
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         model._meta.name,
-        NEWLINE + ("," + NEWLINE).join([FieldSerializer.to_code(field, False) for field in fields]),
+        NEWLINE + ("," + NEWLINE).join([FieldSerializer(field).serialize() for field in fields]),
     )
 
 
@@ -393,7 +254,7 @@ def remove_fields(model: ModelCls, *fields) -> str:
 def change_fields(model: ModelCls, *fields) -> str:
     return "migrator.change_fields('%s', %s)" % (
         model._meta.name,
-        ("," + NEWLINE).join([FieldSerializer.to_code(f, False) for f in fields]),
+        ("," + NEWLINE).join([FieldSerializer(f).serialize() for f in fields]),
     )
 
 
