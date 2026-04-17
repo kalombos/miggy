@@ -76,12 +76,6 @@ class FieldSerializer:
             self.related_name = field.backref
             self.rel_model = "migrator.state['%s']" % field.rel_model._meta.name
 
-    def handle_default(self, params: dict[str, Any]) -> None:
-        field = self.field_deconstructor.field
-        default = field.default
-        if default is not None and not callable(default):
-            params["default"] = serialize_value(default)
-
     def handle_constraints(self, params: dict[str, Any]) -> None:
         field = self.field_deconstructor.field
         if field.constraints:
@@ -115,7 +109,6 @@ class FieldSerializer:
             elif self.index and not self.is_foreign_key():
                 params["index"] = "True"
         self.handle_constraints(params)
-        self.handle_default(params)
         return params
 
     def is_primary_key(self) -> bool:
@@ -131,6 +124,10 @@ class FieldSerializer:
             if isinstance(value, pw.Field):
                 value = value.__name__
             field_params[key] = value
+
+        if "default" in field_params:
+            field_params["default"] = serialize_value(field_params["default"])
+
 
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
         field = "%s = %s(%s)" % (self.name, self.field_class.__name__, param_str)

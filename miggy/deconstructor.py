@@ -45,6 +45,8 @@ class FieldDeconstructor:
             params.update(self.fk_to_params(self.field))
         if self.field.null:
             params["null"] = True
+        if default := self._get_default(self.field):
+            params["default"] = default
         return params
 
     def deconstruct(self) -> dict[str, Any]:
@@ -52,7 +54,6 @@ class FieldDeconstructor:
         params = self.get_field_params()
         params["type"] = self.field_type
         params["column_name"] = field.column_name
-        params["default"] = self._get_default(field)
         params["default_constraint"] = get_default_constraint_value(field)
         params["index"] = field.index and not field.unique, field.unique
         return params
