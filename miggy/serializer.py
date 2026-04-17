@@ -71,11 +71,6 @@ class FieldSerializer:
         self.unique = field.unique
         self.extra_parameters = self.field_deconstructor.get_field_params()
 
-        if isinstance(field, pw.ForeignKeyField):
-            self.to_field = field.rel_field.name
-            self.related_name = field.backref
-            self.rel_model = "migrator.state['%s']" % field.rel_model._meta.name
-
     def handle_constraints(self, params: dict[str, Any]) -> None:
         field = self.field_deconstructor.field
         if field.constraints:
@@ -85,6 +80,7 @@ class FieldSerializer:
 
     def get_field_parameters(self):
         params = {}
+        field = self.field_deconstructor.field
         if self.extra_parameters is not None:
             params.update(self.extra_parameters)
 
@@ -95,12 +91,12 @@ class FieldSerializer:
             params["primary_key"] = True
 
         # Handle ForeignKeyField-specific attributes.
-        if self.is_foreign_key():
-            params["model"] = self.rel_model
-            if self.to_field:
-                params["field"] = "'%s'" % self.to_field
-            if self.related_name:
-                params["backref"] = "'%s'" % self.related_name
+        if self.is_foreign_key():            
+            params["model"] = "migrator.state['%s']" % field.rel_model._meta.name
+            if field.rel_field:
+                params["field"] = "'%s'" % field.rel_field.name
+            if field.backref:
+                params["backref"] = "'%s'" % field.backref
 
         # Handle indexes on column.
         if not self.is_primary_key():
