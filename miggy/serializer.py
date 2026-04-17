@@ -91,12 +91,10 @@ class FieldSerializer:
             params["primary_key"] = True
 
         # Handle ForeignKeyField-specific attributes.
-        if self.is_foreign_key():            
+        if self.is_foreign_key():
             params["model"] = "migrator.state['%s']" % field.rel_model._meta.name
             if field.rel_field:
                 params["field"] = "'%s'" % field.rel_field.name
-            if field.backref:
-                params["backref"] = "'%s'" % field.backref
 
         # Handle indexes on column.
         if not self.is_primary_key():
@@ -123,7 +121,6 @@ class FieldSerializer:
 
         if "default" in field_params:
             field_params["default"] = serialize_value(field_params["default"])
-
 
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
         field = "%s = %s(%s)" % (self.name, self.field_class.__name__, param_str)

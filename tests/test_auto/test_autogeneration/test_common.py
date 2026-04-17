@@ -36,7 +36,6 @@ def test_on_real_migrations(migrations_dir: Path):
     changes = diff_one(Person1, Person_)
     assert len(changes) == 3
     assert "on_delete='CASCADE'" in changes[0]
-    assert "backref='persons'" in changes[0]
 
     class Person2(pw.Model):
         first_name = pw.CharField(max_length=255)
