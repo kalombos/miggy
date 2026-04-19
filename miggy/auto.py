@@ -4,7 +4,7 @@ from typing import Any, NamedTuple
 
 import peewee as pw
 
-from miggy.deconstructor import deconstructor_factory
+from miggy.deconstructor import deep_deconstruct
 from miggy.serializer import FieldSerializer
 from miggy.utils import ModelIndex, indexes_state
 
@@ -144,7 +144,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     fields_ = []
     for name in set(fields1) - names1 - names2:
         field1, field2 = fields1[name], fields2[name]
-        if deconstructor_factory(field1).deconstruct() != deconstructor_factory(field2).deconstruct():
+        if deep_deconstruct(field1) != deep_deconstruct(field2):
             fields_.append(field1)
 
     if fields_:

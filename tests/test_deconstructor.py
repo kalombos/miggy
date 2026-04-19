@@ -1,9 +1,12 @@
+from typing import Any
+
 import peewee as pw
 import pytest
 
-from miggy.deconstructor import FieldDeconstructor, deconstructor_factory
+from miggy.deconstructor import FieldDeconstructor, deconstructor_factory, deep_deconstruct
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
+from miggy.utils import Default
 from tests.helpers import Rating, Status
 
 
@@ -50,6 +53,12 @@ def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> No
         pytest.param(
             pw.IntegerField(constraints=[pw.SQL(" DEFAULT 5")]), pw.IntegerField(), True, id="default_constraint"
         ),
+        pytest.param(
+            pw.IntegerField(constraints=[pw.SQL(" DEFAULT 5")]),
+            pw.IntegerField(constraints=[pw.SQL(" DEFAULT 7")]),
+            True,
+            id="different_default_constraint",
+        ),
         pytest.param(pw.IntegerField(default=5), pw.IntegerField(), True, id="default"),
         pytest.param(pw.IntegerField(default=lambda: 5), pw.IntegerField(), False, id="default_callable"),
         pytest.param(pw.IntegerField(), pw.IntegerField(unique=True), True, id="unique"),
@@ -73,6 +82,28 @@ def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> No
         pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1, constraint_name="new_name"), True),
     ],
 )
-def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
-    not_equal = deconstructor_factory(f1).deconstruct() != deconstructor_factory(f2).deconstruct()
+def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
+    not_equal = deep_deconstruct(f1) != deep_deconstruct(f2)
     assert not_equal is expected
+
+
+@pytest.mark.parametrize(
+    ("f", "expected"),
+    [
+        (
+            pw.CharField(max_length=50),
+            {"max_length": 50, "type": pw.CharField, "column_name": None, "index": (False, False)},
+        ),
+        (
+            pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
+            {
+                "constraints": [{"type": Default, "value": "'words'"}],
+                "type": pw.IntegerField,
+                "column_name": None,
+                "index": (False, False),
+            },
+        ),
+    ],
+)
+def test_deep_deconstruct(f: pw.Field, expected: dict[str, Any]) -> None:
+    assert deep_deconstruct(f) == expected

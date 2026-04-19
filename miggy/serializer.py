@@ -1,10 +1,9 @@
 import enum
-from typing import Any
 
 import peewee as pw
 
 from miggy.deconstructor import deconstructor_factory
-from miggy.utils import Default, get_default_constraint
+from miggy.utils import Default
 
 
 class BaseSerializer:
@@ -71,13 +70,6 @@ class FieldSerializer:
         self.unique = field.unique
         self.extra_parameters = self.field_deconstructor.get_field_params()
 
-    def handle_constraints(self, params: dict[str, Any]) -> None:
-        field = self.field_deconstructor.field
-        if field.constraints:
-            default_constraint = get_default_constraint(field)
-            if default_constraint is not None:
-                params["constraints"] = serialize_value([default_constraint])
-
     def get_field_parameters(self):
         params = {}
         field = self.field_deconstructor.field
@@ -99,10 +91,9 @@ class FieldSerializer:
         # Handle indexes on column.
         if not self.is_primary_key():
             if self.unique:
-                params["unique"] = "True"
+                params["unique"] = True
             elif self.index and not self.is_foreign_key():
-                params["index"] = "True"
-        self.handle_constraints(params)
+                params["index"] = True
         return params
 
     def is_primary_key(self) -> bool:
@@ -118,10 +109,9 @@ class FieldSerializer:
             if isinstance(value, pw.Field):
                 value = value.__name__
             field_params[key] = value
-
-        if "default" in field_params:
-            field_params["default"] = serialize_value(field_params["default"])
-
+        for name in ("default", "constraints"):
+            if name in field_params:
+                field_params[name] = serialize_value(field_params[name])
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
         field = "%s = %s(%s)" % (self.name, self.field_class.__name__, param_str)
 

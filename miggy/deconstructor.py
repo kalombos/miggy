@@ -5,7 +5,7 @@ from typing import Any
 import peewee as pw
 
 from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import get_default_constraint_value
+from miggy.utils import Default, get_default_constraint
 
 
 class FieldDeconstructor:
@@ -47,6 +47,8 @@ class FieldDeconstructor:
             params["null"] = True
         if default := self._get_default(self.field):
             params["default"] = default
+        if default_constraint := get_default_constraint(self.field):
+            params["constraints"] = [default_constraint]
         return params
 
     def deconstruct(self) -> dict[str, Any]:
@@ -54,7 +56,6 @@ class FieldDeconstructor:
         params = self.get_field_params()
         params["type"] = self.field_type
         params["column_name"] = field.column_name
-        params["default_constraint"] = get_default_constraint_value(field)
         params["index"] = field.index and not field.unique, field.unique
         return params
 
@@ -75,3 +76,12 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
     if isinstance(f, pw.DecimalField):
         return DecimalFieldDeconstructor(f)
     return FieldDeconstructor(f)
+
+
+def deep_deconstruct(field: pw.Field) -> Any:
+    params = deconstructor_factory(field).deconstruct()
+    if "constraints" in params:
+        params["constraints"] = [
+            {"type": Default, "value": c.value} if isinstance(c, Default) else c for c in params["constraints"]
+        ]
+    return params
