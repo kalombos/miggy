@@ -38,16 +38,6 @@ class DefaultSerializer(BaseSerializer):
         return 'pw.SQL("DEFAULT %s")' % default_constraint.value.replace('"', '\\"')
 
 
-def serialize_value(value) -> str:
-    if isinstance(value, enum.Enum):
-        return EnumSerializer(value).serialize()
-    if isinstance(value, list):
-        return ListSerializer(value).serialize()
-    if isinstance(value, Default):
-        return DefaultSerializer(value).serialize()
-    return BaseSerializer(value=value).serialize()
-
-
 class FieldSerializer:
     FIELD_MODULES_MAP = {
         "ArrayField": "pw_pext",
@@ -91,7 +81,7 @@ class FieldSerializer:
             params["primary_key"] = True
 
         # Handle ForeignKeyField-specific attributes.
-        if self.is_foreign_key():            
+        if self.is_foreign_key():
             params["model"] = "migrator.state['%s']" % field.rel_model._meta.name
             if field.rel_field:
                 params["field"] = "'%s'" % field.rel_field.name
@@ -124,7 +114,6 @@ class FieldSerializer:
         if "default" in field_params:
             field_params["default"] = serialize_value(field_params["default"])
 
-
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
         field = "%s = %s(%s)" % (self.name, self.field_class.__name__, param_str)
 
@@ -136,3 +125,20 @@ class FieldSerializer:
         module = self.FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
         name, _, field = [s and s.strip() for s in field.partition("=")]
         return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
+
+
+# class ModelSerializer(BaseSerializer):
+#     def serialize(self) -> str:
+#         model: ModelCls = self.value
+#         deconstructed = ModelDeconstructor(model).deconstruct()
+#         return "{%s}" % (", ".join("%s: %s" % (k, v) for k, v in strings)), imports
+
+
+def serialize_value(value) -> str:
+    if isinstance(value, enum.Enum):
+        return EnumSerializer(value).serialize()
+    if isinstance(value, list):
+        return ListSerializer(value).serialize()
+    if isinstance(value, Default):
+        return DefaultSerializer(value).serialize()
+    return BaseSerializer(value=value).serialize()

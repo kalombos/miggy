@@ -1,14 +1,21 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import peewee as pw
 
 from miggy.ext.fields import CharEnumField, IntEnumField
 from miggy.utils import get_default_constraint_value
 
+if TYPE_CHECKING:
+    from miggy.types import ModelCls
 
-class FieldDeconstructor:
+
+class BaseDeconstructor(Protocol):
+    def deconstruct(self) -> dict[str, Any]: ...
+
+
+class FieldDeconstructor(BaseDeconstructor):
     def __init__(self, field: pw.Field) -> None:
         self.field = field
 
@@ -67,6 +74,22 @@ class CharFieldDeconstructor(FieldDeconstructor):
 class DecimalFieldDeconstructor(FieldDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
         return {"max_digits": self.field.max_digits, "decimal_places": self.field.decimal_places}
+
+
+class ModelDeconstructor(BaseDeconstructor):
+    def __init__(self, model: ModelCls):
+        self.model = model
+
+    def deconstruct(self) -> dict[str, Any]:
+        model = self.model
+        fields = [f for f in self.model._meta.sorted_fields if not isinstance(f, pw.AutoField)]
+        meta = {"table_name": model._meta.table_name}
+        if model._meta.schema:
+            meta["schema"] = model._meta.schema
+        if model._meta.primary_key and isinstance(model._meta.primary_key, pw.CompositeKey):
+            meta["primary_key"] = model._meta.primary_key
+
+        return {"name": model.__name__, "fields": {f.name: f for f in fields}, "meta": meta}
 
 
 def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstructor:
