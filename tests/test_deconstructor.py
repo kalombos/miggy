@@ -27,8 +27,45 @@ class _M2(pw.Model):
         (pw.DecimalField(decimal_places=3), {"decimal_places": 3, "max_digits": 10}),
     ],
 )
-def test_deconstructor_get_type_params(field: pw.Field, expected: type[pw.Field]) -> None:
+def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
     assert deconstructor_factory(field).get_type_modifiers() == expected
+
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        (
+            pw.CharField(max_length=55), 
+            {'column_name': None, 'index': (False, False), 'type': pw.CharField, 'max_length': 55}
+        ),
+        (
+            pw.IntegerField(), 
+            {'column_name': None, 'index': (False, False), 'type': pw.IntegerField}
+        ),
+            (
+            pw.ForeignKeyField(
+                _M1, 
+                on_delete="CASCADE", 
+                on_update="RESTRICT", 
+                constraint_name="constraint_name", 
+                null=True
+            ), 
+            {
+                'model': '_m1',
+                'constraint_name': "'constraint_name'",
+                'column_name': None, 
+                'index': (True, False), 
+                'on_delete': "'CASCADE'", 
+                'on_update': "'RESTRICT'",
+                'null': True,
+                'type': pw.ForeignKeyField
+            }
+        ),
+    ],
+)
+def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
+    assert deconstructor_factory(field).deconstruct() == expected
 
 
 @pytest.mark.parametrize(

@@ -32,35 +32,18 @@ class FieldDeconstructor(BaseDeconstructor):
             return field.default
         return None
 
-    @staticmethod
-    def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
-        params = {"model": field.rel_model._meta.name}
-        if field.on_delete is not None:
-            params["on_delete"] = "'%s'" % field.on_delete
-        if field.on_update is not None:
-            params["on_update"] = "'%s'" % field.on_update
-        if field.constraint_name is not None:
-            params["constraint_name"] = "'%s'" % field.constraint_name
-        return params
-
     def get_type_modifiers(self) -> dict[str, Any]:
         return {}
 
-    def get_field_params(self) -> dict[str, Any]:
+    def deconstruct(self) -> dict[str, Any]:
+        field = self.field
         params = self.get_type_modifiers()
-        if self.field_type is pw.ForeignKeyField:
-            params.update(self.fk_to_params(self.field))
         if self.field.null:
             params["null"] = True
         if default := self._get_default(self.field):
             params["default"] = default
         if default_constraint := get_default_constraint(self.field):
             params["constraints"] = [default_constraint]
-        return params
-
-    def deconstruct(self) -> dict[str, Any]:
-        field = self.field
-        params = self.get_field_params()
         params["type"] = self.field_type
         params["column_name"] = field.column_name
         params["index"] = field.index and not field.unique, field.unique
@@ -75,6 +58,24 @@ class CharFieldDeconstructor(FieldDeconstructor):
 class DecimalFieldDeconstructor(FieldDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
         return {"max_digits": self.field.max_digits, "decimal_places": self.field.decimal_places}
+
+
+class ForeignKeyFieldDeconstructor(FieldDeconstructor):
+    @staticmethod
+    def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
+        params = {"model": field.rel_model._meta.name}
+        if field.on_delete is not None:
+            params["on_delete"] = "'%s'" % field.on_delete
+        if field.on_update is not None:
+            params["on_update"] = "'%s'" % field.on_update
+        if field.constraint_name is not None:
+            params["constraint_name"] = "'%s'" % field.constraint_name
+        return params
+
+    def deconstruct(self) -> dict[str, Any]:
+        params = super().deconstruct()
+        params.update(self.fk_to_params(self.field))
+        return params
 
 
 class ModelDeconstructor(BaseDeconstructor):
@@ -94,6 +95,8 @@ class ModelDeconstructor(BaseDeconstructor):
 
 
 def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstructor:
+    if isinstance(f, pw.ForeignKeyField):
+        return ForeignKeyFieldDeconstructor(f)
     if isinstance(f, pw.CharField):
         return CharFieldDeconstructor(f)
     if isinstance(f, pw.DecimalField):
