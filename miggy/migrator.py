@@ -17,7 +17,7 @@ from playhouse.migrate import SqliteMigrator as SqM
 
 from miggy import LOGGER
 from miggy.auto import resolve_field
-from miggy.deconstructor import FieldDeconstructor, deconstructor_factory
+from miggy.deconstructor import ForeignKeyFieldDeconstructor, deconstructor_factory
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
@@ -370,7 +370,10 @@ class ChangeFields(MigrateOperation):
         if (
             is_old_field_fk
             and is_new_field_fk
-            and FieldDeconstructor.fk_to_params(old_field) == FieldDeconstructor.fk_to_params(new_field)
+            and (
+                ForeignKeyFieldDeconstructor.fk_to_params(old_field)
+                == ForeignKeyFieldDeconstructor.fk_to_params(new_field)
+            )
         ):
             # Nothing's changed for fk
             return _ops

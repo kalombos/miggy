@@ -1,5 +1,5 @@
 import enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import peewee as pw
 
@@ -56,13 +56,20 @@ class FieldSerializer:
         self.field_deconstructor = deconstructor_factory(field)
         self.name = field.name
         self.field_class = self.field_deconstructor.field_type
-        self.raw_column_type = field.field_type
-        self.nullable = field.null
         self.primary_key = field.primary_key
         self.column_name = field.column_name
         self.index = field.index
         self.unique = field.unique
-        self.extra_parameters = self.field_deconstructor.get_field_params()
+
+        params = self.field_deconstructor.deconstruct()
+        self.clear_for_backward_compatibility(params)
+        self.extra_parameters = params
+
+    @staticmethod
+    def clear_for_backward_compatibility(params: dict[str, Any]) -> None:
+        del params["type"]
+        del params["index"]
+        del params["column_name"]
 
     def get_field_parameters(self):
         params = {}
@@ -98,11 +105,7 @@ class FieldSerializer:
 
     def get_field(self) -> str:
         # Generate the field definition for this column.
-        field_params = {}
-        for key, value in self.get_field_parameters().items():
-            if isinstance(value, pw.Field):
-                value = value.__name__
-            field_params[key] = value
+        field_params = self.get_field_parameters()
         for name in ("default", "constraints"):
             if name in field_params:
                 field_params[name] = serialize_value(field_params[name])
