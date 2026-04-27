@@ -1,9 +1,10 @@
 import peewee as pw
 import pytest
+from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
-from miggy.serializer import FieldSerializer, serialize_value
+from miggy.serializer import FieldSerializer, ModelSerializer, serialize_field, serialize_value
 from tests.helpers import Rating, Status
 
 
@@ -22,16 +23,41 @@ def test_serialize_value(value: int | str, expected: str) -> None:
     assert serialize_value(value) == expected
 
 
-def test_field_serializer_to_code() -> None:
+def test_field_serializer_serialize() -> None:
+    class SomeModel(pw.Model):
+        name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
+        status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
+        updated_at = DateTimeTZField()
+
+    assert FieldSerializer(SomeModel.name).serialize() == (
+        """pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
+    )
+    assert FieldSerializer(SomeModel.status).serialize() == (
+        """pw.CharField(default='active', max_length=100, null=True)"""
+    )
+    assert FieldSerializer(SomeModel.updated_at).serialize() == ("""pw_pext.DateTimeTZField()""")
+
+
+def test_serialize_field() -> None:
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
         status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
         rating = IntEnumField(Rating)
 
-    assert FieldSerializer(SomeModel.name).serialize() == (
+    assert serialize_field(SomeModel.name) == (
         """name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
-    assert FieldSerializer(SomeModel.status).serialize() == (
-        """status=pw.CharField(default='active', max_length=100, null=True)"""
+    assert serialize_field(SomeModel.status, add_space=True) == (
+        """status = pw.CharField(default='active', max_length=100, null=True)"""
     )
-    assert FieldSerializer(SomeModel.rating).serialize() == ("""rating=pw.SmallIntegerField()""")
+    assert serialize_field(SomeModel.rating) == ("""rating=pw.SmallIntegerField()""")
+
+
+def test_model_serializer() -> None:
+    class SomeModel(pw.Model):
+        name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
+        status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
+        rating = IntEnumField(Rating)
+
+    print(ModelSerializer(SomeModel).serialize())
+    # WIP

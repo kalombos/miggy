@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deep_deconstruct
-from miggy.serializer import FieldSerializer
+from miggy.serializer import serialize_field
 from miggy.utils import ModelIndex, indexes_state
 
 from .types import ModelCls
@@ -209,7 +209,7 @@ def model_to_code(Model) -> str:
 """
     fields = INDENT + NEWLINE.join(
         [
-            FieldSerializer(field).serialize(" ")
+            serialize_field(field, add_space=True)
             for field in Model._meta.sorted_fields
             if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
         ]
@@ -243,7 +243,7 @@ def add_fields(model: ModelCls, *fields) -> str:
     return "migrator.add_fields(%s'%s', %s)" % (
         NEWLINE,
         model._meta.name,
-        NEWLINE + ("," + NEWLINE).join([FieldSerializer(field).serialize() for field in fields]),
+        NEWLINE + ("," + NEWLINE).join([serialize_field(field) for field in fields]),
     )
 
 
@@ -254,7 +254,7 @@ def remove_fields(model: ModelCls, *fields) -> str:
 def change_fields(model: ModelCls, *fields) -> str:
     return "migrator.change_fields('%s', %s)" % (
         model._meta.name,
-        ("," + NEWLINE).join([FieldSerializer(f).serialize() for f in fields]),
+        ("," + NEWLINE).join([serialize_field(f) for f in fields]),
     )
 
 

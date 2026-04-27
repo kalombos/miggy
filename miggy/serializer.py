@@ -1,9 +1,13 @@
 import enum
+from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from miggy.deconstructor import deconstructor_factory
+from miggy.deconstructor import ModelDeconstructor, deconstructor_factory
 from miggy.utils import Default
+
+if TYPE_CHECKING:
+    from miggy.types import ModelCls
 
 
 class BaseSerializer:
@@ -35,16 +39,6 @@ class DefaultSerializer(BaseSerializer):
     def serialize(self) -> str:
         default_constraint = self.value
         return 'pw.SQL("DEFAULT %s")' % default_constraint.value.replace('"', '\\"')
-
-
-def serialize_value(value) -> str:
-    if isinstance(value, enum.Enum):
-        return EnumSerializer(value).serialize()
-    if isinstance(value, list):
-        return ListSerializer(value).serialize()
-    if isinstance(value, Default):
-        return DefaultSerializer(value).serialize()
-    return BaseSerializer(value=value).serialize()
 
 
 class FieldSerializer:
@@ -113,13 +107,35 @@ class FieldSerializer:
             if name in field_params:
                 field_params[name] = serialize_value(field_params[name])
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
-        field = "%s = %s(%s)" % (self.name, self.field_class.__name__, param_str)
+        return "%s(%s)" % (self.field_class.__name__, param_str)
 
-        return field
-
-    def serialize(self, space="") -> str:
+    def serialize(self) -> str:
         # Generate the field definition for this column.
         field = self.get_field()
         module = self.FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
-        name, _, field = [s and s.strip() for s in field.partition("=")]
-        return "{name}{space}={space}{module}.{field}".format(name=name, field=field, space=space, module=module)
+        return "{module}.{field}".format(field=field, module=module)
+
+
+class ModelSerializer(BaseSerializer):
+    def serialize(self) -> str:
+        model: ModelCls = self.value
+        deconstructed = ModelDeconstructor(model).deconstruct()
+        deconstructed["fields"] = {n: FieldSerializer(f).serialize for n, f in deconstructed["fields"].items()}
+        # WIP
+        return repr(deconstructed)
+
+
+def serialize_field(field: pw.Field, add_space: bool = False) -> str:
+    serialized_field = FieldSerializer(field).serialize()
+    sep = " = " if add_space else "="
+    return sep.join([field.name, serialized_field])
+
+
+def serialize_value(value) -> str:
+    if isinstance(value, enum.Enum):
+        return EnumSerializer(value).serialize()
+    if isinstance(value, list):
+        return ListSerializer(value).serialize()
+    if isinstance(value, Default):
+        return DefaultSerializer(value).serialize()
+    return BaseSerializer(value=value).serialize()
