@@ -48,7 +48,7 @@ class _M1(pw.Model):
             pw.IntegerField(),
             pw.ForeignKeyField(_M1, column_name="new_name", on_update="RESTRICT"),
             (
-                "age=pw.ForeignKeyField(backref='test_set', column_name='new_name', "
+                "age=pw.ForeignKeyField(column_name='new_name', "
                 "field='id', model=migrator.state['_m1'], on_update='RESTRICT')"
             ),
             id="add_fk",

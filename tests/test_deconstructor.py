@@ -1,9 +1,13 @@
+from typing import Any
+
 import peewee as pw
 import pytest
 
-from miggy.deconstructor import FieldDeconstructor, deconstructor_factory
+from miggy.deconstructor import FieldDeconstructor, ModelDeconstructor, deconstructor_factory, deep_deconstruct
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
+from miggy.types import ModelCls
+from miggy.utils import Default
 from tests.helpers import Rating, Status
 
 
@@ -50,6 +54,12 @@ def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> No
         pytest.param(
             pw.IntegerField(constraints=[pw.SQL(" DEFAULT 5")]), pw.IntegerField(), True, id="default_constraint"
         ),
+        pytest.param(
+            pw.IntegerField(constraints=[pw.SQL(" DEFAULT 5")]),
+            pw.IntegerField(constraints=[pw.SQL(" DEFAULT 7")]),
+            True,
+            id="different_default_constraint",
+        ),
         pytest.param(pw.IntegerField(default=5), pw.IntegerField(), True, id="default"),
         pytest.param(pw.IntegerField(default=lambda: 5), pw.IntegerField(), False, id="default_callable"),
         pytest.param(pw.IntegerField(), pw.IntegerField(unique=True), True, id="unique"),
@@ -73,6 +83,89 @@ def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> No
         pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1, constraint_name="new_name"), True),
     ],
 )
-def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
-    not_equal = deconstructor_factory(f1).deconstruct() != deconstructor_factory(f2).deconstruct()
+def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
+    not_equal = deep_deconstruct(f1) != deep_deconstruct(f2)
     assert not_equal is expected
+
+
+@pytest.mark.parametrize(
+    ("f", "expected"),
+    [
+        (
+            pw.CharField(max_length=50),
+            {"max_length": 50, "type": pw.CharField, "column_name": None, "index": (False, False)},
+        ),
+        (
+            pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
+            {
+                "constraints": [{"type": Default, "value": "'words'"}],
+                "type": pw.IntegerField,
+                "column_name": None,
+                "index": (False, False),
+            },
+        ),
+    ],
+)
+def test_deep_deconstruct(f: pw.Field, expected: dict[str, Any]) -> None:
+    assert deep_deconstruct(f) == expected
+
+
+class _TestModelDeconstructNamespace:
+    class SimpleModel(pw.Model):
+        name = pw.CharField()
+
+    class ComplicatedModel(pw.Model):
+        name = pw.CharField(max_length=5)
+        age = pw.IntegerField()
+
+        class Meta:
+            schema = "new_schema"
+            primary_key = pw.CompositeKey("name", "age")
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        (
+            _TestModelDeconstructNamespace.SimpleModel,
+            {
+                "name": "SimpleModel",
+                "fields": {
+                    "name": {
+                        "max_length": 255,
+                        "type": pw.CharField,
+                        "column_name": "name",
+                        "index": (False, False),
+                    }
+                },
+                "meta": {"table_name": "simplemodel"},
+            },
+        ),
+        (
+            _TestModelDeconstructNamespace.ComplicatedModel,
+            {
+                "name": "ComplicatedModel",
+                "fields": {
+                    "name": {
+                        "max_length": 5,
+                        "type": pw.CharField,
+                        "column_name": "name",
+                        "index": (False, False),
+                    },
+                    "age": {
+                        "type": pw.IntegerField,
+                        "column_name": "age",
+                        "index": (False, False),
+                    },
+                },
+                "meta": {"table_name": "complicatedmodel", "schema": "new_schema", "primary_key": ("name", "age")},
+            },
+        ),
+    ],
+)
+def test_model_deconstructor__deconstruct(model: ModelCls, expected: dict[str, Any]) -> None:
+    deconstructed = ModelDeconstructor(model).deconstruct()
+    deconstructed["fields"] = {n: deconstructor_factory(f).deconstruct() for n, f in deconstructed["fields"].items()}
+    if "primary_key" in deconstructed["meta"]:
+        deconstructed["meta"]["primary_key"] = deconstructed["meta"]["primary_key"].field_names
+    assert deconstructed == expected
