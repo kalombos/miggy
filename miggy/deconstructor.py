@@ -40,12 +40,13 @@ class FieldDeconstructor(BaseDeconstructor):
         params = self.get_type_modifiers()
         if self.field.null:
             params["null"] = True
-        if default := self._get_default(self.field):
+        if default := self._get_default(field):
             params["default"] = default
-        if default_constraint := get_default_constraint(self.field):
+        if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
+        if field.name != field.column_name:
+            params["column_name"] = field.column_name
         params["type"] = self.field_type
-        params["column_name"] = field.column_name
         params["index"] = field.index and not field.unique, field.unique
         return params
 

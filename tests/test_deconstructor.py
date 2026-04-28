@@ -36,9 +36,9 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
     [
         (
             pw.CharField(max_length=55),
-            {"column_name": None, "index": (False, False), "type": pw.CharField, "max_length": 55},
+            {"index": (False, False), "type": pw.CharField, "max_length": 55},
         ),
-        (pw.IntegerField(), {"column_name": None, "index": (False, False), "type": pw.IntegerField}),
+        (pw.IntegerField(), {"index": (False, False), "type": pw.IntegerField}),
         (
             pw.ForeignKeyField(
                 _M1, on_delete="CASCADE", on_update="RESTRICT", constraint_name="constraint_name", null=True
@@ -46,7 +46,7 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             {
                 "model": "_m1",
                 "constraint_name": "constraint_name",
-                "column_name": None,
+                "column_name": "some_field_id",
                 "index": (True, False),
                 "on_delete": "CASCADE",
                 "on_update": "RESTRICT",
@@ -57,7 +57,9 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
-    assert deconstructor_factory(field).deconstruct() == expected
+    class MyTestModel(pw.Model):
+        some_field = field
+    assert deconstructor_factory(MyTestModel.some_field).deconstruct() == expected
 
 
 @pytest.mark.parametrize(
@@ -113,7 +115,13 @@ def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> No
     ],
 )
 def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
-    not_equal = deep_deconstruct(f1) != deep_deconstruct(f2)
+    class TestModel1(pw.Model):
+        some_field = f1
+
+    class TestModel2(pw.Model):
+        some_field = f2
+        
+    not_equal = deep_deconstruct(TestModel1.some_field) != deep_deconstruct(TestModel2.some_field)
     assert not_equal is expected
 
 
@@ -122,21 +130,22 @@ def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) 
     [
         (
             pw.CharField(max_length=50),
-            {"max_length": 50, "type": pw.CharField, "column_name": None, "index": (False, False)},
+            {"max_length": 50, "type": pw.CharField, "index": (False, False)},
         ),
         (
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
             {
                 "constraints": [{"type": Default, "value": "'words'"}],
                 "type": pw.IntegerField,
-                "column_name": None,
                 "index": (False, False),
             },
         ),
     ],
 )
 def test_deep_deconstruct(f: pw.Field, expected: dict[str, Any]) -> None:
-    assert deep_deconstruct(f) == expected
+    class TestModel(pw.Model):
+        some_field = f
+    assert deep_deconstruct(TestModel.some_field) == expected
 
 
 class _TestModelDeconstructNamespace:
@@ -163,7 +172,6 @@ class _TestModelDeconstructNamespace:
                     "name": {
                         "max_length": 255,
                         "type": pw.CharField,
-                        "column_name": "name",
                         "index": (False, False),
                     }
                 },
@@ -178,12 +186,10 @@ class _TestModelDeconstructNamespace:
                     "name": {
                         "max_length": 5,
                         "type": pw.CharField,
-                        "column_name": "name",
                         "index": (False, False),
                     },
                     "age": {
                         "type": pw.IntegerField,
-                        "column_name": "age",
                         "index": (False, False),
                     },
                 },
