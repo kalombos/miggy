@@ -79,7 +79,7 @@ class FieldSerializer:
 
         # Set up default attributes.
         if self.field_class is pw.ForeignKeyField or self.name != self.column_name:
-            params["column_name"] = "'%s'" % self.column_name
+            params["column_name"] = self.column_name
         if self.primary_key and not issubclass(self.field_class, pw.AutoField):
             params["primary_key"] = True
 
@@ -106,7 +106,7 @@ class FieldSerializer:
     def get_field(self) -> str:
         # Generate the field definition for this column.
         field_params = self.get_field_parameters()
-        for name in ("default", "constraints"):
+        for name in ("default", "constraints", "column_name"):
             if name in field_params:
                 field_params[name] = serialize_value(field_params[name])
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
