@@ -106,7 +106,7 @@ class FieldSerializer:
     def get_field(self) -> str:
         # Generate the field definition for this column.
         field_params = self.get_field_parameters()
-        for name in ("default", "constraints", "column_name"):
+        for name in ("default", "constraints", "column_name", "on_delete", "on_update", "constraint_name"):
             if name in field_params:
                 field_params[name] = serialize_value(field_params[name])
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
