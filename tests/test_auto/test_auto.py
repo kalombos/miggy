@@ -200,12 +200,12 @@ def test_add_fields() -> None:
     f = pw.CharField()
     f.name = "name"
     assert to_one_line(add_fields(MyTestModel, f)) == (
-        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name='None', max_length=255))"
+        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name=None, max_length=255))"
     )
     status = CharEnumField(Status, max_length=5)
     status.name = "name"
     assert to_one_line(add_fields(MyTestModel, status)) == (
-        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name='None', max_length=5))"
+        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name=None, max_length=5))"
     )
 
 
@@ -229,7 +229,7 @@ def test_change_fields() -> None:
     f = pw.CharField()
     f.name = "name"
     assert to_one_line(change_fields(MyTestModel, f)) == (
-        "migrator.change_fields('mytestmodel', name=pw.CharField(column_name='None', max_length=255))"
+        "migrator.change_fields('mytestmodel', name=pw.CharField(column_name=None, max_length=255))"
     )
 
 
