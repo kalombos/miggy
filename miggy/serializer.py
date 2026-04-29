@@ -76,9 +76,6 @@ class FieldSerializer:
         if self.extra_parameters is not None:
             params.update(self.extra_parameters)
 
-        # Set up default attributes.
-        if self.field_class is pw.ForeignKeyField:
-            params["column_name"] = self.column_name
         if self.primary_key and not issubclass(self.field_class, pw.AutoField):
             params["primary_key"] = True
 

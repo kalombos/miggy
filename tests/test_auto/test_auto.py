@@ -224,6 +224,7 @@ def test_change_fields() -> None:
 
         class Meta:
             table_name = "another_name"
+
     assert to_one_line(change_fields(MyTestModel, MyTestModel.name)) == (
         "migrator.change_fields('mytestmodel', name=pw.CharField(max_length=255))"
     )

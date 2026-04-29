@@ -154,3 +154,7 @@ def delete_field(model: ModelCls, field: pw.Field) -> None:
     if isinstance(field, pw.ForeignKeyField):
         delattr(model, field.object_id_name)
         delattr(field.rel_model, field.backref)
+
+
+def fk_postfix(name: str) -> str:
+    return name if name.endswith("_id") else name + "_id"

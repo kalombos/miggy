@@ -24,10 +24,7 @@ class _M1(pw.Model):
         pytest.param(pw.IntegerField(null=True), """field=pw.IntegerField(null=True)""", id="add_nullable"),
         pytest.param(
             pw.ForeignKeyField(_M1, on_delete="CASCADE", null=True),
-            (
-                "pw.ForeignKeyField(column_name='field_id', "
-                "field='id', model=migrator.state['_m1'], null=True, on_delete='CASCADE')"
-            ),
+            ("pw.ForeignKeyField(field='id', model=migrator.state['_m1'], null=True, on_delete='CASCADE')"),
             id="add_fk",
         ),
     ],

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import peewee as pw
 
 from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import Default, get_default_constraint
+from miggy.utils import Default, fk_postfix, get_default_constraint
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -35,6 +35,10 @@ class FieldDeconstructor(BaseDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
         return {}
 
+    def deconstruct_column_name(self, params: dict[str, Any]) -> None:
+        if self.field.name != self.field.column_name:
+            params["column_name"] = self.field.column_name
+
     def deconstruct(self) -> dict[str, Any]:
         field = self.field
         params = self.get_type_modifiers()
@@ -44,8 +48,7 @@ class FieldDeconstructor(BaseDeconstructor):
             params["default"] = default
         if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
-        if field.name != field.column_name:
-            params["column_name"] = field.column_name
+        self.deconstruct_column_name(params)
         params["type"] = self.field_type
         params["index"] = field.index and not field.unique, field.unique
         return params
@@ -72,6 +75,10 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
         if field.constraint_name is not None:
             params["constraint_name"] = field.constraint_name
         return params
+
+    def deconstruct_column_name(self, params: dict[str, Any]) -> None:
+        if self.field.column_name != fk_postfix(self.field.name):
+            params["column_name"] = self.field.column_name
 
     def deconstruct(self) -> dict[str, Any]:
         params = super().deconstruct()
