@@ -16,6 +16,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from miggy import LOGGER
+from miggy.deconstructor import ModelDeconstructor
 from miggy.operations import (
     AddFields,
     AddIndex,
@@ -282,11 +283,34 @@ class Migrator(object):
         """Clean the operations."""
         self.migration.clean()
 
-    def create_model(self, model: ModelCls) -> ModelCls:
-        """A shortcut for adding a :class:`CreateModel` operation."""
+    def create_model(
+        self,
+        model_name: ModelCls | str,
+        fields: dict[str, pw.Field] | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> ModelCls | None:
+        """A shortcut for adding a :class:`CreateModel` operation.
 
-        self.add_operation(CreateModel(model))
-        return model
+        Can be used in two ways:        
+        1. With explicit parameters to create a model dynamically:
+            migrator.create_model(name="User", fields={"name": pw.CharField()}, meta={"table_name": "users"})
+
+        2. As a decorator with an existing model class. Legacy API:
+            @migrator.create_model
+            class User(pw.Model):
+                name = pw.CharField()
+        """ 
+        if isinstance(model_name, str):
+            
+            fields = fields or {}
+            meta = meta or {}
+            self.add_operation(CreateModel(model_name, fields, meta))
+            return None
+        else:
+            # Legacy API
+            deconstructed = ModelDeconstructor(model_name).deconstruct()
+            self.add_operation(CreateModel(**deconstructed))
+            return model_name
 
     create_table = create_model
 

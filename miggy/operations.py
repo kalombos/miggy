@@ -114,16 +114,18 @@ class CreateModel(MigrateOperation):
     Creates a new model in the :class:`State` and a corresponding table in the database to match it.
     """
 
-    def __init__(self, model: ModelCls) -> None:
-        self.model = model
+    def __init__(self, name: str, fields: dict[str, pw.Field], meta: dict[str, Any]) -> None:
+        self.name = name
+        self.fields = fields
+        self.meta = meta
 
     def state_forwards(self, state: State) -> None:
-        state[self.model._meta.name] = self.model
+        state.add_model(self.name, self.fields, self.meta)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Callable]:
-        model = to_state[self.model._meta.name]
+        model = to_state[self.name]
         return [schema_migrator.create_table(model)]
 
 
