@@ -193,19 +193,17 @@ def test_remove_model() -> None:
 def test_add_fields() -> None:
     class MyTestModel(pw.Model):
         i1 = pw.IntegerField()
+        name = pw.CharField()
+        status = CharEnumField(Status, max_length=5)
 
         class Meta:
             table_name = "another_name"
 
-    f = pw.CharField()
-    f.name = "name"
-    assert to_one_line(add_fields(MyTestModel, f)) == (
-        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name=None, max_length=255))"
+    assert to_one_line(add_fields(MyTestModel, MyTestModel.name)) == (
+        "migrator.add_fields('mytestmodel',name=pw.CharField(max_length=255))"
     )
-    status = CharEnumField(Status, max_length=5)
-    status.name = "name"
-    assert to_one_line(add_fields(MyTestModel, status)) == (
-        "migrator.add_fields('mytestmodel',name=pw.CharField(column_name=None, max_length=5))"
+    assert to_one_line(add_fields(MyTestModel, MyTestModel.status)) == (
+        "migrator.add_fields('mytestmodel',status=pw.CharField(max_length=5))"
     )
 
 
@@ -222,14 +220,13 @@ def test_remove_fields() -> None:
 def test_change_fields() -> None:
     class MyTestModel(pw.Model):
         i1 = pw.IntegerField()
+        name = pw.CharField()
 
         class Meta:
             table_name = "another_name"
 
-    f = pw.CharField()
-    f.name = "name"
-    assert to_one_line(change_fields(MyTestModel, f)) == (
-        "migrator.change_fields('mytestmodel', name=pw.CharField(column_name=None, max_length=255))"
+    assert to_one_line(change_fields(MyTestModel, MyTestModel.name)) == (
+        "migrator.change_fields('mytestmodel', name=pw.CharField(max_length=255))"
     )
 
 

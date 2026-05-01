@@ -69,12 +69,16 @@ def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, ex
         class Meta:
             table_name = "test"
 
+    OldTest._meta.add_field("age", age_field_before)
+
     class Test(pw.Model):
         first_name = pw.CharField()
         age = age_field_after
 
         class Meta:
             table_name = "test"
+
+    Test._meta.add_field("age", age_field_after)
 
     code = diff_one(Test, OldTest)[0]
     assert code == change_fields(Test, Test.age)

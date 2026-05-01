@@ -23,6 +23,7 @@ from miggy.utils import (
     ModelIndex,
     copy_model,
     delete_field,
+    fk_postfix,
     get_default_constraint,
     get_default_constraint_value,
     get_single_index,
@@ -474,10 +475,6 @@ class RemoveFields(MigrateOperation):
             field = model._meta.fields[name]
             ops.append(schema_migrator.drop_column(model._meta.table_name, field.column_name, cascade=self.cascade))
         return ops
-
-
-def fk_postfix(name: str) -> str:
-    return name if name.endswith("_id") else name + "_id"
 
 
 class RenameField(MigrateOperation):
