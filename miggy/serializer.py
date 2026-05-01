@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 
 from miggy.deconstructor import ModelDeconstructor, deconstructor_factory
-from miggy.utils import Default
+from miggy.utils import Default, LazyModel
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -39,6 +39,11 @@ class DefaultSerializer(BaseSerializer):
     def serialize(self) -> str:
         default_constraint = self.value
         return 'pw.SQL("DEFAULT %s")' % default_constraint.value.replace('"', '\\"')
+    
+
+class LazyModelSerializer(BaseSerializer):
+    def serialize(self) -> str:
+        return "migrator.state['%s']" % self.value
 
 
 class FieldSerializer:
@@ -81,7 +86,6 @@ class FieldSerializer:
 
         # Handle ForeignKeyField-specific attributes.
         if self.is_foreign_key():
-            params["model"] = "migrator.state['%s']" % field.rel_model._meta.name
             if field.rel_field:
                 params["field"] = "'%s'" % field.rel_field.name
 
@@ -137,4 +141,6 @@ def serialize_value(value) -> str:
         return ListSerializer(value).serialize()
     if isinstance(value, Default):
         return DefaultSerializer(value).serialize()
+    if isinstance(value, LazyModel):
+        return LazyModel(value).serialize()
     return BaseSerializer(value=value).serialize()
