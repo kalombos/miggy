@@ -285,7 +285,7 @@ class Migrator(object):
 
     def create_model(
         self,
-        model_name: ModelCls | str,
+        model: ModelCls | str,
         fields: dict[str, pw.Field] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> ModelCls | None:
@@ -300,16 +300,16 @@ class Migrator(object):
             class User(pw.Model):
                 name = pw.CharField()
         """
-        if isinstance(model_name, str):
+        if isinstance(model, str):
             fields = fields or {}
             meta = meta or {}
-            self.add_operation(CreateModel(model_name, fields, meta))
+            self.add_operation(CreateModel(model, fields, meta))
             return None
         else:
             # Legacy API
-            deconstructed = ModelDeconstructor(model_name).deconstruct()
+            deconstructed = ModelDeconstructor(model).deconstruct()
             self.add_operation(CreateModel(**deconstructed))
-            return model_name
+            return model
 
     create_table = create_model
 
