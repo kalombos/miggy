@@ -2,7 +2,7 @@ API Documentation
 ====================
 
 
-.. autoclass:: miggy.migrator::State
+.. autoclass:: miggy.state::State
 .. autoclass:: miggy.migrator::SchemaMigrator
     :members: sql, rename_index, create_table, drop_table
     :member-order: bysource
@@ -10,20 +10,20 @@ API Documentation
 Migrate operations
 ++++++++++++++++++
 
-.. autoclass:: miggy.migrator::MigrateOperation
+.. autoclass:: miggy.operations::MigrateOperation
     :members: state_forwards, database_forwards
     :member-order: bysource
-.. autoclass:: miggy.migrator::RunPython
-.. autoclass:: miggy.migrator::RunSql
-.. autoclass:: miggy.migrator::CreateModel
-.. autoclass:: miggy.migrator::RemoveModel
-.. autoclass:: miggy.migrator::AddIndex
-.. autoclass:: miggy.migrator::DropIndex    
-.. autoclass:: miggy.migrator::RenameTable
-.. autoclass:: miggy.migrator::AddFields
-.. autoclass:: miggy.migrator::ChangeFields
-.. autoclass:: miggy.migrator::RemoveFields
-.. autoclass:: miggy.migrator::RenameField
+.. autoclass:: miggy.operations::RunPython
+.. autoclass:: miggy.operations::RunSql
+.. autoclass:: miggy.operations::CreateModel
+.. autoclass:: miggy.operations::RemoveModel
+.. autoclass:: miggy.operations::AddIndex
+.. autoclass:: miggy.operations::DropIndex    
+.. autoclass:: miggy.operations::RenameTable
+.. autoclass:: miggy.operations::AddFields
+.. autoclass:: miggy.operations::ChangeFields
+.. autoclass:: miggy.operations::RemoveFields
+.. autoclass:: miggy.operations::RenameField
 
 Migrator
 ++++++++++++++++++
