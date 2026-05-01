@@ -291,7 +291,7 @@ class Migrator(object):
     ) -> ModelCls | None:
         """A shortcut for adding a :class:`CreateModel` operation.
 
-        Can be used in two ways:        
+        Can be used in two ways:
         1. With explicit parameters to create a model dynamically:
             migrator.create_model(name="User", fields={"name": pw.CharField()}, meta={"table_name": "users"})
 
@@ -299,9 +299,8 @@ class Migrator(object):
             @migrator.create_model
             class User(pw.Model):
                 name = pw.CharField()
-        """ 
+        """
         if isinstance(model_name, str):
-            
             fields = fields or {}
             meta = meta or {}
             self.add_operation(CreateModel(model_name, fields, meta))

@@ -7,12 +7,12 @@ from miggy.state import State
 def test_state_forwards() -> None:
 
     operation = CreateModel(
-        "User", 
+        "User",
         {
             "name": pw.CharField(max_length=100),
             "email": pw.CharField(max_length=255, null=True),
-        }, 
-        {}
+        },
+        {},
     )
     state = State()
     operation.state_forwards(state)

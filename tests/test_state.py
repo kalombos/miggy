@@ -7,12 +7,12 @@ def test_add_model() -> None:
 
     state = State()
     state.add_model(
-        "User", 
+        "User",
         {
             "age": pw.IntegerField(),
             "email": pw.CharField(max_length=255, null=True),
-        }, 
-        {"table_name": "users"}
+        },
+        {"table_name": "users"},
     )
     model = state["user"]
 
