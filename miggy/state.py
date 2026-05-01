@@ -1,4 +1,7 @@
 from collections.abc import ValuesView
+from typing import Any
+
+import peewee as pw
 
 from miggy.types import ModelCls
 from miggy.utils import copy_model
@@ -51,3 +54,9 @@ class State:
         _snapshot = self._snapshot
         self._snapshot = None
         return State(_snapshot)
+
+    def add_model(self, name: str, fields: dict[str, pw.Field], meta: dict[str, Any]) -> None:
+        attrs = fields.copy()
+        attrs["Meta"] = type("Meta", (object,), meta)
+        model = type(name, (pw.Model,), attrs)
+        self[name] = model

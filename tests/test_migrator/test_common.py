@@ -29,8 +29,9 @@ def test_migrator_sqlite_common():
         customer_id = pw.ForeignKeyField(Customer, column_name="customer_id")
 
     migrator.run()
-    assert Customer == migrator.state["customer"]
-    assert Order == migrator.state["order"]
+
+    Customer = migrator.state["customer"]
+    Order = migrator.state["order"]  # noqa: F811
 
     migrator.add_fields("order", finished=pw.BooleanField(default=False))
     migrator.run()
@@ -214,7 +215,7 @@ def test_run_sql(patched_pg_db: PatchedPgDatabase):
 
     migrator.run()
 
-    assert User.get(first_name="First", last_name="Last") is not None
+    assert migrator.state["user"].get(first_name="First", last_name="Last") is not None
 
 
 def test_run_sql_w_params(patched_pg_db: PatchedPgDatabase):
@@ -238,7 +239,7 @@ def test_run_sql_w_params(patched_pg_db: PatchedPgDatabase):
 
     migrator.run()
 
-    assert User.get(first_name="First", last_name="Last") is not None
+    assert migrator.state["user"].get(first_name="First", last_name="Last") is not None
 
 
 def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
@@ -267,7 +268,7 @@ def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
 
     migrator.run()
 
-    assert not hasattr(User, "last_name")
+    assert not hasattr(migrator.state["User"], "last_name")
     assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
 
 
@@ -285,7 +286,7 @@ def test_rename_table(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.rename_table("user", "new_name")
     migrator.run()
 
-    assert User._meta.table_name == "new_name"
+    assert migrator.state["User"]._meta.table_name == "new_name"
 
     _, _, rename_table, _, rename_seq, rename_index1, rename_index2 = patched_pg_db.queries
 

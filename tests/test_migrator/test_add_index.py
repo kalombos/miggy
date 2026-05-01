@@ -38,5 +38,3 @@ def test_add_index(patched_pg_db: PatchedPgDatabase, index_params: dict[str, Any
 
     migrator.run()
     assert patched_pg_db.queries == [expected]
-
-    Company.drop_table(safe=True)
