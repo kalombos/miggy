@@ -6,7 +6,9 @@ from playhouse.db_url import connect
 from playhouse.migrate import Operation
 
 from miggy import Migrator, types
-from miggy.migrator import MigrateOperation, SchemaMigrator, State
+from miggy.migrator import SchemaMigrator
+from miggy.operations import MigrateOperation
+from miggy.state import State
 from miggy.utils import delete_field
 from tests.conftest import PatchedPgDatabase
 
