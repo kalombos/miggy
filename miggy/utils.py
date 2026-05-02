@@ -158,3 +158,7 @@ def delete_field(model: ModelCls, field: pw.Field) -> None:
 
 def fk_postfix(name: str) -> str:
     return name if name.endswith("_id") else name + "_id"
+
+
+class LazyModel(str):
+    pass

@@ -39,10 +39,14 @@ def test_field_serializer_serialize() -> None:
 
 
 def test_serialize_field() -> None:
+    class LinkModel(pw.Model):
+        some_field = pw.CharField()
+
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
         status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
         rating = IntEnumField(Rating)
+        link_model = pw.ForeignKeyField(LinkModel)
 
     assert serialize_field(SomeModel.name) == (
         """name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
@@ -51,6 +55,9 @@ def test_serialize_field() -> None:
         """status = pw.CharField(default='active', max_length=100, null=True)"""
     )
     assert serialize_field(SomeModel.rating) == ("""rating=pw.SmallIntegerField()""")
+    assert serialize_field(SomeModel.link_model) == (
+        """link_model=pw.ForeignKeyField(field='id', model=migrator.state['linkmodel'])"""
+    )
 
 
 def test_model_serializer() -> None:
