@@ -315,8 +315,8 @@ class ChangeFields(MigrateOperation):
             is_old_field_fk
             and is_new_field_fk
             and (
-                ForeignKeyFieldDeconstructor.fk_to_params(old_field)
-                == ForeignKeyFieldDeconstructor.fk_to_params(new_field)
+                ForeignKeyFieldDeconstructor.deconstruct_fk_params(old_field)
+                == ForeignKeyFieldDeconstructor.deconstruct_fk_params(new_field)
             )
         ):
             # Nothing's changed for fk

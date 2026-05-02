@@ -39,7 +39,7 @@ class DefaultSerializer(BaseSerializer):
     def serialize(self) -> str:
         default_constraint = self.value
         return 'pw.SQL("DEFAULT %s")' % default_constraint.value.replace('"', '\\"')
-    
+
 
 class LazyModelSerializer(BaseSerializer):
     def serialize(self) -> str:
@@ -106,7 +106,7 @@ class FieldSerializer:
     def get_field(self) -> str:
         # Generate the field definition for this column.
         field_params = self.get_field_parameters()
-        for name in ("default", "constraints", "column_name", "on_delete", "on_update", "constraint_name"):
+        for name in ("default", "constraints", "column_name", "on_delete", "on_update", "constraint_name", "model"):
             if name in field_params:
                 field_params[name] = serialize_value(field_params[name])
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
@@ -142,5 +142,5 @@ def serialize_value(value) -> str:
     if isinstance(value, Default):
         return DefaultSerializer(value).serialize()
     if isinstance(value, LazyModel):
-        return LazyModel(value).serialize()
+        return LazyModelSerializer(value).serialize()
     return BaseSerializer(value=value).serialize()

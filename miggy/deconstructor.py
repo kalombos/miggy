@@ -66,8 +66,8 @@ class DecimalFieldDeconstructor(FieldDeconstructor):
 
 class ForeignKeyFieldDeconstructor(FieldDeconstructor):
     @staticmethod
-    def fk_to_params(field: pw.ForeignKeyField) -> dict[str, Any]:
-        params = {"model": field.rel_model._meta.name}
+    def deconstruct_fk_params(field: pw.ForeignKeyField) -> dict[str, Any]:
+        params = {"model": LazyModel(field.rel_model._meta.name)}
         if field.on_delete is not None:
             params["on_delete"] = field.on_delete
         if field.on_update is not None:
@@ -82,8 +82,7 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
 
     def deconstruct(self) -> dict[str, Any]:
         params = super().deconstruct()
-        params["model"] = LazyModel(self.field.rel_model._meta.name)
-        params.update(self.fk_to_params(self.field))
+        params.update(self.deconstruct_fk_params(self.field))
         return params
 
 

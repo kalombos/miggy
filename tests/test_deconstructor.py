@@ -13,7 +13,7 @@ from miggy.deconstructor import (
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
-from miggy.utils import Default
+from miggy.utils import Default, LazyModel
 from tests.helpers import Rating, Status
 
 
@@ -46,7 +46,7 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
                 _M1, on_delete="CASCADE", on_update="RESTRICT", constraint_name="constraint_name", null=True
             ),
             {
-                "model": "_m1",
+                "model": LazyModel("_m1"),
                 "constraint_name": "constraint_name",
                 "index": (True, False),
                 "on_delete": "CASCADE",
@@ -59,7 +59,7 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             "some_field",
             pw.ForeignKeyField(_M1, column_name="some_column_id"),
             {
-                "model": "_m1",
+                "model": LazyModel("_m1"),
                 "column_name": "some_column_id",
                 "index": (True, False),
                 "type": pw.ForeignKeyField,
@@ -69,7 +69,7 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             "some_field",
             pw.ForeignKeyField(_M1, column_name="some_field"),
             {
-                "model": "_m1",
+                "model": LazyModel("_m1"),
                 "column_name": "some_field",
                 "index": (True, False),
                 "type": pw.ForeignKeyField,
@@ -79,7 +79,7 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             "some_field",
             pw.ForeignKeyField(_M1),
             {
-                "model": "_m1",
+                "model": LazyModel("_m1"),
                 "index": (True, False),
                 "type": pw.ForeignKeyField,
             },
@@ -92,6 +92,36 @@ def test_foreignkey_field_deconstructor_deconstruct(field_name: str, field: pw.F
 
     MyTestModel._meta.add_field(field_name, field)
     assert ForeignKeyFieldDeconstructor(field).deconstruct() == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        (
+            pw.ForeignKeyField(
+                _M1, on_delete="CASCADE", on_update="RESTRICT", constraint_name="constraint_name", null=True
+            ),
+            {
+                "model": LazyModel("_m1"),
+                "constraint_name": "constraint_name",
+                "on_delete": "CASCADE",
+                "on_update": "RESTRICT",
+            },
+        ),
+        (
+            pw.ForeignKeyField(_M1, column_name="some_column_id"),
+            {
+                "model": LazyModel("_m1"),
+            },
+        ),
+    ],
+)
+def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[str, Any]) -> None:
+    class MyTestModel(pw.Model):
+        pass
+
+    MyTestModel._meta.add_field("field_name", field)
+    assert ForeignKeyFieldDeconstructor.deconstruct_fk_params(field) == expected
 
 
 @pytest.mark.parametrize(
