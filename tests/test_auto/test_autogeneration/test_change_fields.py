@@ -46,10 +46,10 @@ class _M1(pw.Model):
         ),
         pytest.param(
             pw.IntegerField(),
-            pw.ForeignKeyField(_M1, column_name="new_name", on_update="RESTRICT"),
+            pw.ForeignKeyField(_M1, column_name="new_name", on_update="RESTRICT", field="name"),
             (
                 "age=pw.ForeignKeyField(column_name='new_name', "
-                "field='id', model=migrator.state['_m1'], on_update='RESTRICT')"
+                "field='name', model=migrator.state['_m1'], on_update='RESTRICT')"
             ),
             id="add_fk",
         ),

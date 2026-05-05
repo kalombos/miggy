@@ -94,25 +94,45 @@ def test_foreignkey_field_deconstructor_deconstruct(field_name: str, field: pw.F
     assert ForeignKeyFieldDeconstructor(field).deconstruct() == expected
 
 
+class _TestDeconstructFkParamsNamespace:
+    class M1(pw.Model):
+        name = pw.CharField()
+
+
 @pytest.mark.parametrize(
     ("field", "expected"),
     [
-        (
+        pytest.param(
             pw.ForeignKeyField(
-                _M1, on_delete="CASCADE", on_update="RESTRICT", constraint_name="constraint_name", null=True
+                _TestDeconstructFkParamsNamespace.M1,
+                on_delete="CASCADE",
+                on_update="RESTRICT",
+                constraint_name="constraint_name",
+                null=True,
+                field="name",
             ),
             {
-                "model": LazyModel("_m1"),
+                "model": LazyModel("m1"),
                 "constraint_name": "constraint_name",
                 "on_delete": "CASCADE",
                 "on_update": "RESTRICT",
+                "field": "name",
             },
+            id="custom_values",
         ),
-        (
-            pw.ForeignKeyField(_M1, column_name="some_column_id"),
+        pytest.param(
+            pw.ForeignKeyField(_TestDeconstructFkParamsNamespace.M1),
             {
-                "model": LazyModel("_m1"),
+                "model": LazyModel("m1"),
             },
+            id="default_values",
+        ),
+        pytest.param(
+            pw.ForeignKeyField(_TestDeconstructFkParamsNamespace.M1, field="id"),
+            {
+                "model": LazyModel("m1"),
+            },
+            id="field_same_primary_key",
         ),
     ],
 )

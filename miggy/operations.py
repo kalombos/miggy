@@ -284,9 +284,7 @@ class ChangeFields(MigrateOperation):
         self.fields = fields
 
     def state_forwards(self, state: State) -> None:
-        model = state[self.model_name]
-        for name, field in self.fields.items():
-            model._meta.add_field(name, field)
+        state.add_fields(self.model_name, **self.fields)
 
     def handle_indexes(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
@@ -323,6 +321,7 @@ class ChangeFields(MigrateOperation):
             return _ops
         table_name = old_field.model._meta.table_name
         if is_old_field_fk:
+            # we use new_field.column_name because we may have rename column before
             _ops.append(schema_migrator.drop_foreign_key_constraint(table_name, new_field.column_name))
         if is_new_field_fk:
             _ops.append(
@@ -330,7 +329,7 @@ class ChangeFields(MigrateOperation):
                     table_name,
                     new_field.column_name,
                     new_field.rel_model._meta.table_name,
-                    new_field.rel_field.name,
+                    new_field.rel_field.column_name,
                     new_field.on_delete,
                     new_field.on_update,
                     constraint_name=new_field.constraint_name,

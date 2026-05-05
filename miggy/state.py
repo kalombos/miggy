@@ -60,3 +60,8 @@ class State:
         attrs["Meta"] = type("Meta", (object,), meta)
         model = type(name, (pw.Model,), attrs)
         self[name] = model
+
+    def add_fields(self, model_name: str, **fields: pw.Field) -> None:
+        model = self[model_name]
+        for field_name, field in fields.items():
+            model._meta.add_field(field_name, field)
