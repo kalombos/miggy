@@ -24,3 +24,24 @@ def test_add_model() -> None:
     assert isinstance(model.email, pw.CharField)
 
     assert isinstance(model.age, pw.IntegerField)
+
+
+def test_add_fields() -> None:
+
+    class User(pw.Model):
+        test = pw.CharField()
+
+    state = State()
+
+    state["user"] = User
+    state.add_fields(
+        "User",
+        age=pw.IntegerField(),
+        email=pw.CharField(max_length=255, null=True),
+    )
+    model = state["user"]
+
+    assert model.email.max_length == 255
+    assert model.email.null is True
+    assert isinstance(model.email, pw.CharField)
+    assert isinstance(model.age, pw.IntegerField)

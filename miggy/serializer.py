@@ -75,19 +75,11 @@ class FieldSerializer:
         del params["type"]
         del params["index"]
 
-    def get_field_parameters(self):
-        params = {}
-        field = self.field_deconstructor.field
-        if self.extra_parameters is not None:
-            params.update(self.extra_parameters)
+    def get_field_parameters(self) -> dict[str, Any]:
+        params = self.extra_parameters
 
         if self.primary_key and not issubclass(self.field_class, pw.AutoField):
             params["primary_key"] = True
-
-        # Handle ForeignKeyField-specific attributes.
-        if self.is_foreign_key():
-            if field.rel_field:
-                params["field"] = "'%s'" % field.rel_field.name
 
         # Handle indexes on column.
         if not self.is_primary_key():
@@ -106,7 +98,16 @@ class FieldSerializer:
     def get_field(self) -> str:
         # Generate the field definition for this column.
         field_params = self.get_field_parameters()
-        for name in ("default", "constraints", "column_name", "on_delete", "on_update", "constraint_name", "model"):
+        for name in (
+            "default",
+            "constraints",
+            "column_name",
+            "on_delete",
+            "on_update",
+            "constraint_name",
+            "model",
+            "field",
+        ):
             if name in field_params:
                 field_params[name] = serialize_value(field_params[name])
         param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))

@@ -56,7 +56,7 @@ def test_serialize_field() -> None:
     )
     assert serialize_field(SomeModel.rating) == ("""rating=pw.SmallIntegerField()""")
     assert serialize_field(SomeModel.link_model) == (
-        """link_model=pw.ForeignKeyField(field='id', model=migrator.state['linkmodel'])"""
+        """link_model=pw.ForeignKeyField(model=migrator.state['linkmodel'])"""
     )
 
 

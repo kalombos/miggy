@@ -68,12 +68,14 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
     @staticmethod
     def deconstruct_fk_params(field: pw.ForeignKeyField) -> dict[str, Any]:
         params = {"model": LazyModel(field.rel_model._meta.name)}
-        if field.on_delete is not None:
+        if field.on_delete:
             params["on_delete"] = field.on_delete
-        if field.on_update is not None:
+        if field.on_update:
             params["on_update"] = field.on_update
-        if field.constraint_name is not None:
+        if field.constraint_name:
             params["constraint_name"] = field.constraint_name
+        if field.rel_field.name != field.rel_model._meta.primary_key.name:
+            params["field"] = field.rel_field.name
         return params
 
     def deconstruct_column_name(self, params: dict[str, Any]) -> None:
