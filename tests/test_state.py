@@ -4,7 +4,6 @@ from miggy.state import State
 
 
 def test_add_model() -> None:
-
     state = State()
     state.add_model(
         "User",
@@ -27,7 +26,6 @@ def test_add_model() -> None:
 
 
 def test_add_fields() -> None:
-
     class User(pw.Model):
         test = pw.CharField()
 
