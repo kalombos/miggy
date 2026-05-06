@@ -1,13 +1,12 @@
 import peewee as pw
 
-from miggy.migrator import SchemaMigrator
 from miggy.operations import CreateModel
+from miggy.schema import SchemaMigrator
 from miggy.state import State
 from tests.conftest import PatchedPgDatabase
 
 
 def test_state_forwards() -> None:
-
     operation = CreateModel(
         "User",
         {
@@ -26,7 +25,6 @@ def test_state_forwards() -> None:
 
 
 def test_database_forwards(patched_pg_db: PatchedPgDatabase) -> None:
-
     operation = CreateModel(
         "User",
         {

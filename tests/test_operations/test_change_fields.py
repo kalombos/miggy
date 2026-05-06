@@ -1,14 +1,13 @@
 import peewee as pw
 import pytest
 
-from miggy.migrator import SchemaMigrator
 from miggy.operations import ChangeFields
+from miggy.schema import SchemaMigrator
 from miggy.state import State
 from tests.conftest import PatchedPgDatabase
 
 
 def test_state_forwards() -> None:
-
     class User(pw.Model):
         test = pw.CharField()
 
@@ -103,7 +102,6 @@ class _TestHandleFkConstraintNamespace:
 def test_handle_fk_constraint(
     old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
 ) -> None:
-
     _TestHandleFkConstraintNamespace.RefModel._meta.database = patched_pg_db
     _TestHandleFkConstraintNamespace.RefModel.create_table()
 

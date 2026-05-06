@@ -20,7 +20,7 @@ from miggy.utils import (
 )
 
 if TYPE_CHECKING:
-    from miggy.migrator import SchemaMigrator
+    from miggy.schema import SchemaMigrator
 
 RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
