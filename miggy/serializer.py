@@ -1,5 +1,5 @@
 import enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import peewee as pw
 
@@ -58,48 +58,21 @@ class FieldSerializer:
     }
 
     def __init__(self, field: pw.Field) -> None:
-        self.field_deconstructor = deconstructor_factory(field)
-        self.name = field.name
-        self.field_class = self.field_deconstructor.field_type
-        self.primary_key = field.primary_key
-
-        params = self.field_deconstructor.deconstruct()
-        self.clear_for_backward_compatibility(params)
-        self.extra_parameters = params
-
-    @staticmethod
-    def clear_for_backward_compatibility(params: dict[str, Any]) -> None:
-        del params["type"]
-
-    def get_field_parameters(self) -> dict[str, Any]:
-        params = self.extra_parameters
-
-        if self.primary_key and not issubclass(self.field_class, pw.AutoField):
-            params["primary_key"] = True
-        return params
-
-    def get_field(self) -> str:
-        # Generate the field definition for this column.
-        field_params = self.get_field_parameters()
-        for name in (
-            "default",
-            "constraints",
-            "column_name",
-            "on_delete",
-            "on_update",
-            "constraint_name",
-            "model",
-            "field",
-        ):
-            if name in field_params:
-                field_params[name] = serialize_value(field_params[name])
-        param_str = ", ".join("%s=%s" % (k, v) for k, v in sorted(field_params.items()))
-        return "%s(%s)" % (self.field_class.__name__, param_str)
+        self.field = field
 
     def serialize(self) -> str:
-        # Generate the field definition for this column.
-        field = self.get_field()
-        module = self.FIELD_MODULES_MAP.get(self.field_class.__name__, "pw")
+        deconstructed = deconstructor_factory(self.field).deconstruct()
+
+        field_class = deconstructed["type"]
+        del deconstructed["type"]
+
+        if self.field.primary_key and not issubclass(field_class, pw.AutoField):
+            deconstructed["primary_key"] = True
+
+        param_str = ", ".join("%s=%s" % (k, serialize_value(v)) for k, v in sorted(deconstructed.items()))
+        field = "%s(%s)" % (field_class.__name__, param_str)
+
+        module = self.FIELD_MODULES_MAP.get(field_class.__name__, "pw")
         return "{module}.{field}".format(field=field, module=module)
 
 
@@ -107,7 +80,7 @@ class ModelSerializer(BaseSerializer):
     def serialize(self) -> str:
         model: ModelCls = self.value
         deconstructed = ModelDeconstructor(model).deconstruct()
-        deconstructed["fields"] = {n: FieldSerializer(f).serialize for n, f in deconstructed["fields"].items()}
+        deconstructed["fields"] = {n: FieldSerializer(f).serialize() for n, f in deconstructed["fields"].items()}
         # WIP
         return repr(deconstructed)
 
