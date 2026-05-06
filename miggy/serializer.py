@@ -62,9 +62,6 @@ class FieldSerializer:
         self.name = field.name
         self.field_class = self.field_deconstructor.field_type
         self.primary_key = field.primary_key
-        self.column_name = field.column_name
-        self.index = field.index
-        self.unique = field.unique
 
         params = self.field_deconstructor.deconstruct()
         self.clear_for_backward_compatibility(params)
@@ -73,27 +70,13 @@ class FieldSerializer:
     @staticmethod
     def clear_for_backward_compatibility(params: dict[str, Any]) -> None:
         del params["type"]
-        del params["index"]
 
     def get_field_parameters(self) -> dict[str, Any]:
         params = self.extra_parameters
 
         if self.primary_key and not issubclass(self.field_class, pw.AutoField):
             params["primary_key"] = True
-
-        # Handle indexes on column.
-        if not self.is_primary_key():
-            if self.unique:
-                params["unique"] = True
-            elif self.index and not self.is_foreign_key():
-                params["index"] = True
         return params
-
-    def is_primary_key(self) -> bool:
-        return self.field_class is pw.AutoField or self.primary_key
-
-    def is_foreign_key(self) -> bool:
-        return self.field_class is pw.ForeignKeyField
 
     def get_field(self) -> str:
         # Generate the field definition for this column.

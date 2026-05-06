@@ -48,7 +48,6 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             {
                 "model": LazyModel("_m1"),
                 "constraint_name": "constraint_name",
-                "index": (True, False),
                 "on_delete": "CASCADE",
                 "on_update": "RESTRICT",
                 "null": True,
@@ -61,7 +60,6 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             {
                 "model": LazyModel("_m1"),
                 "column_name": "some_column_id",
-                "index": (True, False),
                 "type": pw.ForeignKeyField,
             },
         ),
@@ -71,7 +69,6 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             {
                 "model": LazyModel("_m1"),
                 "column_name": "some_field",
-                "index": (True, False),
                 "type": pw.ForeignKeyField,
             },
         ),
@@ -80,7 +77,42 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             pw.ForeignKeyField(_M1),
             {
                 "model": LazyModel("_m1"),
-                "index": (True, False),
+                "type": pw.ForeignKeyField,
+            },
+        ),
+        # test indexes
+        (
+            "some_field",
+            pw.ForeignKeyField(_M1, index=False),
+            {
+                "model": LazyModel("_m1"),
+                "index": False,
+                "type": pw.ForeignKeyField,
+            },
+        ),
+        (
+            "some_field",
+            pw.ForeignKeyField(_M1, unique=True, index=False),
+            {
+                "model": LazyModel("_m1"),
+                "unique": True,
+                "type": pw.ForeignKeyField,
+            },
+        ),
+        (
+            "some_field",
+            pw.ForeignKeyField(_M1, unique=True),
+            {
+                "model": LazyModel("_m1"),
+                "unique": True,
+                "type": pw.ForeignKeyField,
+            },
+        ),
+        (
+            "some_field",
+            pw.ForeignKeyField(_M1, primary_key=True, index=False),
+            {
+                "model": LazyModel("_m1"),
                 "type": pw.ForeignKeyField,
             },
         ),
@@ -148,19 +180,22 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
     ("field", "expected"),
     [
         (
-            pw.CharField(max_length=55),
-            {"index": (False, False), "type": pw.CharField, "max_length": 55},
-        ),
-        (pw.IntegerField(), {"index": (False, False), "type": pw.IntegerField}),
-        (
             pw.ForeignKeyField(_M1, null=True),
             {
                 "model": "_m1",
-                "index": (True, False),
                 "null": True,
                 "type": pw.ForeignKeyField,
             },
         ),
+        # test indexes
+        (
+            pw.CharField(max_length=55, index=True, unique=True),
+            {"unique": True, "type": pw.CharField, "max_length": 55},
+        ),
+        (pw.IntegerField(unique=True), {"unique": True, "type": pw.IntegerField}),
+        (pw.IntegerField(index=True), {"index": True, "type": pw.IntegerField}),
+        (pw.IntegerField(index=True, primary_key=True), {"type": pw.IntegerField}),
+        (pw.AutoField(index=True, unique=True), {"type": pw.AutoField}),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:

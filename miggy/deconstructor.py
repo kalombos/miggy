@@ -39,6 +39,15 @@ class FieldDeconstructor(BaseDeconstructor):
         if self.field.name != self.field.column_name:
             params["column_name"] = self.field.column_name
 
+    def deconstruct_index(self) -> dict[str, Any]:
+        params = {}
+        if not self.field.primary_key:
+            if self.field.unique:
+                params["unique"] = True
+            elif self.field.index:
+                params["index"] = True
+        return params
+
     def deconstruct(self) -> dict[str, Any]:
         field = self.field
         params = self.get_type_modifiers()
@@ -49,8 +58,9 @@ class FieldDeconstructor(BaseDeconstructor):
         if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
         self.deconstruct_column_name(params)
+
         params["type"] = self.field_type
-        params["index"] = field.index and not field.unique, field.unique
+        params.update(self.deconstruct_index())
         return params
 
 
@@ -81,6 +91,15 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
     def deconstruct_column_name(self, params: dict[str, Any]) -> None:
         if self.field.column_name != fk_postfix(self.field.name):
             params["column_name"] = self.field.column_name
+
+    def deconstruct_index(self) -> dict[str, Any]:
+        params = {}
+        if not self.field.primary_key:
+            if self.field.unique:
+                params["unique"] = True
+            elif not self.field.index:
+                params["index"] = False
+        return params
 
     def deconstruct(self) -> dict[str, Any]:
         params = super().deconstruct()
