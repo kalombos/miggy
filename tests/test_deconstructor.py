@@ -273,14 +273,13 @@ def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) 
     [
         (
             pw.CharField(max_length=50),
-            {"max_length": 50, "type": pw.CharField, "index": (False, False)},
+            {"max_length": 50, "type": pw.CharField},
         ),
         (
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
             {
                 "constraints": [{"type": Default, "value": "'words'"}],
                 "type": pw.IntegerField,
-                "index": (False, False),
             },
         ),
     ],
@@ -316,7 +315,6 @@ class _TestModelDeconstructNamespace:
                     "name": {
                         "max_length": 255,
                         "type": pw.CharField,
-                        "index": (False, False),
                     }
                 },
                 "meta": {"table_name": "simplemodel"},
@@ -330,11 +328,9 @@ class _TestModelDeconstructNamespace:
                     "name": {
                         "max_length": 5,
                         "type": pw.CharField,
-                        "index": (False, False),
                     },
                     "age": {
                         "type": pw.IntegerField,
-                        "index": (False, False),
                     },
                 },
                 "meta": {"table_name": "complicatedmodel", "schema": "new_schema", "primary_key": ("name", "age")},
