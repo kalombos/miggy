@@ -7,6 +7,7 @@ import pytest
 from miggy.auto import add_fields, create_model, diff_many, diff_one, model_to_code
 from miggy.cli import get_router
 from miggy.types import ModelCls
+from miggy.utils import copy_model
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -144,3 +145,58 @@ def test_proper_order_for_fk() -> None:
         # we add fk to it after
         add_fields(user_model, user_model.test),
     ]
+
+
+@pytest.mark.parametrize(
+    ("fields_before", "fields_after", "expected"),
+    [
+        pytest.param(
+            {
+                "age": pw.IntegerField(),
+                "uid": pw.IntegerField(primary_key=True),
+                "name": pw.CharField(),
+                "guid": pw.IntegerField(),
+            },
+            {
+                "age": pw.IntegerField(),
+                "uid": pw.IntegerField(),
+                "name": pw.CharField(),
+                "guid": pw.IntegerField(primary_key=True),
+            },
+            """migrator.change_fields('oldtest', uid=pw.IntegerField(),\n    guid=pw.IntegerField(primary_key=True))""",
+        ),
+        pytest.param(
+            {
+                "age": pw.IntegerField(),
+                "uid": pw.IntegerField(),
+                "name": pw.CharField(),
+                "guid": pw.IntegerField(primary_key=True),
+            },
+            {
+                "age": pw.IntegerField(),
+                "uid": pw.IntegerField(primary_key=True),
+                "name": pw.CharField(),
+                "guid": pw.IntegerField(),
+            },
+            """migrator.change_fields('oldtest', guid=pw.IntegerField(),\n    uid=pw.IntegerField(primary_key=True))""",
+        ),
+    ],
+)
+def test_primary_key_order(
+    fields_before: dict[str, pw.Field], fields_after: dict[str, pw.Field], expected: str
+) -> None:
+    class OldTest(pw.Model):
+        mock_field = pw.CharField()
+
+        class Meta:
+            table_name = "test"
+            primary_key = False
+
+    for n, f in fields_before.items():
+        OldTest._meta.add_field(n, f)
+
+    Test = copy_model(OldTest)
+    for n, f in fields_after.items():
+        Test._meta.add_field(n, f)
+    code = diff_one(Test, OldTest)
+    assert code[0] == expected

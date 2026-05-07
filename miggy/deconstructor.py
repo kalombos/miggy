@@ -35,9 +35,10 @@ class FieldDeconstructor(BaseDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
         return {}
 
-    def deconstruct_column_name(self, params: dict[str, Any]) -> None:
+    def deconstruct_column_name(self) -> dict[str, Any]:
         if self.field.name != self.field.column_name:
-            params["column_name"] = self.field.column_name
+            return {"column_name": self.field.column_name}
+        return {}
 
     def deconstruct_index(self) -> dict[str, Any]:
         params = {}
@@ -48,6 +49,11 @@ class FieldDeconstructor(BaseDeconstructor):
                 params["index"] = True
         return params
 
+    def deconstruct_primary_key(self) -> dict[str, Any]:
+        if self.field.primary_key:
+            return {"primary_key": True}
+        return {}
+
     def deconstruct(self) -> dict[str, Any]:
         field = self.field
         params = self.get_type_modifiers()
@@ -57,9 +63,10 @@ class FieldDeconstructor(BaseDeconstructor):
             params["default"] = default
         if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
-        self.deconstruct_column_name(params)
 
         params["type"] = self.field_type
+        params.update(self.deconstruct_column_name())
+        params.update(self.deconstruct_primary_key())
         params.update(self.deconstruct_index())
         return params
 
@@ -88,9 +95,10 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
             params["field"] = field.rel_field.name
         return params
 
-    def deconstruct_column_name(self, params: dict[str, Any]) -> None:
+    def deconstruct_column_name(self) -> dict[str, Any]:
         if self.field.column_name != fk_postfix(self.field.name):
-            params["column_name"] = self.field.column_name
+            return {"column_name": self.field.column_name}
+        return {}
 
     def deconstruct_index(self) -> dict[str, Any]:
         params = {}
@@ -107,8 +115,13 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
         return params
 
 
+class AutoFieldDeconstructor(FieldDeconstructor):
+    def deconstruct_primary_key(self) -> dict[str, Any]:
+        return {}
+
+
 class ModelDeconstructor(BaseDeconstructor):
-    def __init__(self, model: ModelCls):
+    def __init__(self, model: ModelCls) -> None:
         self.model = model
 
     def deconstruct(self) -> dict[str, Any]:
@@ -130,6 +143,8 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
         return CharFieldDeconstructor(f)
     if isinstance(f, pw.DecimalField):
         return DecimalFieldDeconstructor(f)
+    if isinstance(f, pw.AutoField):
+        return AutoFieldDeconstructor(f)
     return FieldDeconstructor(f)
 
 

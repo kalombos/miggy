@@ -113,6 +113,7 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
             pw.ForeignKeyField(_M1, primary_key=True, index=False),
             {
                 "model": LazyModel("_m1"),
+                "primary_key": True,
                 "type": pw.ForeignKeyField,
             },
         ),
@@ -187,6 +188,8 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
                 "type": pw.ForeignKeyField,
             },
         ),
+        # test column_name
+        (pw.IntegerField(column_name="some_name"), {"column_name": "some_name", "type": pw.IntegerField}),
         # test indexes
         (
             pw.CharField(max_length=55, index=True, unique=True),
@@ -194,8 +197,9 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         ),
         (pw.IntegerField(unique=True), {"unique": True, "type": pw.IntegerField}),
         (pw.IntegerField(index=True), {"index": True, "type": pw.IntegerField}),
-        (pw.IntegerField(index=True, primary_key=True), {"type": pw.IntegerField}),
-        (pw.AutoField(index=True, unique=True), {"type": pw.AutoField}),
+        (pw.IntegerField(index=True, primary_key=True), {"type": pw.IntegerField, "primary_key": True}),
+        # test autofield
+        (pw.AutoField(index=True, unique=True, primary_key=True), {"type": pw.AutoField}),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
