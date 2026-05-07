@@ -380,7 +380,7 @@ class ChangeFields(MigrateOperation):
 
             if old_column_name != field.column_name:
                 _ops.append(schema_migrator.rename_field(table_name, old_field, field))
-
+            _ops.append(schema_migrator._change_primary_key(old_field, field))
             _ops.extend(self.handle_type(old_field, field, schema_migrator))
             _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
             _ops.extend(self.handle_default_constraint(old_field, field, schema_migrator))

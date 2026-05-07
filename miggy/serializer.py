@@ -66,9 +66,6 @@ class FieldSerializer:
         field_class = deconstructed["type"]
         del deconstructed["type"]
 
-        if self.field.primary_key and not issubclass(field_class, pw.AutoField):
-            deconstructed["primary_key"] = True
-
         param_str = ", ".join("%s=%s" % (k, serialize_value(v)) for k, v in sorted(deconstructed.items()))
         field = "%s(%s)" % (field_class.__name__, param_str)
 

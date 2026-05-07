@@ -114,6 +114,19 @@ def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str]
     return create_changes, drop_changes
 
 
+def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
+    _fields = []
+    pk_field = None
+    for f in fields:
+        if f.primary_key:
+            pk_field = f
+        else:
+            _fields.append(f)
+    if pk_field:
+        _fields.append(pk_field)
+    return _fields
+
+
 def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     """Find difference between given peewee models."""
     changes = []
@@ -148,7 +161,8 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
             fields_.append(field1)
 
     if fields_:
-        changes.append(change_fields(current, *fields_))
+        fields_ = _primary_key_last(fields_)
+        changes.append(change_fields(current, *_primary_key_last(fields_)))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
