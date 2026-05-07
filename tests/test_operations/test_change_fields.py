@@ -4,6 +4,7 @@ import pytest
 from miggy.operations import ChangeFields
 from miggy.schema import SchemaMigrator
 from miggy.state import State
+from miggy.utils import copy_model
 from tests.conftest import PatchedPgDatabase
 
 
@@ -123,4 +124,45 @@ def test_handle_fk_constraint(
         o.run()
     # remove query for constraints
     queries = [q for q in patched_pg_db.queries if "FROM information_schema.table_constraints" not in q]
+    assert queries == expected
+
+
+@pytest.mark.parametrize(
+    ("old_field", "new_field", "expected"),
+    [
+        pytest.param(
+            pw.IntegerField(primary_key=False),
+            pw.IntegerField(primary_key=True),
+            ['ALTER TABLE "oldmodel" ADD PRIMARY KEY ("field")'],
+        ),
+    ],
+)
+def test__database_forwards(
+    old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
+) -> None:
+
+    class OldModel(pw.Model):
+        field = old_field
+
+        class Meta:
+            primary_key = False
+            database = patched_pg_db
+
+    OldModel.create_table()
+    patched_pg_db.clear_queries()
+    NewModel = copy_model(OldModel)
+    NewModel._meta.add_field("field", new_field)
+
+    operation = ChangeFields(
+        "oldmodel",
+        field=new_field,
+    )
+
+    from_state = State({"oldmodel": OldModel})
+    to_state = State({"oldmodel": NewModel})
+
+    for o in operation.database_forwards(SchemaMigrator.from_database(patched_pg_db), from_state, to_state):
+        o.run()
+
+    queries = [q for q in patched_pg_db.queries if "FROM pg_constraint" not in q]
     assert queries == expected

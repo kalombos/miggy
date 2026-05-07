@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 import peewee as pw
-from playhouse.migrate import SQL, MySQLDatabase, PostgresqlDatabase, SqliteDatabase, operation
+from playhouse.migrate import MySQLDatabase, PostgresqlDatabase, SqliteDatabase, operation
 from playhouse.migrate import MySQLMigrator as MqM
 from playhouse.migrate import PostgresqlMigrator as PgM
 from playhouse.migrate import SchemaMigrator as ScM
@@ -27,14 +27,31 @@ class SchemaMigrator(ScM):
         return super(SchemaMigrator, cls).from_database(database)
 
     @operation
+    def drop_primary_key_constraint(self, table: str, column_name: str):
+        raise NotImplementedError
+
+    @operation
+    def add_primary_key_constraint(self, table: str, column_name: str):
+        raise NotImplementedError
+
+    @operation
+    def _change_primary_key(self, old_field: pw.Field, new_field: pw.Field):
+        table_name = new_field.model._meta.table_name
+        if not old_field.primary_key and new_field.primary_key:
+            return self.add_primary_key_constraint(table_name, new_field.column_name)
+        elif old_field.primary_key and not new_field.primary_key:
+            return self.drop_primary_key_constraint(table_name)
+        return []
+
+    @operation
     def select_schema(self, schema):
         """Select database schema"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @operation
     def sql(self, sql, params: tuple[Any, ...] | None = None):
         """Execute raw SQL."""
-        return SQL(sql, params)
+        return pw.SQL(sql, params)
 
     @operation
     def add_column(self, table, column_name, field):
@@ -158,10 +175,33 @@ class PostgresqlMigrator(SchemaMigrator, PgM):
         cursor = self.database.execute_sql(sql, (table, column_name))
         return cursor.fetchall()[0][0]
 
+    def get_primary_key_constraint(self, table: str) -> str:
+        sql = """
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = %s::regclass
+            AND contype = 'p';
+        """
+        cursor = self.database.execute_sql(sql, (table,))
+        return cursor.fetchall()[0][0]
+
+    @operation
+    def drop_primary_key_constraint(self, table: str):
+        pk_constraint = self.get_primary_key_constraint(table)
+        return self.drop_constraint(table, pk_constraint)
+
     @operation
     def drop_foreign_key_constraint(self, table: str, column_name: str):
         fk_constraint = self.get_foreign_key_constraint(table, column_name)
         return self.drop_constraint(table, fk_constraint)
+
+    @operation
+    def add_primary_key_constraint(self, table: str, *column_names: str):
+        return (
+            self._alter_table(self.make_context(), table)
+            .literal(" ADD PRIMARY KEY ")
+            .sql(pw.EnclosedNodeList([pw.Entity(column) for column in column_names]))
+        )
 
 
 class SqliteMigrator(SchemaMigrator, SqM):
