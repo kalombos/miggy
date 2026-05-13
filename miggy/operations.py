@@ -269,8 +269,9 @@ class AddFields(MigrateOperation):
     ) -> list[Operation]:
         ops = []
         model = to_state[self.model_name]
-        for field in self.fields.values():
-            ops.append(schema_migrator.add_column(model._meta.table_name, field.column_name, field))
+        for name in self.fields.keys():
+            field = model._meta.fields[name]
+            ops.append(schema_migrator.add_field(field))
         return ops
 
 
