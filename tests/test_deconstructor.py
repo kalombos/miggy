@@ -212,6 +212,26 @@ def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
 @pytest.mark.parametrize(
     ("field", "expected"),
     [
+        (
+            pw.ForeignKeyField(_M1, null=True),
+            {
+                "model": "_m1",
+                "null": True,
+                "type": pw.ForeignKeyField,
+            },
+        ),
+        # test column_name
+        (pw.IntegerField(column_name="some_name"), {"column_name": "some_name", "type": pw.IntegerField}),
+    ],
+)
+def test_deconstruct_unbound(field: pw.Field, expected: dict[str, Any]) -> None:
+    # TODO fix fk test
+    assert deconstructor_factory(field).deconstruct() == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
         (CharEnumField(Status), pw.CharField),
         (IntEnumField(Rating), pw.SmallIntegerField),
         (pw.CharField(), pw.CharField),

@@ -1,7 +1,3 @@
-
-
-import re
-
 from miggy.serializer import serialize_value
 
 
@@ -11,48 +7,35 @@ class OperationWriter:
         self.buff = []
         self.indentation = indentation
 
-    def _write(self, _arg_name, _arg_value):
+    def _write(self, _arg_value, _arg_name=None) -> None:
+        _arg_name_prefix = "%s=" % _arg_name if _arg_name else ""
         if isinstance(_arg_value, dict):
-            self.feed("%s={" % _arg_name)
+            self.feed("%s{" % _arg_name_prefix)
             self.indent()
             for key, value in _arg_value.items():
                 key_string = serialize_value(key)
                 arg_string = serialize_value(value)
-                args = arg_string.splitlines()
-                if len(args) > 1:
-                    self.feed("%s: %s" % (key_string, args[0]))
-                    for arg in args[1:-1]:
-                        self.feed(arg)
-                    self.feed("%s," % args[-1])
-                else:
-                    self.feed("%s: %s," % (key_string, arg_string))
+                self.feed("%s: %s," % (key_string, arg_string))
             self.unindent()
             self.feed("},")
         else:
             arg_string = serialize_value(_arg_value)
-            args = arg_string.splitlines()
-            if len(args) > 1:
-                self.feed("%s=%s" % (_arg_name, args[0]))
-                for arg in args[1:-1]:
-                    self.feed(arg)
-                self.feed("%s," % args[-1])
-            else:
-                self.feed("%s=%s," % (_arg_name, arg_string))
-
-    def get_func_name(self) -> str:
-        name = self.operation.__class__.__name__
-        shortcut = re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
-        return f"migrator.{shortcut}"
+            self.feed("%s%s," % (_arg_name_prefix, arg_string))
 
     def serialize(self) -> str:
-        params = self.operation.deconstruct()
-        self.feed("%s(" % self.get_func_name())
+        operation_call, args, kwargs = self.operation.deconstruct()
+
+        self.feed("%s(" % operation_call)
         self.indent()
-        for name, value in params.items():
-            self._write(name, value)
+
+        for arg_value in args:
+            self._write(arg_value)
+
+        for arg_name, arg_value in kwargs.items():
+            self._write(arg_value, arg_name)
 
         self.unindent()
-        self.feed("),")
+        self.feed(")")
         return self.render()
 
     def indent(self) -> None:

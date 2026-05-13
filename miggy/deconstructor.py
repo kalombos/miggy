@@ -35,8 +35,15 @@ class FieldDeconstructor(BaseDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
         return {}
 
+    def is_custom_column_name(self) -> bool:
+        return self.field.name != self.field.column_name
+
     def deconstruct_column_name(self) -> dict[str, Any]:
-        if self.field.name != self.field.column_name:
+        is_bound = hasattr(self.field, "model") and hasattr(self.field, "name")
+
+        if is_bound and self.is_custom_column_name():
+            return {"column_name": self.field.column_name}
+        if not is_bound and self.field.column_name is not None:
             return {"column_name": self.field.column_name}
         return {}
 
@@ -95,10 +102,8 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
             params["field"] = field.rel_field.name
         return params
 
-    def deconstruct_column_name(self) -> dict[str, Any]:
-        if self.field.column_name != fk_postfix(self.field.name):
-            return {"column_name": self.field.column_name}
-        return {}
+    def is_custom_column_name(self) -> bool:
+        return self.field.column_name != fk_postfix(self.field.name)
 
     def deconstruct_index(self) -> dict[str, Any]:
         params = {}

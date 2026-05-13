@@ -89,6 +89,8 @@ def serialize_field(field: pw.Field, add_space: bool = False) -> str:
 
 
 def serialize_value(value) -> str:
+    if isinstance(value, pw.Field):
+        return FieldSerializer(value).serialize()
     if isinstance(value, enum.Enum):
         return EnumSerializer(value).serialize()
     if isinstance(value, list):
