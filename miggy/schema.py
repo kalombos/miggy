@@ -54,14 +54,21 @@ class SchemaMigrator(ScM):
         return pw.SQL(sql, params)
 
     @operation
-    def add_column(self, table, column_name, field):
+    def add_field(self, field: pw.Field) -> list:
         # Adding a column is complicated by the fact that if there are rows
         # present and the field is non-null, then we need to first add the
         # column as a nullable field, then set the value, then add a not null
         # constraint.
-        default_constraint = get_default_constraint(field)
-        if not field.null and field.default is None and not default_constraint:
-            raise ValueError("%s is not null but has no default" % column_name)
+        column_name = field.column_name
+        table = field.model._meta.table_name
+
+        default_required = all(
+            (get_default_constraint(field) is None, not field.auto_increment, field.sequence is None, not field.null)
+        )
+        if default_required and field.default is None:
+            raise ValueError(
+                "%s is not null, not a sequence, and not a primary key, but has no default value" % column_name
+            )
 
         is_foreign_key = isinstance(field, pw.ForeignKeyField)
         if is_foreign_key and not field.rel_field:
@@ -69,10 +76,8 @@ class SchemaMigrator(ScM):
 
         operations = [self.alter_add_column(table, column_name, field)]
 
-        # In the event the field is *not* nullable and has no default constraint, update with the default
-        # value and set not null.
         if not field.null:
-            if not default_constraint:
+            if default_required:
                 operations.append(
                     self.apply_default(table, column_name, field),
                 )
