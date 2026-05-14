@@ -19,12 +19,9 @@ class EnumSerializer(BaseSerializer):
         return repr(self.value.value)
 
 
-
 class BaseSequenceSerializer(BaseSerializer):
     def _format(self) -> str:
-        raise NotImplementedError(
-            "Subclasses of BaseSequenceSerializer must implement the _format() method."
-        )
+        raise NotImplementedError("Subclasses of BaseSequenceSerializer must implement the _format() method.")
 
     def serialize(self):
         strings = []
@@ -32,12 +29,12 @@ class BaseSequenceSerializer(BaseSerializer):
             strings.append(serialize_value(item))
         value = self._format()
         return value % (", ".join(strings))
-    
+
 
 class ListSerializer(BaseSequenceSerializer):
     def _format(self) -> str:
         return "[%s]"
-    
+
 
 class TupleSerializer(BaseSequenceSerializer):
     def _format(self):
@@ -55,7 +52,7 @@ class DefaultSerializer(BaseSerializer):
 class LazyModelSerializer(BaseSerializer):
     def serialize(self) -> str:
         return "migrator.state['%s']" % self.value
-    
+
 
 class CompositeKeySerializer(BaseSerializer):
     def serialize(self) -> str:
