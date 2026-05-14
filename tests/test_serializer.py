@@ -4,7 +4,7 @@ from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
-from miggy.serializer import FieldSerializer, ModelSerializer, serialize_field, serialize_value
+from miggy.serializer import FieldSerializer, serialize_field, serialize_value
 from tests.helpers import Rating, Status
 
 
@@ -60,13 +60,3 @@ def test_serialize_field() -> None:
         """link_model=pw.ForeignKeyField(model=migrator.state['linkmodel'])"""
     )
     assert serialize_field(SomeModel.index_field) == ("""index_field=pw.IntegerField(unique=True)""")
-
-
-def test_model_serializer() -> None:
-    class SomeModel(pw.Model):
-        name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
-        status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
-        rating = IntEnumField(Rating)
-
-    print(ModelSerializer(SomeModel).serialize())
-    # WIP

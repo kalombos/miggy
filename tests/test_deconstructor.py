@@ -346,6 +346,7 @@ class _TestModelDeconstructNamespace:
         class Meta:
             schema = "new_schema"
             primary_key = pw.CompositeKey("name", "age")
+            table_name = "custom_name"
 
 
 @pytest.mark.parametrize(
@@ -361,7 +362,7 @@ class _TestModelDeconstructNamespace:
                         "type": pw.CharField,
                     }
                 },
-                "meta": {"table_name": "simplemodel"},
+                "meta": {},
             },
         ),
         (
@@ -377,7 +378,7 @@ class _TestModelDeconstructNamespace:
                         "type": pw.IntegerField,
                     },
                 },
-                "meta": {"table_name": "complicatedmodel", "schema": "new_schema", "primary_key": ("name", "age")},
+                "meta": {"table_name": "custom_name", "schema": "new_schema", "primary_key": ("name", "age")},
             },
         ),
     ],

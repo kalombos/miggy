@@ -2,7 +2,7 @@ from miggy.serializer import serialize_value
 
 
 class OperationWriter:
-    def __init__(self, operation, indentation=2):
+    def __init__(self, operation, indentation=1):
         self.operation = operation
         self.buff = []
         self.indentation = indentation

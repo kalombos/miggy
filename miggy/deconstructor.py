@@ -140,7 +140,9 @@ class ModelDeconstructor(BaseDeconstructor):
     def deconstruct(self) -> dict[str, Any]:
         model = self.model
         fields = [f for f in self.model._meta.sorted_fields if not isinstance(f, pw.AutoField)]
-        meta = {"table_name": model._meta.table_name}
+        meta = {}
+        if model._meta.table_name != model._meta.make_table_name():
+            meta["table_name"] = model._meta.table_name
         if model._meta.schema:
             meta["schema"] = model._meta.schema
         if model._meta.primary_key and isinstance(model._meta.primary_key, pw.CompositeKey):
