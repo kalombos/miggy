@@ -35,9 +35,19 @@ class FieldDeconstructor(BaseDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
         return {}
 
+    def is_bound(self) -> bool:
+        return hasattr(self.field, "model") and hasattr(self.field, "name")
+
+    def is_custom_column_name(self) -> bool:
+        return self.field.name != self.field.column_name
+
     def deconstruct_column_name(self) -> dict[str, Any]:
-        if self.field.name != self.field.column_name:
-            return {"column_name": self.field.column_name}
+        if self.is_bound():
+            if self.is_custom_column_name():
+                return {"column_name": self.field.column_name}
+        else:
+            if self.field.column_name is not None:
+                return {"column_name": self.field.column_name}
         return {}
 
     def deconstruct_index(self) -> dict[str, Any]:
@@ -82,23 +92,26 @@ class DecimalFieldDeconstructor(FieldDeconstructor):
 
 
 class ForeignKeyFieldDeconstructor(FieldDeconstructor):
-    @staticmethod
-    def deconstruct_fk_params(field: pw.ForeignKeyField) -> dict[str, Any]:
-        params = {"model": LazyModel(field.rel_model._meta.name)}
+    def deconstruct_fk_params(self) -> dict[str, Any]:
+        field = self.field
+        params: dict[str, Any] = {"model": LazyModel(field.rel_model._meta.name)}
         if field.on_delete:
             params["on_delete"] = field.on_delete
         if field.on_update:
             params["on_update"] = field.on_update
         if field.constraint_name:
             params["constraint_name"] = field.constraint_name
-        if field.rel_field.name != field.rel_model._meta.primary_key.name:
-            params["field"] = field.rel_field.name
+
+        if self.is_bound():
+            if field.rel_field.name != field.rel_model._meta.primary_key.name:
+                params["field"] = field.rel_field.name
+        else:
+            if isinstance(field.rel_field, str):
+                params["field"] = field.rel_field
         return params
 
-    def deconstruct_column_name(self) -> dict[str, Any]:
-        if self.field.column_name != fk_postfix(self.field.name):
-            return {"column_name": self.field.column_name}
-        return {}
+    def is_custom_column_name(self) -> bool:
+        return self.field.column_name != fk_postfix(self.field.name)
 
     def deconstruct_index(self) -> dict[str, Any]:
         params = {}
@@ -111,7 +124,7 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
 
     def deconstruct(self) -> dict[str, Any]:
         params = super().deconstruct()
-        params.update(self.deconstruct_fk_params(self.field))
+        params.update(self.deconstruct_fk_params())
         return params
 
 
@@ -127,7 +140,9 @@ class ModelDeconstructor(BaseDeconstructor):
     def deconstruct(self) -> dict[str, Any]:
         model = self.model
         fields = [f for f in self.model._meta.sorted_fields if not isinstance(f, pw.AutoField)]
-        meta = {"table_name": model._meta.table_name}
+        meta = {}
+        if model._meta.table_name != model._meta.make_table_name():
+            meta["table_name"] = model._meta.table_name
         if model._meta.schema:
             meta["schema"] = model._meta.schema
         if model._meta.primary_key and isinstance(model._meta.primary_key, pw.CompositeKey):

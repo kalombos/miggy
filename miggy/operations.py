@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,28 @@ class MigrateOperation:
     """
     Base class for a migrate operation
     """
+
+    def __new__(cls, *args, **kwargs):
+        self = object.__new__(cls)
+        self._constructor_args = (args, kwargs)
+        return self
+
+    def get_operation_call(self) -> str:
+        name = self.__class__.__name__
+        shortcut = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+        return f"migrator.{shortcut}"
+
+    def deconstruct(self):
+        """
+        Return a 3-tuple of class import path (or just name if it lives
+        under django.db.migrations), positional arguments, and keyword
+        arguments.
+        """
+        return (
+            self.get_operation_call(),
+            self._constructor_args[0],
+            self._constructor_args[1],
+        )
 
     def state_forwards(self, state: State) -> None:
         """
@@ -314,8 +337,8 @@ class ChangeFields(MigrateOperation):
             is_old_field_fk
             and is_new_field_fk
             and (
-                ForeignKeyFieldDeconstructor.deconstruct_fk_params(old_field)
-                == ForeignKeyFieldDeconstructor.deconstruct_fk_params(new_field)
+                ForeignKeyFieldDeconstructor(old_field).deconstruct_fk_params()
+                == ForeignKeyFieldDeconstructor(new_field).deconstruct_fk_params()
             )
         ):
             # Nothing's changed for fk

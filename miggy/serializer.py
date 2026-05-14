@@ -1,13 +1,9 @@
 import enum
-from typing import TYPE_CHECKING
 
 import peewee as pw
 
-from miggy.deconstructor import ModelDeconstructor, deconstructor_factory
+from miggy.deconstructor import deconstructor_factory
 from miggy.utils import Default, LazyModel
-
-if TYPE_CHECKING:
-    from miggy.types import ModelCls
 
 
 class BaseSerializer:
@@ -23,9 +19,9 @@ class EnumSerializer(BaseSerializer):
         return repr(self.value.value)
 
 
-class ListSerializer(BaseSerializer):
+class BaseSequenceSerializer(BaseSerializer):
     def _format(self) -> str:
-        return "[%s]"
+        raise NotImplementedError("Subclasses of BaseSequenceSerializer must implement the _format() method.")
 
     def serialize(self):
         strings = []
@@ -33,6 +29,18 @@ class ListSerializer(BaseSerializer):
             strings.append(serialize_value(item))
         value = self._format()
         return value % (", ".join(strings))
+
+
+class ListSerializer(BaseSequenceSerializer):
+    def _format(self) -> str:
+        return "[%s]"
+
+
+class TupleSerializer(BaseSequenceSerializer):
+    def _format(self):
+        # When len(value)==0, the empty tuple should be serialized as "()",
+        # not "(,)" because (,) is invalid Python syntax.
+        return "(%s)" if len(self.value) != 1 else "(%s,)"
 
 
 class DefaultSerializer(BaseSerializer):
@@ -44,6 +52,11 @@ class DefaultSerializer(BaseSerializer):
 class LazyModelSerializer(BaseSerializer):
     def serialize(self) -> str:
         return "migrator.state['%s']" % self.value
+
+
+class CompositeKeySerializer(BaseSerializer):
+    def serialize(self) -> str:
+        return "pw.CompositeKey(%s)" % ", ".join(serialize_value(n) for n in self.value.field_names)
 
 
 class FieldSerializer:
@@ -73,15 +86,6 @@ class FieldSerializer:
         return "{module}.{field}".format(field=field, module=module)
 
 
-class ModelSerializer(BaseSerializer):
-    def serialize(self) -> str:
-        model: ModelCls = self.value
-        deconstructed = ModelDeconstructor(model).deconstruct()
-        deconstructed["fields"] = {n: FieldSerializer(f).serialize() for n, f in deconstructed["fields"].items()}
-        # WIP
-        return repr(deconstructed)
-
-
 def serialize_field(field: pw.Field, add_space: bool = False) -> str:
     serialized_field = FieldSerializer(field).serialize()
     sep = " = " if add_space else "="
@@ -89,8 +93,14 @@ def serialize_field(field: pw.Field, add_space: bool = False) -> str:
 
 
 def serialize_value(value) -> str:
+    if isinstance(value, pw.CompositeKey):
+        return CompositeKeySerializer(value).serialize()
+    if isinstance(value, pw.Field):
+        return FieldSerializer(value).serialize()
     if isinstance(value, enum.Enum):
         return EnumSerializer(value).serialize()
+    if isinstance(value, tuple):
+        return TupleSerializer(value).serialize()
     if isinstance(value, list):
         return ListSerializer(value).serialize()
     if isinstance(value, Default):

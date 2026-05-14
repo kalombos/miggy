@@ -56,10 +56,17 @@ def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
         ),
         (
             "some_field",
-            pw.ForeignKeyField(_M1, column_name="some_column_id"),
+            pw.ForeignKeyField(_M1, column_name="some_field_id"),
             {
                 "model": LazyModel("_m1"),
-                "column_name": "some_column_id",
+                "type": pw.ForeignKeyField,
+            },
+        ),
+        (
+            "some_field_id",
+            pw.ForeignKeyField(_M1, column_name="some_field_id"),
+            {
+                "model": LazyModel("_m1"),
                 "type": pw.ForeignKeyField,
             },
         ),
@@ -174,7 +181,7 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         pass
 
     MyTestModel._meta.add_field("field_name", field)
-    assert ForeignKeyFieldDeconstructor.deconstruct_fk_params(field) == expected
+    assert ForeignKeyFieldDeconstructor(field).deconstruct_fk_params() == expected
 
 
 @pytest.mark.parametrize(
@@ -207,6 +214,39 @@ def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
         some_field = field
 
     assert deconstructor_factory(MyTestModel.some_field).deconstruct() == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        pytest.param(
+            pw.ForeignKeyField(_M1, null=True),
+            {
+                "model": "_m1",
+                "null": True,
+                "type": pw.ForeignKeyField,
+            },
+            id="default_rel_field",
+        ),
+        pytest.param(
+            pw.ForeignKeyField(_M1, field="name"),
+            {
+                "model": "_m1",
+                "field": "name",
+                "type": pw.ForeignKeyField,
+            },
+            id="custom_rel_field",
+        ),
+        pytest.param(pw.IntegerField(), {"type": pw.IntegerField}, id="default_column_name"),
+        pytest.param(
+            pw.IntegerField(column_name="some_name"),
+            {"column_name": "some_name", "type": pw.IntegerField},
+            id="custom_column_name",
+        ),
+    ],
+)
+def test_deconstruct_unbound(field: pw.Field, expected: dict[str, Any]) -> None:
+    assert deconstructor_factory(field).deconstruct() == expected
 
 
 @pytest.mark.parametrize(
@@ -306,6 +346,7 @@ class _TestModelDeconstructNamespace:
         class Meta:
             schema = "new_schema"
             primary_key = pw.CompositeKey("name", "age")
+            table_name = "custom_name"
 
 
 @pytest.mark.parametrize(
@@ -321,7 +362,7 @@ class _TestModelDeconstructNamespace:
                         "type": pw.CharField,
                     }
                 },
-                "meta": {"table_name": "simplemodel"},
+                "meta": {},
             },
         ),
         (
@@ -337,7 +378,7 @@ class _TestModelDeconstructNamespace:
                         "type": pw.IntegerField,
                     },
                 },
-                "meta": {"table_name": "complicatedmodel", "schema": "new_schema", "primary_key": ("name", "age")},
+                "meta": {"table_name": "custom_name", "schema": "new_schema", "primary_key": ("name", "age")},
             },
         ),
     ],
