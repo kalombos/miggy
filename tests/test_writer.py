@@ -6,7 +6,7 @@ from miggy.operations import CreateModel
 from miggy.writer import OperationWriter
 
 
-def compare_dedent(s1: str, s2: str) -> bool:
+def compare_dedent(s1: str, s2: str) -> None:
     assert dedent(s1).strip() == dedent(s2).strip()
 
 

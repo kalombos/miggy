@@ -272,11 +272,6 @@ def change_fields(model: ModelCls, *fields) -> str:
     )
 
 
-def change_not_null(model: ModelCls, name, null) -> str:
-    operation = "drop_not_null" if null else "add_not_null"
-    return "migrator.%s('%s', %s)" % (operation, model._meta.name, repr(name))
-
-
 def add_index(index_meta: IndexMeta) -> str:
     operation = "add_index"
 

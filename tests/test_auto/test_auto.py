@@ -18,7 +18,6 @@ from miggy.auto import (
     add_fields,
     add_index,
     change_fields,
-    change_not_null,
     extract_index_meta,
     model_to_code,
     remove_fields,
@@ -228,20 +227,3 @@ def test_change_fields() -> None:
     assert to_one_line(change_fields(MyTestModel, MyTestModel.name)) == (
         "migrator.change_fields('mytestmodel', name=pw.CharField(max_length=255))"
     )
-
-
-@pytest.mark.parametrize(
-    ("is_null", "expected"),
-    [
-        (True, "migrator.drop_not_null('mytestmodel', 'i1')"),
-        (False, "migrator.add_not_null('mytestmodel', 'i1')"),
-    ],
-)
-def test_change_not_null(is_null: bool, expected: str) -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert change_not_null(MyTestModel, "i1", is_null) == expected
