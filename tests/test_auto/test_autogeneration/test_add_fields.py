@@ -16,7 +16,7 @@ class _M1(pw.Model):
     [
         pytest.param(
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
-            """field=pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])""",
+            """field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')])""",
             id="add_constraint",
         ),
         pytest.param(pw.IntegerField(default=5), """field=pw.IntegerField(default=5)""", id="add_default"),

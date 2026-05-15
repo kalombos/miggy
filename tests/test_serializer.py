@@ -17,6 +17,10 @@ from tests.helpers import Rating, Status
         ("O'neal", '"O\'neal"'),
         (Status.ACTIVE, "'active'"),
         (Rating.LOW, "1"),
+        (pw.CompositeKey("name", "age"), "pw.CompositeKey('name', 'age')"),
+        (pw.SQL("where name='%s'", params=["John"]), """pw.SQL("where name='%s'", ['John'])"""),
+        (pw.SQL("DEFAULT 5"), "pw.SQL('DEFAULT 5')"),
+        (pw.SQL("where name='%s'", params=("John",)), """pw.SQL("where name='%s'", ('John',))"""),
     ],
 )
 def test_serialize_value(value: int | str, expected: str) -> None:

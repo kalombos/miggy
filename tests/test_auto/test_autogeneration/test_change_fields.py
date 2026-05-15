@@ -15,7 +15,7 @@ class _M1(pw.Model):
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
-            """age=pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])""",
+            """age=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')])""",
             id="add_constraint",
         ),
         pytest.param(
@@ -30,7 +30,7 @@ class _M1(pw.Model):
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(default=lambda: 5, constraints=[pw.SQL("DEFAULT 5")]),
-            """age=pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])""",
+            """age=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')])""",
             id="default_callable",
         ),
         pytest.param(pw.IntegerField(default=5), pw.IntegerField(), """age=pw.IntegerField()""", id="remove_default"),

@@ -43,10 +43,18 @@ class TupleSerializer(BaseSequenceSerializer):
         return "(%s)" if len(self.value) != 1 else "(%s,)"
 
 
+class SQLSerializer(BaseSerializer):
+    def serialize(self) -> str:
+        params = [serialize_value(self.value.sql)]
+        if self.value.params is not None:
+            params.append(serialize_value(self.value.params))
+        return "pw.SQL(%s)" % ", ".join(params)
+
+
 class DefaultSerializer(BaseSerializer):
     def serialize(self) -> str:
         default_constraint = self.value
-        return 'pw.SQL("DEFAULT %s")' % default_constraint.value.replace('"', '\\"')
+        return "pw.SQL(%s)" % serialize_value(f"DEFAULT {default_constraint.value}")
 
 
 class LazyModelSerializer(BaseSerializer):
@@ -95,6 +103,10 @@ def serialize_field(field: pw.Field, add_space: bool = False) -> str:
 def serialize_value(value) -> str:
     if isinstance(value, pw.CompositeKey):
         return CompositeKeySerializer(value).serialize()
+    if isinstance(value, Default):
+        return DefaultSerializer(value).serialize()
+    if isinstance(value, pw.SQL):
+        return SQLSerializer(value).serialize()
     if isinstance(value, pw.Field):
         return FieldSerializer(value).serialize()
     if isinstance(value, enum.Enum):
@@ -103,8 +115,6 @@ def serialize_value(value) -> str:
         return TupleSerializer(value).serialize()
     if isinstance(value, list):
         return ListSerializer(value).serialize()
-    if isinstance(value, Default):
-        return DefaultSerializer(value).serialize()
     if isinstance(value, LazyModel):
         return LazyModelSerializer(value).serialize()
     return BaseSerializer(value=value).serialize()
