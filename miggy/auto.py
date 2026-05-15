@@ -5,8 +5,9 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deep_deconstruct
+from miggy.operations import AddFields, MigrateOperation
 from miggy.serializer import serialize_field
-from miggy.utils import ModelIndex, indexes_state
+from miggy.utils import ModelIndex, indexes_state, resolve_field
 
 from .types import ModelCls
 
@@ -20,13 +21,6 @@ class IndexMeta(NamedTuple):
     name: str
     unique: bool = False
     where: str | None = None
-
-
-def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
-    _field = model_cls._meta.combined.get(field, None)
-    if _field is None:
-        raise ValueError(f"{model_cls} does not have '{field}' field.")
-    return _field
 
 
 class IndexMetaExtractor:
@@ -127,9 +121,9 @@ def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
     return _fields
 
 
-def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
+def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
     """Find difference between given peewee models."""
-    changes = []
+    changes: list[str | MigrateOperation] = []
 
     fields1 = current._meta.fields
     fields2 = prev._meta.fields
@@ -145,8 +139,8 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     # Add fields
     names1 = set(fields1) - set(fields2)
     if names1:
-        fields = [fields1[name] for name in names1]
-        changes.append(add_fields(current, *fields))
+        fields = {name: fields1[name] for name in names1}
+        changes.append(AddFields(current, **fields))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)

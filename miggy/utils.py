@@ -162,3 +162,10 @@ def fk_postfix(name: str) -> str:
 
 class LazyModel(str):
     pass
+
+
+def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
+    _field = model_cls._meta.combined.get(field, None)
+    if _field is None:
+        raise ValueError(f"{model_cls} does not have '{field}' field.")
+    return _field
