@@ -5,6 +5,7 @@ import pytest
 
 from miggy.operations import (
     AddFields,
+    AddIndex,
     ChangeFields,
     CreateModel,
     DropIndex,
@@ -18,6 +19,10 @@ from miggy.writer import OperationWriter
 
 def compare_dedent(s1: str, s2: str) -> None:
     assert dedent(s1).strip() == dedent(s2).strip()
+
+
+class Car(pw.Model):
+    name = pw.CharField()
 
 
 @pytest.mark.parametrize(
@@ -61,19 +66,29 @@ def compare_dedent(s1: str, s2: str) -> None:
             """,
             id="RemoveModel",
         ),
-        # TODO
-        # pytest.param(
-        #     AddIndex("user", "field1", "field2", name="user_index", where=pw.SQL("field1 = 'bob'")),
-        #     """
-        #     migrator.add_index(
-        #         'user',
-        #         'field1',
-        #         'field2',
-        #         name='user_index',
-        #     )
-        #     """,
-        #     id="AddIndex",
-        # ),
+        pytest.param(
+            AddIndex(
+                "user",
+                "field1",
+                "field2",
+                name="user_index",
+                where=pw.SQL("field1 = 'bob'"),
+                safe=True,
+                concurrently=True,
+            ),
+            """
+            migrator.add_index(
+                'user',
+                'field1',
+                'field2',
+                name='user_index',
+                where=pw.SQL("field1 = 'bob'"),
+                safe=True,
+                concurrently=True,
+            )
+            """,
+            id="AddIndex",
+        ),
         pytest.param(
             DropIndex("user", name="user_index"),
             """
@@ -94,18 +109,19 @@ def compare_dedent(s1: str, s2: str) -> None:
             """,
             id="RenameTable",
         ),
-        # TODO add fk
         pytest.param(
             AddFields(
                 "user",
-                name=pw.CharField(max_length=100),
+                name=pw.CharField(max_length=100, constraints=[pw.SQL("DEFAULT 'Max'")]),
                 email=pw.CharField(max_length=255, null=True),
+                car=pw.ForeignKeyField(Car, field="name"),
             ),
             """
             migrator.add_fields(
                 'user',
-                name=pw.CharField(max_length=100),
+                name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Max'")], max_length=100),
                 email=pw.CharField(max_length=255, null=True),
+                car=pw.ForeignKeyField(field='name', model=migrator.state['car']),
             )
             """,
             id="AddFields",
@@ -126,11 +142,7 @@ def compare_dedent(s1: str, s2: str) -> None:
             id="ChangeFields",
         ),
         pytest.param(
-            RemoveFields(
-                "user",
-                "field1",
-                "field2"
-            ),
+            RemoveFields("user", "field1", "field2"),
             """
             migrator.remove_fields(
                 'user',
