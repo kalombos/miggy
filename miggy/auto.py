@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deep_deconstruct
-from miggy.operations import AddFields, MigrateOperation, RemoveFields, RenameTable
+from miggy.operations import AddFields, AddIndex, DropIndex, MigrateOperation, RemoveFields, RenameTable
 from miggy.serializer import serialize_field
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
@@ -21,6 +21,17 @@ class IndexMeta(NamedTuple):
     name: str
     unique: bool = False
     where: str | None = None
+
+    def as_operation(self) -> AddIndex:
+        kwargs = {}
+
+        if self.unique:
+            kwargs["unique"] = True
+
+        if self.where is not None:
+            kwargs["where"] = pw.SQL(self.where)
+
+        return AddIndex(self.model, *self.fields, name=self.name, **kwargs)
 
 
 class IndexMetaExtractor:
@@ -95,16 +106,16 @@ def rebuild_indexes(model_cls: ModelCls) -> None:
     model_cls._meta.indexes = []
 
 
-def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str], list[str]]:
+def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[AddIndex], list[DropIndex]]:
     create_changes = []
     drop_changes = []
     current_indexes = extract_index_meta(current)
     prev_indexes = extract_index_meta(prev)
 
-    for index in set(current_indexes) - set(prev_indexes):
-        create_changes.append(add_index(index))
-    for index in set(prev_indexes) - set(current_indexes):
-        drop_changes.append(drop_index(prev, index.name))
+    for index_meta in set(current_indexes) - set(prev_indexes):
+        create_changes.append(index_meta.as_operation())
+    for index_meta in set(prev_indexes) - set(current_indexes):
+        drop_changes.append(DropIndex(prev._meta.name, index_meta.name))
     return create_changes, drop_changes
 
 
@@ -186,7 +197,7 @@ def diff_many(current_models, prev_models, reverse=False):
             index_meta = extract_index_meta(current_models[name])
             changes.append(create_model(current_models[name]))
             for i in index_meta:
-                changes.append(add_index(i))
+                changes.append(i.as_operation())
         # Change existing models
         else:
             prev_model = prev_models[name]
@@ -252,17 +263,3 @@ def change_fields(model: ModelCls, *fields) -> str:
         model._meta.name,
         ("," + NEWLINE).join([serialize_field(f) for f in fields]),
     )
-
-
-def add_index(index_meta: IndexMeta) -> str:
-    operation = "add_index"
-
-    _where = ", where=pw.SQL(%s)" % repr(index_meta.where) if index_meta.where else ""
-    _unique = f", unique={index_meta.unique}" if index_meta.unique else ""
-    _fields = ", ".join(map(repr, index_meta.fields))
-    return f"migrator.{operation}('{index_meta.model}', {_fields}, name='{index_meta.name}'{_unique}{_where})"
-
-
-def drop_index(model: ModelCls, name: str) -> str:
-    operation = "drop_index"
-    return "migrator.%s('%s', '%s')" % (operation, model._meta.name, name)

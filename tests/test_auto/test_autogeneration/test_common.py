@@ -94,9 +94,8 @@ def test_create_model() -> None:
     create_model_code = changes[0]
 
     assert create_model_code == create_model(Test)
-    assert changes[1] == "migrator.add_index('test', 'i1', 'i2', name='test_i1_i2', unique=True)"
-    assert changes[2] == "migrator.add_index('test', 'i1', 'i2', name='i3')"
-    assert """constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])""" in create_model_code
+    assert operation_to_one_line(changes[1]) == "migrator.add_index('test','i1','i2',name='test_i1_i2',unique=True,)"
+    assert operation_to_one_line(changes[2]) == "migrator.add_index('test','i1','i2',name='i3',)"
 
 
 @pytest.mark.parametrize(

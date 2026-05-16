@@ -15,7 +15,6 @@ from playhouse.postgres_ext import (
 from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
-    add_index,
     change_fields,
     extract_index_meta,
     model_to_code,
@@ -23,7 +22,7 @@ from miggy.auto import (
 )
 from miggy.ext import IntEnumField
 from miggy.utils import ModelIndex
-from tests.helpers import Rating, to_one_line
+from tests.helpers import Rating, operation_to_one_line, to_one_line
 
 
 class _DoesNotMatter(pw.Model):
@@ -158,7 +157,7 @@ def test_model_to_code_indexes():
     [
         (
             IndexMeta(model="model", fields=("f1", "f2"), name="some_name"),
-            "migrator.add_index('model', 'f1', 'f2', name='some_name')",
+            "migrator.add_index('model','f1','f2',name='some_name',)",
         ),
         (
             IndexMeta(
@@ -168,12 +167,12 @@ def test_model_to_code_indexes():
                 name="n",
                 where="first_name = 'bob'",
             ),
-            """migrator.add_index('model', 'f1', 'f2', name='n', unique=True, where=pw.SQL("first_name = 'bob'"))""",
+            """migrator.add_index('model','f1','f2',name='n',unique=True,where=pw.SQL("first_name = 'bob'"),)""",
         ),
     ],
 )
-def test_add_index(index_meta: IndexMeta, expected: str) -> None:
-    assert add_index(index_meta) == expected
+def test_index_meta__as_operation(index_meta: IndexMeta, expected: str) -> None:
+    assert operation_to_one_line(index_meta.as_operation()) == expected
 
 
 def test_remove_model() -> None:
