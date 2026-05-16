@@ -247,14 +247,6 @@ def remove_model(model: ModelCls) -> str:
     return "migrator.remove_model('%s')" % model._meta.name
 
 
-def add_fields(model: ModelCls, *fields) -> str:
-    return "migrator.add_fields(%s'%s', %s)" % (
-        NEWLINE,
-        model._meta.name,
-        NEWLINE + ("," + NEWLINE).join([serialize_field(field) for field in fields]),
-    )
-
-
 def remove_fields(model: ModelCls, *fields) -> str:
     return "migrator.remove_fields('%s', %s)" % (model._meta.name, ", ".join(map(repr, fields)))
 
