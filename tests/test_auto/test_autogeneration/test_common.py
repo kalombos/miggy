@@ -9,8 +9,7 @@ from miggy.cli import get_router
 from miggy.operations import AddFields
 from miggy.types import ModelCls
 from miggy.utils import copy_model
-from miggy.writer import OperationWriter
-from tests.helpers import to_one_line
+from tests.helpers import operation_to_one_line
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -76,8 +75,8 @@ def test_drop_field_w_constraint() -> None:
         class Meta:
             table_name = "test"
 
-    code = diff_one(Test, OldTest)[0]
-    assert code == "migrator.remove_fields('test', 'age')"
+    operation = diff_one(Test, OldTest)[0]
+    assert operation_to_one_line(operation) == "migrator.remove_fields('test','age',)"  # type: ignore
 
 
 def test_create_model() -> None:
@@ -120,7 +119,7 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
         return Test
 
     changes = diff_one(create_model(name_after), create_model(name_before))
-    changes = [to_one_line(OperationWriter(c).serialize()) for c in changes]  # type: ignore
+    changes = [operation_to_one_line(c) for c in changes]  # type: ignore
     assert changes == expected
 
 

@@ -19,7 +19,6 @@ from miggy.auto import (
     change_fields,
     extract_index_meta,
     model_to_code,
-    remove_fields,
     remove_model,
 )
 from miggy.ext import IntEnumField
@@ -185,16 +184,6 @@ def test_remove_model() -> None:
             table_name = "another_name"
 
     assert remove_model(MyTestModel) == "migrator.remove_model('mytestmodel')"
-
-
-def test_remove_fields() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert remove_fields(MyTestModel, "i1") == "migrator.remove_fields('mytestmodel', 'i1')"
 
 
 def test_change_fields() -> None:

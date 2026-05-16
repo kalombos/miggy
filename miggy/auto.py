@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deep_deconstruct
-from miggy.operations import AddFields, MigrateOperation, RenameTable
+from miggy.operations import AddFields, MigrateOperation, RemoveFields, RenameTable
 from miggy.serializer import serialize_field
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
@@ -145,7 +145,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
     # Drop fields
     names2 = set(fields2) - set(fields1)
     if names2:
-        changes.append(remove_fields(current, *names2))
+        changes.append(RemoveFields(current._meta.name, *names2))
 
     # Change fields
     fields_ = []
@@ -245,10 +245,6 @@ def create_model(model: ModelCls) -> str:
 
 def remove_model(model: ModelCls) -> str:
     return "migrator.remove_model('%s')" % model._meta.name
-
-
-def remove_fields(model: ModelCls, *fields) -> str:
-    return "migrator.remove_fields('%s', %s)" % (model._meta.name, ", ".join(map(repr, fields)))
 
 
 def change_fields(model: ModelCls, *fields) -> str:
