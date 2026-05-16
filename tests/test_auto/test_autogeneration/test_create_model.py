@@ -9,4 +9,4 @@ def test_create_model_w_constraint() -> None:
 
     code = diff_many([Test], [])[0]
     assert code == create_model(Test)
-    assert """first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in code
+    assert """first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])""" in code

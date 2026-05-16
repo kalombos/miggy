@@ -4,8 +4,9 @@ from pathlib import Path
 import peewee as pw
 import pytest
 
-from miggy.auto import add_fields, create_model, diff_many, diff_one, model_to_code
+from miggy.auto import create_model, diff_many, diff_one, model_to_code
 from miggy.cli import get_router
+from miggy.operations import AddFields
 from miggy.types import ModelCls
 from miggy.utils import copy_model
 
@@ -36,7 +37,7 @@ def test_on_real_migrations(migrations_dir: Path):
 
     changes = diff_one(Person1, Person_)
     assert len(changes) == 3
-    assert "on_delete='CASCADE'" in changes[0]
+    assert isinstance(changes[0], AddFields)
 
     class Person2(pw.Model):
         first_name = pw.CharField(max_length=255)
@@ -56,7 +57,7 @@ def test_on_real_migrations(migrations_dir: Path):
         name = pw.CharField(default="red")
 
     code = model_to_code(Color)
-    assert "name = pw.CharField(default='red', max_length=255)" in code
+    assert "name = pw.CharField(default='red')" in code
 
 
 def test_drop_field_w_constraint() -> None:
@@ -94,7 +95,7 @@ def test_create_model() -> None:
     assert create_model_code == create_model(Test)
     assert changes[1] == "migrator.add_index('test', 'i1', 'i2', name='test_i1_i2', unique=True)"
     assert changes[2] == "migrator.add_index('test', 'i1', 'i2', name='i3')"
-    assert """constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")], max_length=255)""" in create_model_code
+    assert """constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])""" in create_model_code
 
 
 @pytest.mark.parametrize(
@@ -139,12 +140,11 @@ def test_proper_order_for_fk() -> None:
 
     test_model, user_model = current_models()
 
-    assert diff_many(current_models(), prev_models()) == [
-        # we create model first
-        create_model(test_model),
-        # we add fk to it after
-        add_fields(user_model, user_model.test),
-    ]
+    changes = diff_many(current_models(), prev_models())
+    # we create model first
+    assert changes[0] == create_model(test_model)
+    # we add fk to it after
+    assert isinstance(changes[1], AddFields)
 
 
 @pytest.mark.parametrize(

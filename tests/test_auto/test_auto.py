@@ -15,7 +15,6 @@ from playhouse.postgres_ext import (
 from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
-    add_fields,
     add_index,
     change_fields,
     extract_index_meta,
@@ -24,9 +23,8 @@ from miggy.auto import (
     remove_model,
 )
 from miggy.ext import IntEnumField
-from miggy.ext.fields import CharEnumField
 from miggy.utils import ModelIndex
-from tests.helpers import Rating, Status, to_one_line
+from tests.helpers import Rating, to_one_line
 
 
 class _DoesNotMatter(pw.Model):
@@ -189,23 +187,6 @@ def test_remove_model() -> None:
     assert remove_model(MyTestModel) == "migrator.remove_model('mytestmodel')"
 
 
-def test_add_fields() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-        name = pw.CharField()
-        status = CharEnumField(Status, max_length=5)
-
-        class Meta:
-            table_name = "another_name"
-
-    assert to_one_line(add_fields(MyTestModel, MyTestModel.name)) == (
-        "migrator.add_fields('mytestmodel',name=pw.CharField(max_length=255))"
-    )
-    assert to_one_line(add_fields(MyTestModel, MyTestModel.status)) == (
-        "migrator.add_fields('mytestmodel',status=pw.CharField(max_length=5))"
-    )
-
-
 def test_remove_fields() -> None:
     class MyTestModel(pw.Model):
         i1 = pw.IntegerField()
@@ -225,5 +206,5 @@ def test_change_fields() -> None:
             table_name = "another_name"
 
     assert to_one_line(change_fields(MyTestModel, MyTestModel.name)) == (
-        "migrator.change_fields('mytestmodel', name=pw.CharField(max_length=255))"
+        "migrator.change_fields('mytestmodel', name=pw.CharField())"
     )

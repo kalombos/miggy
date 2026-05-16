@@ -1,5 +1,3 @@
-from textwrap import dedent
-
 import peewee as pw
 import pytest
 
@@ -15,10 +13,7 @@ from miggy.operations import (
     RenameTable,
 )
 from miggy.writer import OperationWriter
-
-
-def compare_dedent(s1: str, s2: str) -> None:
-    assert dedent(s1).strip() == dedent(s2).strip()
+from tests.helpers import compare_dedent
 
 
 class Car(pw.Model):
@@ -46,7 +41,7 @@ class Car(pw.Model):
                 'user',
                 {
                     'name': pw.CharField(max_length=100),
-                    'email': pw.CharField(max_length=255, null=True),
+                    'email': pw.CharField(null=True),
                 },
                 meta={
                     'table_name': 'some_table',
@@ -120,7 +115,7 @@ class Car(pw.Model):
             migrator.add_fields(
                 'user',
                 name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Max'")], max_length=100),
-                email=pw.CharField(max_length=255, null=True),
+                email=pw.CharField(null=True),
                 car=pw.ForeignKeyField(field='name', model=migrator.state['car']),
             )
             """,
@@ -136,7 +131,7 @@ class Car(pw.Model):
             migrator.change_fields(
                 'user',
                 name=pw.CharField(max_length=100),
-                email=pw.CharField(max_length=255, null=True),
+                email=pw.CharField(null=True),
             )
             """,
             id="ChangeFields",

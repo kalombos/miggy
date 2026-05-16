@@ -15,49 +15,49 @@ from miggy.utils import ModelIndex
         (
             {},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+            ["migrator.change_fields('test', first_name=pw.CharField(unique=True))"],
         ),
         (
             {},
             {"index": False, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+            ["migrator.change_fields('test', first_name=pw.CharField(unique=True))"],
         ),
         (
             {},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+            ["migrator.change_fields('test', first_name=pw.CharField(index=True))"],
         ),
         # Changing index
         (
             {"index": True, "unique": False},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+            ["migrator.change_fields('test', first_name=pw.CharField(unique=True))"],
         ),
         (
             {"index": True, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+            ["migrator.change_fields('test', first_name=pw.CharField(index=True))"],
         ),
         (
             {"index": False, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+            ["migrator.change_fields('test', first_name=pw.CharField(index=True))"],
         ),
         # Dropping index
         (
             {"index": True, "unique": True},
             {},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+            ["migrator.change_fields('test', first_name=pw.CharField())"],
         ),
         (
             {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+            ["migrator.change_fields('test', first_name=pw.CharField())"],
         ),
         (
             {"index": True, "unique": False},
             {},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+            ["migrator.change_fields('test', first_name=pw.CharField())"],
         ),
         # do nothing
         ({"index": False, "unique": False}, {}, []),

@@ -3,7 +3,7 @@ from miggy.serializer import serialize_value
 
 
 class OperationWriter:
-    def __init__(self, operation: MigrateOperation, indentation: int = 1) -> None:
+    def __init__(self, operation: MigrateOperation, indentation: int = 0) -> None:
         self.operation = operation
         self.buff: list[str] = []
         self.indentation = indentation

@@ -140,7 +140,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
     names1 = set(fields1) - set(fields2)
     if names1:
         fields = {name: fields1[name] for name in names1}
-        changes.append(AddFields(current, **fields))
+        changes.append(AddFields(current._meta.name, **fields))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)

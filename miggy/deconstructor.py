@@ -83,7 +83,9 @@ class FieldDeconstructor(BaseDeconstructor):
 
 class CharFieldDeconstructor(FieldDeconstructor):
     def get_type_modifiers(self) -> dict[str, Any]:
-        return {"max_length": self.field.max_length}
+        if self.field.max_length != 255:
+            return {"max_length": self.field.max_length}
+        return {}
 
 
 class DecimalFieldDeconstructor(FieldDeconstructor):

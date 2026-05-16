@@ -358,7 +358,6 @@ class _TestModelDeconstructNamespace:
                 "name": "SimpleModel",
                 "fields": {
                     "name": {
-                        "max_length": 255,
                         "type": pw.CharField,
                     }
                 },

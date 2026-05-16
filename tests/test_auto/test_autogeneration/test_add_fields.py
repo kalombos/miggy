@@ -1,7 +1,10 @@
 import peewee as pw
 import pytest
 
-from miggy.auto import add_fields, diff_one
+from miggy.auto import diff_one
+from miggy.operations import MigrateOperation
+from miggy.writer import OperationWriter
+from tests.helpers import compare_dedent
 
 
 class _M1(pw.Model):
@@ -16,15 +19,42 @@ class _M1(pw.Model):
     [
         pytest.param(
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
-            """field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')])""",
+            """
+            migrator.add_fields(
+                'test',
+                field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),
+            )
+            """,
             id="add_constraint",
         ),
-        pytest.param(pw.IntegerField(default=5), """field=pw.IntegerField(default=5)""", id="add_default"),
-        pytest.param(pw.IntegerField(default=lambda: 5), """field=pw.IntegerField()""", id="add_default_callable"),
-        pytest.param(pw.IntegerField(null=True), """field=pw.IntegerField(null=True)""", id="add_nullable"),
+        pytest.param(
+            pw.IntegerField(default=5),
+            """
+            migrator.add_fields(
+                'test',
+                field=pw.IntegerField(default=5),
+            )
+            """,
+            id="add_default",
+        ),
+        pytest.param(
+            pw.IntegerField(default=lambda: 5),
+            """
+            migrator.add_fields(
+                'test',
+                field=pw.IntegerField(),
+            )
+            """,
+            id="add_default_callable",
+        ),
         pytest.param(
             pw.ForeignKeyField(_M1, on_delete="CASCADE", null=True),
-            ("pw.ForeignKeyField(model=migrator.state['_m1'], null=True, on_delete='CASCADE')"),
+            """
+            migrator.add_fields(
+                'test',
+                field=pw.ForeignKeyField(model=migrator.state['_m1'], null=True, on_delete='CASCADE'),
+            )
+            """,
             id="add_fk",
         ),
     ],
@@ -43,6 +73,7 @@ def test_add_fields(test_field: pw.Field, expected: str) -> None:
         class Meta:
             table_name = "test"
 
-    code = diff_one(Test, OldTest)[0]
-    assert code == add_fields(Test, Test.field)
-    assert expected in code
+    operations = diff_one(Test, OldTest)
+    assert len(operations) == 1
+    assert isinstance(operations[0], MigrateOperation)
+    compare_dedent(OperationWriter(operations[0]).serialize(), expected)
