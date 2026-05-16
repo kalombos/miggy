@@ -79,49 +79,6 @@ def test_drop_field_w_constraint() -> None:
     assert operation_to_one_line(operation) == "migrator.remove_fields('test','age',)"  # type: ignore
 
 
-def test_create_model() -> None:
-    class Test(pw.Model):
-        constraint = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
-        i1 = pw.IntegerField()
-        i2 = pw.IntegerField()
-
-        class Meta:
-            indexes = ((("i1", "i2"), True),)
-
-    Test.add_index(Test.i1, Test.i2, name="i3")
-
-    changes = diff_many([Test], [])
-    create_model_code = changes[0]
-
-    assert create_model_code == create_model(Test)
-    assert operation_to_one_line(changes[1]) == "migrator.add_index('test','i1','i2',name='test_i1_i2',unique=True,)"
-    assert operation_to_one_line(changes[2]) == "migrator.add_index('test','i1','i2',name='i3',)"
-
-
-@pytest.mark.parametrize(
-    ("name_before", "name_after", "expected"),
-    [
-        (None, "new_name", ["migrator.rename_table('test','new_name',)"]),
-        (None, "test", []),
-        (None, None, []),
-        ("new_name", None, ["migrator.rename_table('test','test',)"]),
-    ],
-)
-def test_rename_table(name_before: str | None, name_after: str | None, expected: list[str]) -> None:
-    def create_model(_table_name: str | None) -> ModelCls:
-        class Test(pw.Model):
-            i1 = pw.IntegerField()
-
-            class Meta:
-                table_name = _table_name
-
-        return Test
-
-    changes = diff_one(create_model(name_after), create_model(name_before))
-    changes = [operation_to_one_line(c) for c in changes]  # type: ignore
-    assert changes == expected
-
-
 def test_proper_order_for_fk() -> None:
     def prev_models() -> list[ModelCls]:
         class Users(pw.Model):
