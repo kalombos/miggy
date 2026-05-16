@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deep_deconstruct
-from miggy.operations import AddFields, MigrateOperation
+from miggy.operations import AddFields, MigrateOperation, RenameTable
 from miggy.serializer import serialize_field
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
@@ -129,7 +129,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
     fields2 = prev._meta.fields
 
     if current._meta.table_name != prev._meta.table_name:
-        changes.append(rename_table(prev, current._meta.table_name))
+        changes.append(RenameTable(prev._meta.name, current._meta.table_name))
 
     create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
 
@@ -270,8 +270,3 @@ def add_index(index_meta: IndexMeta) -> str:
 def drop_index(model: ModelCls, name: str) -> str:
     operation = "drop_index"
     return "migrator.%s('%s', '%s')" % (operation, model._meta.name, name)
-
-
-def rename_table(model: ModelCls, new_name: str) -> str:
-    operation = "rename_table"
-    return "migrator.%s('%s', '%s')" % (operation, model._meta.name, new_name)

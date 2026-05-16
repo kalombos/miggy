@@ -9,6 +9,8 @@ from miggy.cli import get_router
 from miggy.operations import AddFields
 from miggy.types import ModelCls
 from miggy.utils import copy_model
+from miggy.writer import OperationWriter
+from tests.helpers import to_one_line
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -101,10 +103,10 @@ def test_create_model() -> None:
 @pytest.mark.parametrize(
     ("name_before", "name_after", "expected"),
     [
-        (None, "new_name", ["migrator.rename_table('test', 'new_name')"]),
+        (None, "new_name", ["migrator.rename_table('test','new_name',)"]),
         (None, "test", []),
         (None, None, []),
-        ("new_name", None, ["migrator.rename_table('test', 'test')"]),
+        ("new_name", None, ["migrator.rename_table('test','test',)"]),
     ],
 )
 def test_rename_table(name_before: str | None, name_after: str | None, expected: list[str]) -> None:
@@ -118,6 +120,7 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
         return Test
 
     changes = diff_one(create_model(name_after), create_model(name_before))
+    changes = [to_one_line(OperationWriter(c).serialize()) for c in changes]  # type: ignore
     assert changes == expected
 
 
