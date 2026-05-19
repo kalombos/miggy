@@ -161,7 +161,7 @@ class RemoveModel(MigrateOperation):
         self.model_name = model_name
 
     def state_forwards(self, state: State) -> None:
-        del state[self.model_name]
+        state.remove_model(self.model_name)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State

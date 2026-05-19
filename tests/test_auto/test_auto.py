@@ -18,7 +18,6 @@ from miggy.auto import (
     change_fields,
     extract_index_meta,
     model_to_code,
-    remove_model,
 )
 from miggy.ext import IntEnumField
 from miggy.utils import ModelIndex
@@ -173,16 +172,6 @@ def test_model_to_code_indexes():
 )
 def test_index_meta__as_operation(index_meta: IndexMeta, expected: str) -> None:
     assert operation_to_one_line(index_meta.as_operation()) == expected
-
-
-def test_remove_model() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert remove_model(MyTestModel) == "migrator.remove_model('mytestmodel')"
 
 
 def test_change_fields() -> None:

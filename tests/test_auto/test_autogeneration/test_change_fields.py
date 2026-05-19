@@ -82,7 +82,7 @@ def test_change_fields(age_field_before: pw.Field, age_field_after: pw.Field, ex
 
     code = diff_one(Test, OldTest)[0]
     assert code == change_fields(Test, Test.age)
-    assert expected in code
+    assert expected in code  # type: ignore
 
 
 @pytest.mark.parametrize(

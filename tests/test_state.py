@@ -25,6 +25,22 @@ def test_add_model() -> None:
     assert isinstance(model.age, pw.IntegerField)
 
 
+def test_remove_model() -> None:
+    state = State()
+    state.add_model(
+        "User",
+        {
+            "age": pw.IntegerField(),
+            "email": pw.CharField(max_length=255, null=True),
+        },
+        {"table_name": "users"},
+    )
+
+    state.remove_model("user")
+
+    assert "user" not in state
+
+
 def test_add_fields() -> None:
     class User(pw.Model):
         test = pw.CharField()

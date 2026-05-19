@@ -61,6 +61,9 @@ class State:
         model = type(name, (pw.Model,), attrs)
         self[name] = model
 
+    def remove_model(self, name: str) -> None:
+        del self[name]
+
     def add_fields(self, model_name: str, **fields: pw.Field) -> None:
         model = self[model_name]
         for field_name, field in fields.items():
