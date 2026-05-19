@@ -2,25 +2,14 @@ from typing import Any
 
 import peewee as pw
 import pytest
-from playhouse.postgres_ext import (
-    ArrayField,
-    BinaryJSONField,
-    DateTimeTZField,
-    HStoreField,
-    IntervalField,
-    JSONField,
-    TSVectorField,
-)
 
 from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
     extract_index_meta,
-    model_to_code,
 )
-from miggy.ext import IntEnumField
 from miggy.utils import ModelIndex
-from tests.helpers import Rating, operation_to_one_line
+from tests.helpers import operation_to_one_line
 
 
 class _DoesNotMatter(pw.Model):
@@ -118,36 +107,6 @@ def test_extract_index_meta__advanced__str_field_error() -> None:
         NotImplementedError, match="<class 'str'> for ModelIndex.field is not suported. Use Field object instead."
     ):
         extract_index_meta(Test)
-
-
-def test_model_to_code_postgresext():
-    class Object(pw.Model):
-        array_field = ArrayField()
-        binary_json_field = BinaryJSONField()
-        dattime_tz_field = DateTimeTZField()
-        hstore_field = HStoreField()
-        interval_field = IntervalField()
-        json_field = JSONField()
-        ts_vector_field = TSVectorField()
-        rating = IntEnumField(Rating, null=True)
-
-    code = model_to_code(Object)
-    assert code
-    assert "json_field = pw_pext.JSONField()" in code
-    assert "hstore_field = pw_pext.HStoreField(index=True)" in code
-    assert "rating = pw.SmallIntegerField(null=True)" in code
-
-
-def test_model_to_code_indexes():
-    class Object(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = ((("first_name", "last_name"), True),)
-
-    code = model_to_code(Object)
-    assert "indexes" not in code
 
 
 @pytest.mark.parametrize(

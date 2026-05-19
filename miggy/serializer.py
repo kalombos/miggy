@@ -94,6 +94,7 @@ class FieldSerializer:
         return "{module}.{field}".format(field=field, module=module)
 
 
+# TODO remove
 def serialize_field(field: pw.Field, add_space: bool = False) -> str:
     serialized_field = FieldSerializer(field).serialize()
     sep = " = " if add_space else "="

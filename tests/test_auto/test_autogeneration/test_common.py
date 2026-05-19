@@ -4,9 +4,9 @@ from pathlib import Path
 import peewee as pw
 import pytest
 
-from miggy.auto import create_model, diff_many, diff_one, model_to_code
+from miggy.auto import diff_many, diff_one
 from miggy.cli import get_router
-from miggy.operations import AddFields
+from miggy.operations import AddFields, CreateModel
 from miggy.types import ModelCls
 from miggy.utils import copy_model
 from tests.helpers import operation_to_one_line
@@ -20,12 +20,9 @@ def test_on_real_migrations(migrations_dir: Path):
     Person_ = migrator.state["person"]
     Tag_ = migrator.state["tag"]
 
-    code = model_to_code(Person_)
-    assert code
-    assert 'table_name = "person"' in code
-
     changes = diff_many(models, [])
     assert len(changes) == 2
+    assert all(isinstance(c, CreateModel) for c in changes)
 
     class Person1(pw.Model):
         first_name = pw.IntegerField()
@@ -52,13 +49,6 @@ def test_on_real_migrations(migrations_dir: Path):
 
     changes = diff_one(Person_, Person2)
     assert not changes
-
-    class Color(pw.Model):
-        id = pw.AutoField()
-        name = pw.CharField(default="red")
-
-    code = model_to_code(Color)
-    assert "name = pw.CharField(default='red')" in code
 
 
 def test_drop_field_w_constraint() -> None:
@@ -96,11 +86,9 @@ def test_proper_order_for_fk() -> None:
 
         return [Test, Users]
 
-    test_model, user_model = current_models()
-
     changes = diff_many(current_models(), prev_models())
     # we create model first
-    assert changes[0] == create_model(test_model)
+    assert isinstance(changes[0], CreateModel)
     # we add fk to it after
     assert isinstance(changes[1], AddFields)
 

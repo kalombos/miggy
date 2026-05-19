@@ -54,7 +54,7 @@ def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
 def test_create_model__state(name: str, patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
-    migrator.create_model(model="Company", fields={"name": pw.CharField()}, meta={"table_name": name})
+    migrator.create_model(name="Company", fields={"name": pw.CharField()}, meta={"table_name": name})
 
     migrator.run()
 

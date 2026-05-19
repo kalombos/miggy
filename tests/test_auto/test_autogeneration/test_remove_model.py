@@ -13,6 +13,6 @@ def test_remove_model() -> None:
         class Meta:
             indexes = ((("i1", "i2"), True),)
 
-    changes = diff_many([], [Test])
-    changes = [operation_to_one_line(c) for c in changes]
+    diffs = diff_many([], [Test])
+    changes = [operation_to_one_line(c) for c in diffs]
     assert changes == ["migrator.remove_model('test',)"]

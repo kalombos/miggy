@@ -4,18 +4,18 @@ from typing import Any, NamedTuple
 
 import peewee as pw
 
-from miggy.deconstructor import deep_deconstruct
+from miggy.deconstructor import ModelDeconstructor, deep_deconstruct
 from miggy.operations import (
     AddFields,
     AddIndex,
     ChangeFields,
+    CreateModel,
     DropIndex,
     MigrateOperation,
     RemoveFields,
     RemoveModel,
     RenameTable,
 )
-from miggy.serializer import serialize_field
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
 from .types import ModelCls
@@ -141,9 +141,9 @@ def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
     return _fields
 
 
-def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
+def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
     """Find difference between given peewee models."""
-    changes: list[str | MigrateOperation] = []
+    changes: list[MigrateOperation] = []
 
     fields1 = current._meta.fields
     fields2 = prev._meta.fields
@@ -184,7 +184,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
     return changes
 
 
-def diff_many(current_models, prev_models, reverse=False):
+def diff_many(current_models, prev_models, reverse=False) -> list[MigrateOperation]:
     """Calculate changes for migrations from models2 to models1."""
     if reverse:
         prev_models, current_models = current_models, prev_models
@@ -198,13 +198,14 @@ def diff_many(current_models, prev_models, reverse=False):
     current_models = collections.OrderedDict([(m._meta.name, m) for m in current_models])
     prev_models = collections.OrderedDict([(m._meta.name, m) for m in prev_models])
 
-    changes = []
+    changes: list[MigrateOperation] = []
 
     for name, current_model in current_models.items():
         # Add new models
         if name not in prev_models:
             index_meta = extract_index_meta(current_models[name])
-            changes.append(create_model(current_models[name]))
+            deconstructed = ModelDeconstructor(current_models[name]).deconstruct()
+            changes.append(CreateModel(**deconstructed))
             for i in index_meta:
                 changes.append(i.as_operation())
         # Change existing models
@@ -227,37 +228,3 @@ class MigrationAutodetector:
 
     def changes(self):
         return diff_many(self.to_state, self.from_state, reverse=self.reverse)
-
-
-def model_to_code(Model) -> str:
-    template = """class {classname}(pw.Model):
-{fields}
-
-{meta}
-"""
-    fields = INDENT + NEWLINE.join(
-        [
-            serialize_field(field, add_space=True)
-            for field in Model._meta.sorted_fields
-            if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
-        ]
-    )
-    meta = INDENT + NEWLINE.join(
-        filter(
-            None,
-            [
-                "class Meta:",
-                INDENT + 'table_name = "%s"' % Model._meta.table_name,
-                (INDENT + 'schema = "%s"' % Model._meta.schema) if Model._meta.schema else "",
-                (INDENT + "primary_key = pw.CompositeKey{0}".format(Model._meta.primary_key.field_names))
-                if isinstance(Model._meta.primary_key, pw.CompositeKey)
-                else "",
-            ],
-        )
-    )
-
-    return template.format(classname=Model.__name__, fields=fields, meta=meta)
-
-
-def create_model(model: ModelCls) -> str:
-    return "@migrator.create_model\n" + model_to_code(model)

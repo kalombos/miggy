@@ -11,7 +11,6 @@ from tests.helpers import Rating, Status
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        # TODO add tests for other serializers
         (5, "5"),
         ("5", "'5'"),
         ("O'neal", '"O\'neal"'),
