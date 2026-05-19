@@ -4,7 +4,7 @@ from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
-from miggy.serializer import FieldSerializer, serialize_field, serialize_value
+from miggy.serializer import FieldSerializer, serialize_value
 from tests.helpers import Rating, Status
 
 
@@ -27,10 +27,16 @@ def test_serialize_value(value: int | str, expected: str) -> None:
 
 
 def test_field_serializer_serialize() -> None:
+    class LinkModel(pw.Model):
+        some_field = pw.CharField()
+
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
         status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
+        rating = IntEnumField(Rating)
         updated_at = DateTimeTZField()
+        link_model = pw.ForeignKeyField(LinkModel)
+        index_field = pw.IntegerField(index=True, unique=True)
 
     assert FieldSerializer(SomeModel.name).serialize() == (
         """pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
@@ -39,27 +45,8 @@ def test_field_serializer_serialize() -> None:
         """pw.CharField(default='active', max_length=100, null=True)"""
     )
     assert FieldSerializer(SomeModel.updated_at).serialize() == ("""pw_pext.DateTimeTZField()""")
-
-
-def test_serialize_field() -> None:
-    class LinkModel(pw.Model):
-        some_field = pw.CharField()
-
-    class SomeModel(pw.Model):
-        name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
-        status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
-        rating = IntEnumField(Rating)
-        link_model = pw.ForeignKeyField(LinkModel)
-        index_field = pw.IntegerField(index=True, unique=True)
-
-    assert serialize_field(SomeModel.name) == (
-        """name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
+    assert FieldSerializer(SomeModel.rating).serialize() == ("""pw.SmallIntegerField()""")
+    assert FieldSerializer(SomeModel.link_model).serialize() == (
+        """pw.ForeignKeyField(model=migrator.state['linkmodel'])"""
     )
-    assert serialize_field(SomeModel.status, add_space=True) == (
-        """status = pw.CharField(default='active', max_length=100, null=True)"""
-    )
-    assert serialize_field(SomeModel.rating) == ("""rating=pw.SmallIntegerField()""")
-    assert serialize_field(SomeModel.link_model) == (
-        """link_model=pw.ForeignKeyField(model=migrator.state['linkmodel'])"""
-    )
-    assert serialize_field(SomeModel.index_field) == ("""index_field=pw.IntegerField(unique=True)""")
+    assert FieldSerializer(SomeModel.index_field).serialize() == ("""pw.IntegerField(unique=True)""")
