@@ -94,12 +94,6 @@ class FieldSerializer:
         return "{module}.{field}".format(field=field, module=module)
 
 
-def serialize_field(field: pw.Field, add_space: bool = False) -> str:
-    serialized_field = FieldSerializer(field).serialize()
-    sep = " = " if add_space else "="
-    return sep.join([field.name, serialized_field])
-
-
 def serialize_value(value) -> str:
     if isinstance(value, pw.CompositeKey):
         return CompositeKeySerializer(value).serialize()

@@ -1,5 +1,6 @@
 import os
 import pathlib
+from textwrap import dedent
 from unittest import mock
 
 import peewee as pw
@@ -8,7 +9,7 @@ import pytest
 from playhouse.postgres_ext import Psycopg3Database
 
 from miggy.cli import get_router
-from miggy.router import Router
+from miggy.router import MIGRATE_TEMPLATE, Router, compile_migrations
 from tests.conftest import POSTGRES_DSN
 
 
@@ -113,3 +114,46 @@ def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration
         router.run_one(migration_name, router.migrator, change_schema=True, change_history=True)
         transaction_called = mocked.call_count == 1
         assert transaction_called is expected
+
+
+def test_compile_migrations() -> None:
+    def _old_model():
+        class Test(pw.Model):
+            first_name = pw.CharField()
+
+            class Meta:
+                table_name = "test"
+
+        return Test
+
+    def _current_model():
+        class Test(pw.Model):
+            first_name = pw.CharField()
+            field = pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])
+
+            class Meta:
+                table_name = "test"
+
+        return Test
+
+    changes = compile_migrations([_old_model()], [_current_model()])
+    template = MIGRATE_TEMPLATE.format(migrate=changes, name="", ext_import="", rollback="")
+
+    assert (
+        dedent(
+            '''
+    def migrate(migrator, database, fake=False):
+        """Write your migrations here."""
+
+        migrator.add_fields(
+            'test',
+            field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),
+        )
+
+
+    def rollback(migrator, database, fake=False):
+        """Write your rollback migrations here."""
+    '''
+        )
+        in template
+    )

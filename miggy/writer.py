@@ -1,10 +1,11 @@
+from miggy.operations import MigrateOperation
 from miggy.serializer import serialize_value
 
 
 class OperationWriter:
-    def __init__(self, operation, indentation=1):
+    def __init__(self, operation: MigrateOperation, indentation: int = 0) -> None:
         self.operation = operation
-        self.buff = []
+        self.buff: list[str] = []
         self.indentation = indentation
 
     def _write(self, _arg_value, _arg_name=None) -> None:

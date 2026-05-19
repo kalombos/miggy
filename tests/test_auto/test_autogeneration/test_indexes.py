@@ -6,6 +6,7 @@ import pytest
 from miggy.auto import diff_one
 from miggy.types import ModelCls
 from miggy.utils import ModelIndex
+from tests.helpers import operation_to_one_line
 
 
 @pytest.mark.parametrize(
@@ -15,49 +16,49 @@ from miggy.utils import ModelIndex
         (
             {},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
         ),
         (
             {},
             {"index": False, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
         ),
         (
             {},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
         ),
         # Changing index
         (
             {"index": True, "unique": False},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255, unique=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
         ),
         (
             {"index": True, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
         ),
         (
             {"index": False, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True, max_length=255))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
         ),
         # Dropping index
         (
             {"index": True, "unique": True},
             {},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
         ),
         (
             {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
         ),
         (
             {"index": True, "unique": False},
             {},
-            ["migrator.change_fields('test', first_name=pw.CharField(max_length=255))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
         ),
         # do nothing
         ({"index": False, "unique": False}, {}, []),
@@ -74,7 +75,10 @@ def test_field_index(
 
         return Test
 
-    assert diff_one(create_model(after_params), create_model(before_params)) == changes
+    diff = diff_one(create_model(after_params), create_model(before_params))
+    diff = [operation_to_one_line(o) for o in diff]  # type: ignore
+
+    assert diff == changes
 
 
 @pytest.mark.parametrize(
@@ -86,28 +90,28 @@ def test_field_index(
             [
                 (("first_name",), False),
             ],
-            ["migrator.add_index('test', 'first_name', name='test_first_name')"],
+            ["migrator.add_index('test','first_name',name='test_first_name',)"],
         ),
         (
             [],
             [
                 (("first_name",), True),
             ],
-            ["migrator.add_index('test', 'first_name', name='test_first_name', unique=True)"],
+            ["migrator.add_index('test','first_name',name='test_first_name',unique=True,)"],
         ),
         (
             [],
             [
                 (("first_name", "last_name"), False),
             ],
-            ["migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name')"],
+            ["migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)"],
         ),
         (
             [],
             [
                 (("first_name", "last_name"), True),
             ],
-            ["migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name', unique=True)"],
+            ["migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',unique=True,)"],
         ),
         # Dropping indexes
         (
@@ -115,14 +119,14 @@ def test_field_index(
                 (("first_name", "last_name"), True),
             ],
             [],
-            ["migrator.drop_index('test', 'test_first_name_last_name')"],
+            ["migrator.drop_index('test','test_first_name_last_name',)"],
         ),
         (
             [
                 (("first_name", "last_name"), False),
             ],
             [],
-            ["migrator.drop_index('test', 'test_first_name_last_name')"],
+            ["migrator.drop_index('test','test_first_name_last_name',)"],
         ),
         # Changing indexes
         (
@@ -133,8 +137,8 @@ def test_field_index(
                 (("first_name", "last_name"), True),
             ],
             [
-                "migrator.drop_index('test', 'test_first_name_last_name')",
-                "migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name', unique=True)",
+                "migrator.drop_index('test','test_first_name_last_name',)",
+                "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',unique=True,)",
             ],
         ),
         # Nothing to do
@@ -160,7 +164,8 @@ def test_tuple_indexes__from_meta(indexes_before: list[Any], indexes_after: list
 
         return Test
 
-    assert diff_one(create_model(indexes_after), create_model(indexes_before)) == changes
+    diffs = diff_one(create_model(indexes_after), create_model(indexes_before))
+    assert [operation_to_one_line(d) for d in diffs] == changes  # type: ignore
 
 
 @pytest.mark.parametrize(
@@ -171,32 +176,32 @@ def test_tuple_indexes__from_meta(indexes_before: list[Any], indexes_after: list
             {"unique": False},
             {"unique": False, "name": "new_name"},
             [
-                "migrator.drop_index('test', 'test_first_name_last_name')",
-                "migrator.add_index('test', 'first_name', 'last_name', name='new_name')",
+                "migrator.drop_index('test','test_first_name_last_name',)",
+                "migrator.add_index('test','first_name','last_name',name='new_name',)",
             ],
         ),
         (
             {"unique": False},
             {"unique": True},
             [
-                "migrator.drop_index('test', 'test_first_name_last_name')",
-                "migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name', unique=True)",
+                "migrator.drop_index('test','test_first_name_last_name',)",
+                "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',unique=True,)",
             ],
         ),
         (
             {"where": pw.SQL("first_name = 'bom'")},
             {"unique": False},
             [
-                "migrator.drop_index('test', 'test_first_name_last_name')",
-                "migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name')",
+                "migrator.drop_index('test','test_first_name_last_name',)",
+                "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)",
             ],
         ),
         (
             {"unique": False},
             {"where": pw.SQL("first_name = 'bom'")},
             [
-                "migrator.drop_index('test', 'test_first_name_last_name')",
-                """migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name', where=pw.SQL("first_name = 'bom'"))""",  # noqa: E501
+                "migrator.drop_index('test','test_first_name_last_name',)",
+                """migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',where=pw.SQL("first_name = 'bom'"),)""",  # noqa: E501
             ],
         ),
     ],
@@ -210,7 +215,9 @@ def test_advanced_indexes(before_kwargs: dict[str, Any], after_kwargs: dict[str,
         Test.add_index(Test.first_name, Test.last_name, **indexes_kwrags)
         return Test
 
-    assert diff_one(create_model(after_kwargs), create_model(before_kwargs)) == changes
+    diffs = diff_one(create_model(after_kwargs), create_model(before_kwargs))
+
+    assert [operation_to_one_line(d) for d in diffs] == changes  # type: ignore
 
 
 def test_indexes_rebuilding() -> None:
@@ -235,6 +242,7 @@ def test_indexes_rebuilding() -> None:
         Test._meta.indexes_state = {"test_first_name": ModelIndex(Test, (Test.first_name,))}
         return Test
 
-    assert diff_one(create_model1(), create_model2()) == [
-        "migrator.add_index('test', 'first_name', 'last_name', name='test_first_name_last_name')"
+    changes = diff_one(create_model1(), create_model2())
+    assert [operation_to_one_line(c) for c in changes] == [  # type: ignore
+        "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)"
     ]

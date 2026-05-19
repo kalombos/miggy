@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 from playhouse.migrate import Operation
 
-from miggy.auto import resolve_field
 from miggy.deconstructor import ForeignKeyFieldDeconstructor, deconstructor_factory
 from miggy.state import State
 from miggy.types import ModelCls
@@ -18,6 +17,7 @@ from miggy.utils import (
     get_single_index_name,
     has_single_index,
     indexes_state,
+    resolve_field,
 )
 
 if TYPE_CHECKING:
@@ -161,7 +161,7 @@ class RemoveModel(MigrateOperation):
         self.model_name = model_name
 
     def state_forwards(self, state: State) -> None:
-        del state[self.model_name]
+        state.remove_model(self.model_name)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State

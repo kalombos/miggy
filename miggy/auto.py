@@ -4,9 +4,19 @@ from typing import Any, NamedTuple
 
 import peewee as pw
 
-from miggy.deconstructor import deep_deconstruct
-from miggy.serializer import serialize_field
-from miggy.utils import ModelIndex, indexes_state
+from miggy.deconstructor import ModelDeconstructor, deep_deconstruct
+from miggy.operations import (
+    AddFields,
+    AddIndex,
+    ChangeFields,
+    CreateModel,
+    DropIndex,
+    MigrateOperation,
+    RemoveFields,
+    RemoveModel,
+    RenameTable,
+)
+from miggy.utils import ModelIndex, indexes_state, resolve_field
 
 from .types import ModelCls
 
@@ -21,12 +31,16 @@ class IndexMeta(NamedTuple):
     unique: bool = False
     where: str | None = None
 
+    def as_operation(self) -> AddIndex:
+        kwargs = {}
 
-def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
-    _field = model_cls._meta.combined.get(field, None)
-    if _field is None:
-        raise ValueError(f"{model_cls} does not have '{field}' field.")
-    return _field
+        if self.unique:
+            kwargs["unique"] = True
+
+        if self.where is not None:
+            kwargs["where"] = pw.SQL(self.where)
+
+        return AddIndex(self.model, *self.fields, name=self.name, **kwargs)
 
 
 class IndexMetaExtractor:
@@ -101,16 +115,16 @@ def rebuild_indexes(model_cls: ModelCls) -> None:
     model_cls._meta.indexes = []
 
 
-def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[str], list[str]]:
+def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[AddIndex], list[DropIndex]]:
     create_changes = []
     drop_changes = []
     current_indexes = extract_index_meta(current)
     prev_indexes = extract_index_meta(prev)
 
-    for index in set(current_indexes) - set(prev_indexes):
-        create_changes.append(add_index(index))
-    for index in set(prev_indexes) - set(current_indexes):
-        drop_changes.append(drop_index(prev, index.name))
+    for index_meta in set(current_indexes) - set(prev_indexes):
+        create_changes.append(index_meta.as_operation())
+    for index_meta in set(prev_indexes) - set(current_indexes):
+        drop_changes.append(DropIndex(prev._meta.name, index_meta.name))
     return create_changes, drop_changes
 
 
@@ -127,15 +141,15 @@ def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
     return _fields
 
 
-def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
+def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
     """Find difference between given peewee models."""
-    changes = []
+    changes: list[MigrateOperation] = []
 
     fields1 = current._meta.fields
     fields2 = prev._meta.fields
 
     if current._meta.table_name != prev._meta.table_name:
-        changes.append(rename_table(prev, current._meta.table_name))
+        changes.append(RenameTable(prev._meta.name, current._meta.table_name))
 
     create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
 
@@ -145,13 +159,13 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     # Add fields
     names1 = set(fields1) - set(fields2)
     if names1:
-        fields = [fields1[name] for name in names1]
-        changes.append(add_fields(current, *fields))
+        fields = {name: fields1[name] for name in names1}
+        changes.append(AddFields(current._meta.name, **fields))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)
     if names2:
-        changes.append(remove_fields(current, *names2))
+        changes.append(RemoveFields(current._meta.name, *names2))
 
     # Change fields
     fields_ = []
@@ -162,7 +176,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
 
     if fields_:
         fields_ = _primary_key_last(fields_)
-        changes.append(change_fields(current, *_primary_key_last(fields_)))
+        changes.append(ChangeFields(current._meta.name, **{f.name: f for f in fields_}))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
@@ -170,7 +184,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str]:
     return changes
 
 
-def diff_many(current_models, prev_models, reverse=False):
+def diff_many(current_models, prev_models, reverse=False) -> list[MigrateOperation]:
     """Calculate changes for migrations from models2 to models1."""
     if reverse:
         prev_models, current_models = current_models, prev_models
@@ -184,15 +198,16 @@ def diff_many(current_models, prev_models, reverse=False):
     current_models = collections.OrderedDict([(m._meta.name, m) for m in current_models])
     prev_models = collections.OrderedDict([(m._meta.name, m) for m in prev_models])
 
-    changes = []
+    changes: list[MigrateOperation] = []
 
     for name, current_model in current_models.items():
         # Add new models
         if name not in prev_models:
             index_meta = extract_index_meta(current_models[name])
-            changes.append(create_model(current_models[name]))
+            deconstructed = ModelDeconstructor(current_models[name]).deconstruct()
+            changes.append(CreateModel(**deconstructed))
             for i in index_meta:
-                changes.append(add_index(i))
+                changes.append(i.as_operation())
         # Change existing models
         else:
             prev_model = prev_models[name]
@@ -200,7 +215,7 @@ def diff_many(current_models, prev_models, reverse=False):
 
     # Remove models
     for name in [m for m in prev_models if m not in current_models]:
-        changes.append(remove_model(prev_models[name]))
+        changes.append(RemoveModel(prev_models[name]._meta.name))
 
     return changes
 
@@ -213,79 +228,3 @@ class MigrationAutodetector:
 
     def changes(self):
         return diff_many(self.to_state, self.from_state, reverse=self.reverse)
-
-
-def model_to_code(Model) -> str:
-    template = """class {classname}(pw.Model):
-{fields}
-
-{meta}
-"""
-    fields = INDENT + NEWLINE.join(
-        [
-            serialize_field(field, add_space=True)
-            for field in Model._meta.sorted_fields
-            if not (isinstance(field, pw.PrimaryKeyField) and field.name == "id")
-        ]
-    )
-    meta = INDENT + NEWLINE.join(
-        filter(
-            None,
-            [
-                "class Meta:",
-                INDENT + 'table_name = "%s"' % Model._meta.table_name,
-                (INDENT + 'schema = "%s"' % Model._meta.schema) if Model._meta.schema else "",
-                (INDENT + "primary_key = pw.CompositeKey{0}".format(Model._meta.primary_key.field_names))
-                if isinstance(Model._meta.primary_key, pw.CompositeKey)
-                else "",
-            ],
-        )
-    )
-
-    return template.format(classname=Model.__name__, fields=fields, meta=meta)
-
-
-def create_model(model: ModelCls) -> str:
-    return "@migrator.create_model\n" + model_to_code(model)
-
-
-def remove_model(model: ModelCls) -> str:
-    return "migrator.remove_model('%s')" % model._meta.name
-
-
-def add_fields(model: ModelCls, *fields) -> str:
-    return "migrator.add_fields(%s'%s', %s)" % (
-        NEWLINE,
-        model._meta.name,
-        NEWLINE + ("," + NEWLINE).join([serialize_field(field) for field in fields]),
-    )
-
-
-def remove_fields(model: ModelCls, *fields) -> str:
-    return "migrator.remove_fields('%s', %s)" % (model._meta.name, ", ".join(map(repr, fields)))
-
-
-def change_fields(model: ModelCls, *fields) -> str:
-    return "migrator.change_fields('%s', %s)" % (
-        model._meta.name,
-        ("," + NEWLINE).join([serialize_field(f) for f in fields]),
-    )
-
-
-def add_index(index_meta: IndexMeta) -> str:
-    operation = "add_index"
-
-    _where = ", where=pw.SQL(%s)" % repr(index_meta.where) if index_meta.where else ""
-    _unique = f", unique={index_meta.unique}" if index_meta.unique else ""
-    _fields = ", ".join(map(repr, index_meta.fields))
-    return f"migrator.{operation}('{index_meta.model}', {_fields}, name='{index_meta.name}'{_unique}{_where})"
-
-
-def drop_index(model: ModelCls, name: str) -> str:
-    operation = "drop_index"
-    return "migrator.%s('%s', '%s')" % (operation, model._meta.name, name)
-
-
-def rename_table(model: ModelCls, new_name: str) -> str:
-    operation = "rename_table"
-    return "migrator.%s('%s', '%s')" % (operation, model._meta.name, new_name)

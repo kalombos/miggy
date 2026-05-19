@@ -2,31 +2,14 @@ from typing import Any
 
 import peewee as pw
 import pytest
-from playhouse.postgres_ext import (
-    ArrayField,
-    BinaryJSONField,
-    DateTimeTZField,
-    HStoreField,
-    IntervalField,
-    JSONField,
-    TSVectorField,
-)
 
 from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
-    add_fields,
-    add_index,
-    change_fields,
     extract_index_meta,
-    model_to_code,
-    remove_fields,
-    remove_model,
 )
-from miggy.ext import IntEnumField
-from miggy.ext.fields import CharEnumField
 from miggy.utils import ModelIndex
-from tests.helpers import Rating, Status, to_one_line
+from tests.helpers import operation_to_one_line
 
 
 class _DoesNotMatter(pw.Model):
@@ -126,42 +109,12 @@ def test_extract_index_meta__advanced__str_field_error() -> None:
         extract_index_meta(Test)
 
 
-def test_model_to_code_postgresext():
-    class Object(pw.Model):
-        array_field = ArrayField()
-        binary_json_field = BinaryJSONField()
-        dattime_tz_field = DateTimeTZField()
-        hstore_field = HStoreField()
-        interval_field = IntervalField()
-        json_field = JSONField()
-        ts_vector_field = TSVectorField()
-        rating = IntEnumField(Rating, null=True)
-
-    code = model_to_code(Object)
-    assert code
-    assert "json_field = pw_pext.JSONField()" in code
-    assert "hstore_field = pw_pext.HStoreField(index=True)" in code
-    assert "rating = pw.SmallIntegerField(null=True)" in code
-
-
-def test_model_to_code_indexes():
-    class Object(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-        class Meta:
-            indexes = ((("first_name", "last_name"), True),)
-
-    code = model_to_code(Object)
-    assert "indexes" not in code
-
-
 @pytest.mark.parametrize(
     ("index_meta", "expected"),
     [
         (
             IndexMeta(model="model", fields=("f1", "f2"), name="some_name"),
-            "migrator.add_index('model', 'f1', 'f2', name='some_name')",
+            "migrator.add_index('model','f1','f2',name='some_name',)",
         ),
         (
             IndexMeta(
@@ -171,59 +124,9 @@ def test_model_to_code_indexes():
                 name="n",
                 where="first_name = 'bob'",
             ),
-            """migrator.add_index('model', 'f1', 'f2', name='n', unique=True, where=pw.SQL("first_name = 'bob'"))""",
+            """migrator.add_index('model','f1','f2',name='n',unique=True,where=pw.SQL("first_name = 'bob'"),)""",
         ),
     ],
 )
-def test_add_index(index_meta: IndexMeta, expected: str) -> None:
-    assert add_index(index_meta) == expected
-
-
-def test_remove_model() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert remove_model(MyTestModel) == "migrator.remove_model('mytestmodel')"
-
-
-def test_add_fields() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-        name = pw.CharField()
-        status = CharEnumField(Status, max_length=5)
-
-        class Meta:
-            table_name = "another_name"
-
-    assert to_one_line(add_fields(MyTestModel, MyTestModel.name)) == (
-        "migrator.add_fields('mytestmodel',name=pw.CharField(max_length=255))"
-    )
-    assert to_one_line(add_fields(MyTestModel, MyTestModel.status)) == (
-        "migrator.add_fields('mytestmodel',status=pw.CharField(max_length=5))"
-    )
-
-
-def test_remove_fields() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert remove_fields(MyTestModel, "i1") == "migrator.remove_fields('mytestmodel', 'i1')"
-
-
-def test_change_fields() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-        name = pw.CharField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert to_one_line(change_fields(MyTestModel, MyTestModel.name)) == (
-        "migrator.change_fields('mytestmodel', name=pw.CharField(max_length=255))"
-    )
+def test_index_meta__as_operation(index_meta: IndexMeta, expected: str) -> None:
+    assert operation_to_one_line(index_meta.as_operation()) == expected

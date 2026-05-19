@@ -92,6 +92,7 @@ select = [
     'I',
     'DTZ',
     'UP035',
+    'RUF100',
     'TC'
 ]
 
