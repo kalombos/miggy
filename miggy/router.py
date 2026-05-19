@@ -11,7 +11,6 @@ import peewee as pw
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
-from miggy.operations import MigrateOperation
 from miggy.types import ModelCls
 from miggy.utils import exec_in
 from miggy.writer import OperationWriter
@@ -345,7 +344,7 @@ def compile_migrations(
     changes = MigrationAutodetector(from_state, to_state, reverse).changes()
     if not changes:
         return False
-    changes = [OperationWriter(o).serialize() if isinstance(o, MigrateOperation) else o for o in changes]
+    changes = [OperationWriter(o).serialize() for o in changes]
 
     changes = NEWLINE + NEWLINE.join("\n\n".join(changes).split("\n"))
     return CLEAN_RE.sub("\n", changes)
