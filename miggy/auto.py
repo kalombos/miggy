@@ -5,7 +5,16 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deep_deconstruct
-from miggy.operations import AddFields, AddIndex, DropIndex, MigrateOperation, RemoveFields, RemoveModel, RenameTable
+from miggy.operations import (
+    AddFields,
+    AddIndex,
+    ChangeFields,
+    DropIndex,
+    MigrateOperation,
+    RemoveFields,
+    RemoveModel,
+    RenameTable,
+)
 from miggy.serializer import serialize_field
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
@@ -167,7 +176,7 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[str | MigrateOperation]:
 
     if fields_:
         fields_ = _primary_key_last(fields_)
-        changes.append(change_fields(current, *_primary_key_last(fields_)))
+        changes.append(ChangeFields(current._meta.name, **{f.name: f for f in fields_}))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)
@@ -252,10 +261,3 @@ def model_to_code(Model) -> str:
 
 def create_model(model: ModelCls) -> str:
     return "@migrator.create_model\n" + model_to_code(model)
-
-
-def change_fields(model: ModelCls, *fields) -> str:
-    return "migrator.change_fields('%s', %s)" % (
-        model._meta.name,
-        ("," + NEWLINE).join([serialize_field(f) for f in fields]),
-    )

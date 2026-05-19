@@ -121,7 +121,7 @@ def test_proper_order_for_fk() -> None:
                 "name": pw.CharField(),
                 "guid": pw.IntegerField(primary_key=True),
             },
-            """migrator.change_fields('oldtest', uid=pw.IntegerField(),\n    guid=pw.IntegerField(primary_key=True))""",
+            """migrator.change_fields('oldtest',uid=pw.IntegerField(),guid=pw.IntegerField(primary_key=True),)""",
         ),
         pytest.param(
             {
@@ -136,7 +136,7 @@ def test_proper_order_for_fk() -> None:
                 "name": pw.CharField(),
                 "guid": pw.IntegerField(),
             },
-            """migrator.change_fields('oldtest', guid=pw.IntegerField(),\n    uid=pw.IntegerField(primary_key=True))""",
+            """migrator.change_fields('oldtest',guid=pw.IntegerField(),uid=pw.IntegerField(primary_key=True),)""",
         ),
     ],
 )
@@ -156,5 +156,6 @@ def test_primary_key_order(
     Test = copy_model(OldTest)
     for n, f in fields_after.items():
         Test._meta.add_field(n, f)
-    code = diff_one(Test, OldTest)
-    assert code[0] == expected
+    diffs = diff_one(Test, OldTest)
+    diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
+    assert diffs == [expected]

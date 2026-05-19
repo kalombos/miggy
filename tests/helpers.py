@@ -6,11 +6,11 @@ from miggy.operations import MigrateOperation
 from miggy.writer import OperationWriter
 
 
-def to_one_line(s):
+def to_one_line(s) -> str:
     return "".join(line.strip() for line in s.splitlines())
 
 
-def operation_to_one_line(operation: MigrateOperation):
+def operation_to_one_line(operation: MigrateOperation) -> str:
     return to_one_line(OperationWriter(operation).serialize())
 
 

@@ -15,13 +15,12 @@ from playhouse.postgres_ext import (
 from miggy.auto import (
     IndexMeta,
     IndexMetaExtractor,
-    change_fields,
     extract_index_meta,
     model_to_code,
 )
 from miggy.ext import IntEnumField
 from miggy.utils import ModelIndex
-from tests.helpers import Rating, operation_to_one_line, to_one_line
+from tests.helpers import Rating, operation_to_one_line
 
 
 class _DoesNotMatter(pw.Model):
@@ -172,16 +171,3 @@ def test_model_to_code_indexes():
 )
 def test_index_meta__as_operation(index_meta: IndexMeta, expected: str) -> None:
     assert operation_to_one_line(index_meta.as_operation()) == expected
-
-
-def test_change_fields() -> None:
-    class MyTestModel(pw.Model):
-        i1 = pw.IntegerField()
-        name = pw.CharField()
-
-        class Meta:
-            table_name = "another_name"
-
-    assert to_one_line(change_fields(MyTestModel, MyTestModel.name)) == (
-        "migrator.change_fields('mytestmodel', name=pw.CharField())"
-    )

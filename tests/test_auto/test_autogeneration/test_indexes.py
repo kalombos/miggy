@@ -16,49 +16,49 @@ from tests.helpers import operation_to_one_line
         (
             {},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(unique=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
         ),
         (
             {},
             {"index": False, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(unique=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
         ),
         (
             {},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
         ),
         # Changing index
         (
             {"index": True, "unique": False},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test', first_name=pw.CharField(unique=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
         ),
         (
             {"index": True, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
         ),
         (
             {"index": False, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField(index=True))"],
+            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
         ),
         # Dropping index
         (
             {"index": True, "unique": True},
             {},
-            ["migrator.change_fields('test', first_name=pw.CharField())"],
+            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
         ),
         (
             {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.change_fields('test', first_name=pw.CharField())"],
+            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
         ),
         (
             {"index": True, "unique": False},
             {},
-            ["migrator.change_fields('test', first_name=pw.CharField())"],
+            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
         ),
         # do nothing
         ({"index": False, "unique": False}, {}, []),
@@ -75,7 +75,10 @@ def test_field_index(
 
         return Test
 
-    assert diff_one(create_model(after_params), create_model(before_params)) == changes
+    diff = diff_one(create_model(after_params), create_model(before_params))
+    diff = [operation_to_one_line(o) for o in diff]  # type: ignore
+
+    assert diff == changes
 
 
 @pytest.mark.parametrize(
