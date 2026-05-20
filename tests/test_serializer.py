@@ -46,7 +46,5 @@ def test_field_serializer_serialize() -> None:
     )
     assert FieldSerializer(SomeModel.updated_at).serialize() == ("""pw_pext.DateTimeTZField()""")
     assert FieldSerializer(SomeModel.rating).serialize() == ("""pw.SmallIntegerField()""")
-    assert FieldSerializer(SomeModel.link_model).serialize() == (
-        """pw.ForeignKeyField(model='linkmodel')"""
-    )
+    assert FieldSerializer(SomeModel.link_model).serialize() == ("""pw.ForeignKeyField(model='linkmodel')""")
     assert FieldSerializer(SomeModel.index_field).serialize() == ("""pw.IntegerField(unique=True)""")
