@@ -3,7 +3,7 @@ import enum
 import peewee as pw
 
 from miggy.deconstructor import deconstructor_factory
-from miggy.utils import Default, LazyModel
+from miggy.utils import Default
 
 
 class BaseSerializer:
@@ -57,11 +57,6 @@ class DefaultSerializer(BaseSerializer):
         return "pw.SQL(%s)" % serialize_value(f"DEFAULT {default_constraint.value}")
 
 
-class LazyModelSerializer(BaseSerializer):
-    def serialize(self) -> str:
-        return "migrator.state['%s']" % self.value
-
-
 class CompositeKeySerializer(BaseSerializer):
     def serialize(self) -> str:
         return "pw.CompositeKey(%s)" % ", ".join(serialize_value(n) for n in self.value.field_names)
@@ -109,6 +104,4 @@ def serialize_value(value) -> str:
         return TupleSerializer(value).serialize()
     if isinstance(value, list):
         return ListSerializer(value).serialize()
-    if isinstance(value, LazyModel):
-        return LazyModelSerializer(value).serialize()
     return BaseSerializer(value=value).serialize()

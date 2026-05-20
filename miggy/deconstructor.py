@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import peewee as pw
 
 from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import Default, LazyModel, fk_postfix, get_default_constraint
+from miggy.utils import Default, fk_postfix, get_default_constraint
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -96,7 +96,7 @@ class DecimalFieldDeconstructor(FieldDeconstructor):
 class ForeignKeyFieldDeconstructor(FieldDeconstructor):
     def deconstruct_fk_params(self) -> dict[str, Any]:
         field = self.field
-        params: dict[str, Any] = {"model": LazyModel(field.rel_model._meta.name)}
+        params: dict[str, Any] = {"model": field.rel_model._meta.name}
         if field.on_delete:
             params["on_delete"] = field.on_delete
         if field.on_update:

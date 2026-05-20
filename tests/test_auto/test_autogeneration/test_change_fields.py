@@ -69,7 +69,7 @@ class _M1(pw.Model):
                 "age=pw.ForeignKeyField("
                 "column_name='new_name', "
                 "field='name', "
-                "model=migrator.state['_m1'], "
+                "model='_m1', "
                 "on_update='RESTRICT'),)"
             ),
             id="add_fk",

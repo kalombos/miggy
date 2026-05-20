@@ -42,16 +42,20 @@ def test_remove_model() -> None:
 
 
 def test_add_fields() -> None:
+    class RelatedModel(pw.Model):
+        f = pw.CharField()
+
     class User(pw.Model):
         test = pw.CharField()
 
-    state = State()
+    state = State({"user": User, "relatedmodel": RelatedModel})
 
-    state["user"] = User
     state.add_fields(
         "User",
         age=pw.IntegerField(),
         email=pw.CharField(max_length=255, null=True),
+        related_field=pw.ForeignKeyField("relatedmodel"),
+        self_related_field=pw.ForeignKeyField("self"),
     )
     model = state["user"]
 
@@ -59,3 +63,6 @@ def test_add_fields() -> None:
     assert model.email.null is True
     assert isinstance(model.email, pw.CharField)
     assert isinstance(model.age, pw.IntegerField)
+
+    assert isinstance(model.related_field.rel_model.f, pw.CharField)
+    assert isinstance(model.self_related_field.rel_model.age, pw.IntegerField)

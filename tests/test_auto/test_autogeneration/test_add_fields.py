@@ -52,7 +52,7 @@ class _M1(pw.Model):
             """
             migrator.add_fields(
                 'test',
-                field=pw.ForeignKeyField(model=migrator.state['_m1'], null=True, on_delete='CASCADE'),
+                field=pw.ForeignKeyField(model='_m1', null=True, on_delete='CASCADE'),
             )
             """,
             id="add_fk",

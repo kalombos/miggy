@@ -160,10 +160,6 @@ def fk_postfix(name: str) -> str:
     return name if name.endswith("_id") else name + "_id"
 
 
-class LazyModel(str):
-    pass
-
-
 def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
     _field = model_cls._meta.combined.get(field, None)
     if _field is None:

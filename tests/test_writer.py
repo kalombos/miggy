@@ -116,7 +116,7 @@ class Car(pw.Model):
                 'user',
                 name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Max'")], max_length=100),
                 email=pw.CharField(null=True),
-                car=pw.ForeignKeyField(field='name', model=migrator.state['car']),
+                car=pw.ForeignKeyField(field='name', model='car'),
             )
             """,
             id="AddFields",
