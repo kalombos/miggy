@@ -56,15 +56,22 @@ class State:
         return State(_snapshot)
 
     def add_model(self, name: str, fields: dict[str, pw.Field], meta: dict[str, Any]) -> None:
-        attrs = fields.copy()
-        attrs["Meta"] = type("Meta", (object,), meta)
+        attrs = {"Meta": type("Meta", (object,), meta)}
         model = type(name, (pw.Model,), attrs)
         self[name] = model
+        self.add_fields(name, **fields)
 
     def remove_model(self, name: str) -> None:
         del self[name]
 
+    def _resolve_relation(self, field: pw.Field) -> None:
+        if isinstance(field, pw.ForeignKeyField):
+            rel_model = field.rel_model
+            if isinstance(rel_model, str) and rel_model != "self":
+                field.rel_model = self[rel_model]
+
     def add_fields(self, model_name: str, **fields: pw.Field) -> None:
         model = self[model_name]
         for field_name, field in fields.items():
+            self._resolve_relation(field)
             model._meta.add_field(field_name, field)
