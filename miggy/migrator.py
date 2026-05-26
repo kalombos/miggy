@@ -8,14 +8,14 @@ from playhouse.migrate import (
 from miggy import LOGGER
 from miggy.deconstructor import ModelDeconstructor
 from miggy.operations import (
-    AddFields,
+    AddField,
     AddIndex,
-    ChangeFields,
+    AlterField,
     ChangeNullable,
     CreateModel,
     DropIndex,
     MigrateOperation,
-    RemoveFields,
+    RemoveField,
     RemoveModel,
     RenameField,
     RenameTable,
@@ -140,24 +140,39 @@ class Migrator(object):
 
     drop_table = remove_model
 
-    def add_fields(self, model_name: str, **fields: Any) -> None:
-        """A shortcut for adding a :class:`AddFields` operation."""
+    def add_field(self, model_name: str, name: str, field: pw.Field) -> None:
+        """A shortcut for adding a :class:`AddField` operation."""
 
-        self.add_operation(AddFields(model_name, **fields))
+        self.add_operation(AddField(model_name, name, field))
+
+    def add_fields(self, model_name: str, **fields: Any) -> None:
+
+        for name, field in fields.items():
+            self.add_operation(AddField(model_name, name, field))
 
     add_columns = add_fields
+
+    def alter_field(self, model_name: str, name: str, field: pw.Field) -> None:
+        """A shortcut for adding a :class:`AlterField` operation."""
+
+        self.add_operation(AlterField(model_name, name, field))
 
     def change_fields(self, model_name: str, **fields: pw.Field) -> None:
         """A shortcut for adding a :class:`ChangeFields` operation."""
 
-        return self.add_operation(ChangeFields(model_name, **fields))
+        for name, field in fields.items():
+            self.add_operation(AlterField(model_name, name, field))
 
     change_columns = change_fields
 
-    def remove_fields(self, model_name: str, *names: str, cascade: bool = False) -> None:
-        """A shortcut for adding a :class:`RemoveFields` operation."""
+    def remove_field(self, model_name: str, name: str) -> None:
+        """A shortcut for adding a :class:`RemoveField` operation."""
 
-        self.add_operation(RemoveFields(model_name, *names, cascade=cascade))
+        self.add_operation(RemoveField(model_name, name))
+
+    def remove_fields(self, model_name: str, *names: str) -> None:
+        for name in names:
+            self.add_operation(RemoveField(model_name, name))
 
     drop_columns = remove_fields
 

@@ -6,13 +6,13 @@ import peewee as pw
 
 from miggy.deconstructor import ModelDeconstructor, deep_deconstruct
 from miggy.operations import (
-    AddFields,
+    AddField,
     AddIndex,
-    ChangeFields,
+    AlterField,
     CreateModel,
     DropIndex,
     MigrateOperation,
-    RemoveFields,
+    RemoveField,
     RemoveModel,
     RenameTable,
 )
@@ -159,13 +159,14 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
     # Add fields
     names1 = set(fields1) - set(fields2)
     if names1:
-        fields = {name: fields1[name] for name in names1}
-        changes.append(AddFields(current._meta.name, **fields))
+        for name in names1:
+            changes.append(AddField(model_name=current._meta.name, name=name, field=fields1[name]))
 
     # Drop fields
     names2 = set(fields2) - set(fields1)
     if names2:
-        changes.append(RemoveFields(current._meta.name, *names2))
+        for name in names2:
+            changes.append(RemoveField(model_name=current._meta.name, name=name))
 
     # Change fields
     fields_ = []
@@ -176,7 +177,8 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
 
     if fields_:
         fields_ = _primary_key_last(fields_)
-        changes.append(ChangeFields(current._meta.name, **{f.name: f for f in fields_}))
+        for f in fields_:
+            changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
 
     # Create non-field indexes after dropping and creating fields
     changes.extend(create_index_changes)

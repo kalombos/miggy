@@ -145,8 +145,9 @@ def test_compile_migrations() -> None:
     def migrate(migrator, database, fake=False):
         """Write your migrations here."""
 
-        migrator.add_fields(
-            'test',
+        migrator.add_field(
+            model_name='test',
+            name='field',
             field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),
         )
 

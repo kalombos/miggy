@@ -6,7 +6,7 @@ import pytest
 
 from miggy.auto import diff_many, diff_one
 from miggy.cli import get_router
-from miggy.operations import AddFields, CreateModel
+from miggy.operations import AddField, CreateModel
 from miggy.types import ModelCls
 from miggy.utils import copy_model
 from tests.helpers import operation_to_one_line
@@ -34,8 +34,8 @@ def test_on_real_migrations(migrations_dir: Path):
             table_name = "person"
 
     changes = diff_one(Person1, Person_)
-    assert len(changes) == 3
-    assert isinstance(changes[0], AddFields)
+    assert len(changes) == 5
+    assert isinstance(changes[0], AddField)
 
     class Person2(pw.Model):
         first_name = pw.CharField(max_length=255)
@@ -66,7 +66,7 @@ def test_drop_field_w_constraint() -> None:
             table_name = "test"
 
     operation = diff_one(Test, OldTest)[0]
-    assert operation_to_one_line(operation) == "migrator.remove_fields('test','age',)"  # type: ignore
+    assert operation_to_one_line(operation) == "migrator.remove_field(model_name='test',name='age',)"  # type: ignore
 
 
 def test_proper_order_for_fk() -> None:
@@ -90,7 +90,7 @@ def test_proper_order_for_fk() -> None:
     # we create model first
     assert isinstance(changes[0], CreateModel)
     # we add fk to it after
-    assert isinstance(changes[1], AddFields)
+    assert isinstance(changes[1], AddField)
 
 
 @pytest.mark.parametrize(
@@ -109,7 +109,10 @@ def test_proper_order_for_fk() -> None:
                 "name": pw.CharField(),
                 "guid": pw.IntegerField(primary_key=True),
             },
-            """migrator.change_fields('oldtest',uid=pw.IntegerField(),guid=pw.IntegerField(primary_key=True),)""",
+            [
+                "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(),)",
+                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(primary_key=True),)"
+            ]
         ),
         pytest.param(
             {
@@ -124,12 +127,15 @@ def test_proper_order_for_fk() -> None:
                 "name": pw.CharField(),
                 "guid": pw.IntegerField(),
             },
-            """migrator.change_fields('oldtest',guid=pw.IntegerField(),uid=pw.IntegerField(primary_key=True),)""",
+            [
+                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(),)",
+                "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(primary_key=True),)",
+            ]
         ),
     ],
 )
 def test_primary_key_order(
-    fields_before: dict[str, pw.Field], fields_after: dict[str, pw.Field], expected: str
+    fields_before: dict[str, pw.Field], fields_after: dict[str, pw.Field], expected: list[str]
 ) -> None:
     class OldTest(pw.Model):
         mock_field = pw.CharField()
@@ -146,4 +152,4 @@ def test_primary_key_order(
         Test._meta.add_field(n, f)
     diffs = diff_one(Test, OldTest)
     diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
-    assert diffs == [expected]
+    assert diffs == expected

@@ -70,8 +70,11 @@ class State:
             if isinstance(rel_model, str) and rel_model != "self":
                 field.rel_model = self[rel_model]
 
-    def add_fields(self, model_name: str, **fields: pw.Field) -> None:
+    def add_field(self, model_name: str, name: str, field: pw.Field) -> None:
         model = self[model_name]
+        self._resolve_relation(field)
+        model._meta.add_field(name, field)
+
+    def add_fields(self, model_name: str, **fields: pw.Field) -> None:
         for field_name, field in fields.items():
-            self._resolve_relation(field)
-            model._meta.add_field(field_name, field)
+            self.add_field(model_name, field_name, field)

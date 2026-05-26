@@ -1,7 +1,7 @@
 import peewee as pw
 import pytest
 
-from miggy.operations import ChangeFields
+from miggy.operations import AlterField
 from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import copy_model
@@ -15,21 +15,17 @@ def test_state_forwards() -> None:
     state = State()
     state["user"] = User
 
-    operation = ChangeFields(
+    operation = AlterField(
         "User",
-        **{
-            "name": pw.CharField(max_length=100),
-            "email": pw.CharField(max_length=255, null=True),
-        },
+        "test",
+        pw.CharField(max_length=100),
     )
 
     operation.state_forwards(state)
 
     model = state["user"]
 
-    assert isinstance(model.email, pw.CharField)
-    assert isinstance(model.name, pw.CharField)
-
+    assert model.test.max_length == 100
 
 class _TestHandleFkConstraintNamespace:
     class RefModel(pw.Model):
@@ -118,7 +114,7 @@ def test_handle_fk_constraint(
     TestModel._meta.add_field("some_field", new_field)
 
     patched_pg_db.clear_queries()
-    operation = ChangeFields("User")
+    operation = AlterField("User", "some_field", new_field)
 
     for o in operation.handle_fk_constraint(old_field, new_field, SchemaMigrator.from_database(patched_pg_db)):
         o.run()
@@ -153,8 +149,9 @@ def test__database_forwards(
     NewModel = copy_model(OldModel)
     NewModel._meta.add_field("field", new_field)
 
-    operation = ChangeFields(
+    operation = AlterField(
         "oldmodel",
+        name="field",
         field=new_field,
     )
 

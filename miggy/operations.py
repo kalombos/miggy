@@ -274,41 +274,39 @@ class RenameTable(MigrateOperation):
         return ops
 
 
-class AddFields(MigrateOperation):
+class AddField(MigrateOperation):
     """
-    Adds fields to a model.
+    Add a field to a model.
     """
 
-    def __init__(self, model_name: str, **fields: pw.Field) -> None:
+    def __init__(self, model_name: str, name: str, field: pw.Field) -> None:
         self.model_name = model_name
-        self.fields = fields
+        self.name = name
+        self.field = field
 
     def state_forwards(self, state: State) -> None:
-        for name, field in self.fields.items():
-            state[self.model_name]._meta.add_field(name, field)
+        state.add_field(self.model_name, self.name, self.field)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
-        ops = []
         model = to_state[self.model_name]
-        for name in self.fields.keys():
-            field = model._meta.fields[name]
-            ops.append(schema_migrator.add_field(field))
-        return ops
+        field = model._meta.fields[self.name]
+        return [schema_migrator.add_field(field)]
 
 
-class ChangeFields(MigrateOperation):
+class AlterField(MigrateOperation):
     """
-    Change fields to a model.
+    Alter a field for a model.
     """
 
-    def __init__(self, model_name: str, **fields: pw.Field) -> None:
+    def __init__(self, model_name: str, name: str, field: pw.Field) -> None:
         self.model_name = model_name
-        self.fields = fields
+        self.name = name
+        self.field = field
 
     def state_forwards(self, state: State) -> None:
-        state.add_fields(self.model_name, **self.fields)
+        state.add_field(self.model_name, self.name, self.field)
 
     def handle_indexes(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
@@ -396,51 +394,49 @@ class ChangeFields(MigrateOperation):
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
         _ops = []
-        model = from_state[self.model_name]
-        table_name = model._meta.table_name
-        for name, field in self.fields.items():
-            old_field = getattr(model, name)
-            old_column_name = old_field.column_name
+        name = self.name
+        old_model = from_state[self.model_name]
+        old_field = getattr(old_model, name)
+        old_column_name = old_field.column_name
+        table_name = old_model._meta.table_name
+        model = to_state[self.model_name]
+        field = model._meta.fields[self.name]
 
-            if old_column_name != field.column_name:
-                _ops.append(schema_migrator.rename_field(table_name, old_field, field))
-            _ops.append(schema_migrator._change_primary_key(old_field, field))
-            _ops.extend(self.handle_type(old_field, field, schema_migrator))
-            _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
-            _ops.extend(self.handle_default_constraint(old_field, field, schema_migrator))
-            if old_field.null != field.null:
-                _operation = schema_migrator.drop_not_null if field.null else schema_migrator.add_not_null
-                _ops.append(_operation(table_name, field.column_name))
-            _ops.extend(self.handle_indexes(old_field, field, schema_migrator))
+        if old_column_name != field.column_name:
+            _ops.append(schema_migrator.rename_field(table_name, old_field, field))
+        _ops.append(schema_migrator._change_primary_key(old_field, field))
+        _ops.extend(self.handle_type(old_field, field, schema_migrator))
+        _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
+        _ops.extend(self.handle_default_constraint(old_field, field, schema_migrator))
+        if old_field.null != field.null:
+            _operation = schema_migrator.drop_not_null if field.null else schema_migrator.add_not_null
+            _ops.append(_operation(table_name, field.column_name))
+        _ops.extend(self.handle_indexes(old_field, field, schema_migrator))
         return _ops
 
 
-class RemoveFields(MigrateOperation):
+class RemoveField(MigrateOperation):
     """
-    Removes fields from a model
+    Remove a field from a model
     """
 
-    def __init__(self, model_name: str, *names: str, cascade: bool = False) -> None:
+    def __init__(self, model_name: str, name: str) -> None:
         self.model_name = model_name
-        self.cascade = cascade
-        self.names = names
+        self.name = name
 
     def state_forwards(self, state: State) -> None:
         model = state[self.model_name]
-        for name in self.names:
-            field = state[self.model_name]._meta.fields[name]
-            delete_field(model, field)
+
+        field = state[self.model_name]._meta.fields[self.name]
+        delete_field(model, field)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
-        """Remove fields from model."""
-        ops = []
+
         model = from_state[self.model_name]
-        for name in self.names:
-            field = model._meta.fields[name]
-            ops.append(schema_migrator.drop_column(model._meta.table_name, field.column_name, cascade=self.cascade))
-        return ops
+        field = model._meta.fields[self.name]
+        return [schema_migrator.drop_column(model._meta.table_name, field.column_name, cascade=False)]
 
 
 class RenameField(MigrateOperation):
