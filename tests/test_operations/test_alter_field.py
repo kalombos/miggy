@@ -27,6 +27,7 @@ def test_state_forwards() -> None:
 
     assert model.test.max_length == 100
 
+
 class _TestHandleFkConstraintNamespace:
     class RefModel(pw.Model):
         another_id = pw.IntegerField(unique=True, column_name="another_column_name")

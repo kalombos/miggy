@@ -427,7 +427,7 @@ class RemoveField(MigrateOperation):
     def state_forwards(self, state: State) -> None:
         model = state[self.model_name]
 
-        field = state[self.model_name]._meta.fields[self.name]
+        field = model._meta.fields[self.name]
         delete_field(model, field)
 
     def database_forwards(
@@ -464,7 +464,7 @@ class RenameField(MigrateOperation):
         delete_field(model, old_field)
 
         new_field.column_name = self.resolve_new_name(old_field, self.new_field_name)
-        model._meta.add_field(self.new_field_name, new_field)
+        state.add_field(self.model_name, self.new_field_name, new_field)
 
     def resolve_new_name(self, old_field: pw.Field, new_name: str) -> str:
         if isinstance(old_field, pw.ForeignKeyField):

@@ -1,5 +1,3 @@
-from textwrap import dedent
-
 import peewee as pw
 import pytest
 
@@ -85,7 +83,6 @@ def test_add_fields(test_field: pw.Field, expected: str) -> None:
     compare_dedent(OperationWriter(operations[0]).serialize(), expected)
 
 
-
 def test_add_few_fields() -> None:
     class OldTest(pw.Model):
         first_name = pw.CharField()
@@ -105,14 +102,14 @@ def test_add_few_fields() -> None:
     assert len(operations) == 2
     serialized = sorted([OperationWriter(o).serialize() for o in operations])
     compare_dedent(
-        serialized[0], 
+        serialized[0],
         """
         migrator.add_field(
             model_name='test',
             name='email',
             field=pw.CharField(),
         )
-        """
+        """,
     )
     compare_dedent(
         serialized[1],
@@ -122,5 +119,5 @@ def test_add_few_fields() -> None:
             name='last_name',
             field=pw.CharField(),
         )
-        """
+        """,
     )

@@ -17,7 +17,12 @@ class _M1(pw.Model):
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),)""",
+            (
+                "migrator.alter_field("
+                "model_name='test',"
+                "name='age',"
+                "field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),)"
+            ),
             id="add_constraint",
         ),
         pytest.param(
@@ -35,7 +40,12 @@ class _M1(pw.Model):
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(default=lambda: 5, constraints=[pw.SQL("DEFAULT 5")]),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),)""",
+            (
+                "migrator.alter_field("
+                "model_name='test',"
+                "name='age',"
+                "field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),)"
+            ),
             id="default_callable",
         ),
         pytest.param(
@@ -128,14 +138,14 @@ def test_alter_few_fields() -> None:
 
     serialized = sorted([OperationWriter(o).serialize() for o in operations])
     compare_dedent(
-        serialized[0], 
+        serialized[0],
         """
         migrator.alter_field(
             model_name='test',
             name='email',
             field=pw.CharField(),
         )
-        """
+        """,
     )
     compare_dedent(
         serialized[1],
@@ -145,7 +155,7 @@ def test_alter_few_fields() -> None:
             name='last_name',
             field=pw.CharField(),
         )
-        """
+        """,
     )
 
 

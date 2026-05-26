@@ -111,8 +111,8 @@ def test_proper_order_for_fk() -> None:
             },
             [
                 "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(primary_key=True),)"
-            ]
+                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(primary_key=True),)",
+            ],
         ),
         pytest.param(
             {
@@ -130,7 +130,7 @@ def test_proper_order_for_fk() -> None:
             [
                 "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(),)",
                 "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(primary_key=True),)",
-            ]
+            ],
         ),
     ],
 )
