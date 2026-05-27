@@ -109,8 +109,7 @@ class Migrator(object):
         fields: dict[str, pw.Field] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> ModelCls | None:
-        """A shortcut for adding a :class:`CreateModel` operation.
-        """
+        """A shortcut for adding a :class:`CreateModel` operation."""
         if isinstance(name, str):
             fields = fields or {}
             meta = meta or {}
