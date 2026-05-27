@@ -76,7 +76,7 @@ class State:
         self._resolve_relation(field)
         model._meta.add_field(name, field)
 
-    def remove_field(self, model_name: str, name: pw.Field) -> None:
+    def remove_field(self, model_name: str, name: str) -> None:
         model = self[model_name]
         field = model._meta.fields[name]
         model._meta.remove_field(field.name)
