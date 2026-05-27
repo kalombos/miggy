@@ -110,15 +110,6 @@ class Migrator(object):
         meta: dict[str, Any] | None = None,
     ) -> ModelCls | None:
         """A shortcut for adding a :class:`CreateModel` operation.
-
-        Can be used in two ways:
-        1. With explicit parameters to create a model dynamically:
-            migrator.create_model(name="User", fields={"name": pw.CharField()}, meta={"table_name": "users"})
-
-        2. As a decorator with an existing model class. Legacy API:
-            @migrator.create_model
-            class User(pw.Model):
-                name = pw.CharField()
         """
         if isinstance(name, str):
             fields = fields or {}
