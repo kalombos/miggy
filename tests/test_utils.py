@@ -3,7 +3,7 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from miggy.utils import Default, copy_model, delete_field, get_default_constraint
+from miggy.utils import Default, copy_model, get_default_constraint
 
 
 @pytest.mark.parametrize(
@@ -51,22 +51,6 @@ def test_default__from_sql(sql: pw.SQL, expected: str) -> None:
     assert value == expected
 
 
-def test_delete_field() -> None:
-    class SomeModel(pw.Model):
-        some_field = pw.CharField()
-
-    class User(pw.Model):
-        my_pk = pw.CharField(primary_key=True)
-        fk = pw.ForeignKeyField(SomeModel, backref="users")
-
-    delete_field(User, User.my_pk)
-    delete_field(User, User.fk)
-
-    assert not hasattr(SomeModel, "users")
-    assert not hasattr(User, "my_pk")
-    assert not hasattr(User, "fk_id")
-
-
 def test_copy_model() -> None:
     class User(pw.Model):
         my_pk = pw.CharField(primary_key=True)
@@ -74,7 +58,7 @@ def test_copy_model() -> None:
 
     NewModel = copy_model(User)
 
-    delete_field(User, User.my_pk)
+    User._meta.remove_field("my_pk")
     User.name.constriants = []
 
     assert NewModel.__name__ == "User"

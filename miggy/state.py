@@ -75,3 +75,12 @@ class State:
         model = self[model_name]
         self._resolve_relation(field)
         model._meta.add_field(name, field)
+
+    def remove_field(self, model_name: str, name: pw.Field) -> None:
+        model = self[model_name]
+        field = model._meta.fields[name]
+        model._meta.remove_field(field.name)
+        delattr(model, name)
+        if isinstance(field, pw.ForeignKeyField):
+            delattr(model, field.object_id_name)
+            delattr(field.rel_model, field.backref)

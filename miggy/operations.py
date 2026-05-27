@@ -10,7 +10,6 @@ from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
-    delete_field,
     fk_postfix,
     get_default_constraint_value,
     get_single_index,
@@ -425,10 +424,7 @@ class RemoveField(MigrateOperation):
         self.name = name
 
     def state_forwards(self, state: State) -> None:
-        model = state[self.model_name]
-
-        field = model._meta.fields[self.name]
-        delete_field(model, field)
+        state.remove_field(self.model_name, self.name)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
@@ -461,9 +457,9 @@ class RenameField(MigrateOperation):
 
         old_field = model._meta.fields[self.old_field_name]
         new_field = old_field.clone()
-        delete_field(model, old_field)
-
         new_field.column_name = self.resolve_new_name(old_field, self.new_field_name)
+
+        state.remove_field(self.model_name, self.old_field_name)
         state.add_field(self.model_name, self.new_field_name, new_field)
 
     def resolve_new_name(self, old_field: pw.Field, new_name: str) -> str:

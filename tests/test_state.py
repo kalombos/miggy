@@ -83,3 +83,21 @@ def test_add_field__fk() -> None:
 
     assert isinstance(model.related_field.rel_model.f, pw.CharField)
     assert isinstance(model.self_related_field.rel_model.test, pw.CharField)
+
+
+def test_remove_field() -> None:
+    class SomeModel(pw.Model):
+        some_field = pw.CharField()
+
+    class User(pw.Model):
+        my_pk = pw.CharField(primary_key=True)
+        fk = pw.ForeignKeyField(SomeModel, backref="users")
+
+    state = State({"user": User, "somemodel": SomeModel})
+
+    state.remove_field("User", "my_pk")
+    state.remove_field("User", "fk")
+
+    assert not hasattr(SomeModel, "users")
+    assert not hasattr(User, "my_pk")
+    assert not hasattr(User, "fk_id")
