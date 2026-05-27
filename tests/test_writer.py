@@ -2,13 +2,13 @@ import peewee as pw
 import pytest
 
 from miggy.operations import (
-    AddFields,
+    AddField,
     AddIndex,
-    ChangeFields,
+    AlterField,
     CreateModel,
     DropIndex,
     MigrateOperation,
-    RemoveFields,
+    RemoveField,
     RemoveModel,
     RenameTable,
 )
@@ -105,47 +105,44 @@ class Car(pw.Model):
             id="RenameTable",
         ),
         pytest.param(
-            AddFields(
+            AddField(
                 "user",
-                name=pw.CharField(max_length=100, constraints=[pw.SQL("DEFAULT 'Max'")]),
-                email=pw.CharField(max_length=255, null=True),
-                car=pw.ForeignKeyField(Car, field="name"),
+                name="name",
+                field=pw.CharField(max_length=100, constraints=[pw.SQL("DEFAULT 'Max'")]),
             ),
             """
-            migrator.add_fields(
+            migrator.add_field(
                 'user',
-                name=pw.CharField(constraints=[pw.SQL("DEFAULT 'Max'")], max_length=100),
-                email=pw.CharField(null=True),
-                car=pw.ForeignKeyField(field='name', model='car'),
+                name='name',
+                field=pw.CharField(constraints=[pw.SQL("DEFAULT 'Max'")], max_length=100),
             )
             """,
-            id="AddFields",
+            id="AddField",
         ),
         pytest.param(
-            ChangeFields(
+            AlterField(
                 "user",
-                name=pw.CharField(max_length=100),
-                email=pw.CharField(max_length=255, null=True),
+                name="email",
+                field=pw.CharField(max_length=255, null=True),
             ),
             """
-            migrator.change_fields(
+            migrator.alter_field(
                 'user',
-                name=pw.CharField(max_length=100),
-                email=pw.CharField(null=True),
+                name='email',
+                field=pw.CharField(null=True),
             )
             """,
-            id="ChangeFields",
+            id="AlterField",
         ),
         pytest.param(
-            RemoveFields("user", "field1", "field2"),
+            RemoveField("user", "field1"),
             """
-            migrator.remove_fields(
+            migrator.remove_field(
                 'user',
                 'field1',
-                'field2',
             )
             """,
-            id="RemoveFields",
+            id="RemoveField",
         ),
     ],
 )

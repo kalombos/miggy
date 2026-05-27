@@ -9,7 +9,6 @@ from miggy import Migrator, types
 from miggy.operations import MigrateOperation
 from miggy.schema import SchemaMigrator
 from miggy.state import State
-from miggy.utils import delete_field
 from tests.conftest import PatchedPgDatabase
 
 
@@ -255,9 +254,7 @@ def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
 
     class MyOperation(MigrateOperation):
         def state_forwards(self, state: State) -> None:
-            model = state["user"]
-            field = model._meta.fields["last_name"]
-            delete_field(model, field)
+            state.remove_field("user", "last_name")
 
         def database_forwards(
             self, schema_migrator: SchemaMigrator, from_state: State, to_state: State

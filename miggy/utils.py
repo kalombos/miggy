@@ -147,15 +147,6 @@ def copy_model(model_cls: ModelCls) -> ModelCls:
     return type(model_cls.__name__, model_cls.__bases__, attrs)
 
 
-def delete_field(model: ModelCls, field: pw.Field) -> None:
-    """Delete field from model."""
-    model._meta.remove_field(field.name)
-    delattr(model, field.name)
-    if isinstance(field, pw.ForeignKeyField):
-        delattr(model, field.object_id_name)
-        delattr(field.rel_model, field.backref)
-
-
 def fk_postfix(name: str) -> str:
     return name if name.endswith("_id") else name + "_id"
 

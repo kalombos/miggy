@@ -16,49 +16,49 @@ from tests.helpers import operation_to_one_line
         (
             {},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(unique=True),)"],
         ),
         (
             {},
             {"index": False, "unique": True},
-            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(unique=True),)"],
         ),
         (
             {},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(index=True),)"],
         ),
         # Changing index
         (
             {"index": True, "unique": False},
             {"index": True, "unique": True},
-            ["migrator.change_fields('test',first_name=pw.CharField(unique=True),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(unique=True),)"],
         ),
         (
             {"index": True, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(index=True),)"],
         ),
         (
             {"index": False, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.change_fields('test',first_name=pw.CharField(index=True),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(index=True),)"],
         ),
         # Dropping index
         (
             {"index": True, "unique": True},
             {},
-            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(),)"],
         ),
         (
             {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(),)"],
         ),
         (
             {"index": True, "unique": False},
             {},
-            ["migrator.change_fields('test',first_name=pw.CharField(),)"],
+            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(),)"],
         ),
         # do nothing
         ({"index": False, "unique": False}, {}, []),
