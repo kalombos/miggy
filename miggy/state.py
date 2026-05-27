@@ -59,7 +59,8 @@ class State:
         attrs = {"Meta": type("Meta", (object,), meta)}
         model = type(name, (pw.Model,), attrs)
         self[name] = model
-        self.add_fields(name, **fields)
+        for field_name, field in fields.items():
+            self.add_field(name, field_name, field)
 
     def remove_model(self, name: str) -> None:
         del self[name]
@@ -74,7 +75,3 @@ class State:
         model = self[model_name]
         self._resolve_relation(field)
         model._meta.add_field(name, field)
-
-    def add_fields(self, model_name: str, **fields: pw.Field) -> None:
-        for field_name, field in fields.items():
-            self.add_field(model_name, field_name, field)

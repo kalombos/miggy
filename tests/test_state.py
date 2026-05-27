@@ -41,7 +41,26 @@ def test_remove_model() -> None:
     assert "user" not in state
 
 
-def test_add_fields() -> None:
+def test_add_field() -> None:
+
+    class User(pw.Model):
+        test = pw.CharField()
+
+    state = State({"user": User})
+
+    state.add_field(
+        "User",
+        name="email",
+        field=pw.CharField(max_length=255, null=True),
+    )
+    model = state["user"]
+
+    assert model.email.max_length == 255
+    assert model.email.null is True
+    assert isinstance(model.email, pw.CharField)
+
+
+def test_add_field__fk() -> None:
     class RelatedModel(pw.Model):
         f = pw.CharField()
 
@@ -50,19 +69,17 @@ def test_add_fields() -> None:
 
     state = State({"user": User, "relatedmodel": RelatedModel})
 
-    state.add_fields(
+    state.add_field(
         "User",
-        age=pw.IntegerField(),
-        email=pw.CharField(max_length=255, null=True),
-        related_field=pw.ForeignKeyField("relatedmodel"),
-        self_related_field=pw.ForeignKeyField("self"),
+        name="related_field",
+        field=pw.ForeignKeyField("relatedmodel"),
+    )
+    state.add_field(
+        "User",
+        name="self_related_field",
+        field=pw.ForeignKeyField("self"),
     )
     model = state["user"]
 
-    assert model.email.max_length == 255
-    assert model.email.null is True
-    assert isinstance(model.email, pw.CharField)
-    assert isinstance(model.age, pw.IntegerField)
-
     assert isinstance(model.related_field.rel_model.f, pw.CharField)
-    assert isinstance(model.self_related_field.rel_model.age, pw.IntegerField)
+    assert isinstance(model.self_related_field.rel_model.test, pw.CharField)
