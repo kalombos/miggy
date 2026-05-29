@@ -186,10 +186,8 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
     return changes
 
 
-def diff_many(from_state: State, to_state: State, reverse=False) -> list[MigrateOperation]:
+def diff_many(from_state: State, to_state: State) -> list[MigrateOperation]:
     """Calculate changes for migrations from models2 to models1."""
-    if reverse:
-        from_state, to_state = to_state, from_state
 
     current_models = pw.sort_models(to_state.values())
     prev_models = pw.sort_models(from_state.values())
@@ -221,10 +219,9 @@ def diff_many(from_state: State, to_state: State, reverse=False) -> list[Migrate
 
 
 class MigrationAutodetector:
-    def __init__(self, from_state: State, to_state: State, reverse: bool = False) -> None:
+    def __init__(self, from_state: State, to_state: State) -> None:
         self.from_state = from_state
         self.to_state = to_state
-        self.reverse = reverse
 
     def changes(self) -> list[MigrateOperation]:
-        return diff_many(self.from_state, self.to_state, reverse=self.reverse)
+        return diff_many(self.from_state, self.to_state)

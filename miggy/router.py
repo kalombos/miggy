@@ -129,7 +129,7 @@ class Router(object):
             if not migrate:
                 return self.logger.warning("No changes found.")
 
-            rollback = compile_migrations(self.migration_state, project_state, reverse=True)
+            rollback = compile_migrations(project_state, self.migration_state)
 
         self.logger.info('Creating migration "%s"', name)
         name = self.compile(name, migrate, rollback)
@@ -325,10 +325,13 @@ def _check_model(obj, models=None):
     return isinstance(obj, type) and issubclass(obj, pw.Model) and hasattr(obj, "_meta")
 
 
-def compile_migrations(from_state: State, to_state: State, reverse: bool = False) -> str | typing.Literal[False]:
+def compile_migrations(
+    from_state: State,
+    to_state: State,
+) -> str | typing.Literal[False]:
     """Compile migrations for given models."""
 
-    changes = MigrationAutodetector(from_state, to_state, reverse).changes()
+    changes = MigrationAutodetector(from_state, to_state).changes()
     if not changes:
         return False
     serialized_changes = [OperationWriter(o).serialize() for o in changes]
