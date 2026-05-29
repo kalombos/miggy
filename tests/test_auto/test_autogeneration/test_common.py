@@ -4,7 +4,7 @@ from pathlib import Path
 import peewee as pw
 import pytest
 
-from miggy.auto import diff_many, diff_one
+from miggy.auto import MigrationAutodetector, diff_one
 from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
 from miggy.state import State
@@ -19,7 +19,7 @@ def test_on_real_migrations(migrations_dir: Path):
     Person_ = migrator.state["person"]
     Tag_ = migrator.state["tag"]
 
-    changes = diff_many(State(), migrator.state)
+    changes = MigrationAutodetector(State(), migrator.state).diff_many()
     assert len(changes) == 2
     assert all(isinstance(c, CreateModel) for c in changes)
 
@@ -85,7 +85,7 @@ def test_proper_order_for_fk() -> None:
 
         return State({"test": Test, "users": Users})
 
-    changes = diff_many(from_state(), to_state())
+    changes = MigrationAutodetector(from_state(), to_state()).diff_many()
     # we create model first
     assert isinstance(changes[0], CreateModel)
     # we add fk to it after
