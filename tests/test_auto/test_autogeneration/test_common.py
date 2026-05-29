@@ -7,7 +7,7 @@ import pytest
 from miggy.auto import diff_many, diff_one
 from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
-from miggy.types import ModelCls
+from miggy.state import State
 from miggy.utils import copy_model
 from tests.helpers import operation_to_one_line
 
@@ -16,11 +16,10 @@ def test_on_real_migrations(migrations_dir: Path):
     router = get_router(migrations_dir, "sqlite:///:memory:")
     router.run()
     migrator = router.migrator
-    models = migrator.state.values()
     Person_ = migrator.state["person"]
     Tag_ = migrator.state["tag"]
 
-    changes = diff_many(models, [])
+    changes = diff_many(State(), migrator.state)
     assert len(changes) == 2
     assert all(isinstance(c, CreateModel) for c in changes)
 
@@ -70,13 +69,13 @@ def test_drop_field_w_constraint() -> None:
 
 
 def test_proper_order_for_fk() -> None:
-    def prev_models() -> list[ModelCls]:
+    def from_state() -> State:
         class Users(pw.Model):
             name = pw.TextField()
 
-        return [Users]
+        return State({"users": Users})
 
-    def current_models() -> list[ModelCls]:
+    def to_state() -> State:
         class Test(pw.Model):
             name = pw.TextField()
 
@@ -84,9 +83,9 @@ def test_proper_order_for_fk() -> None:
             name = pw.TextField()
             test = pw.ForeignKeyField(Test, null=True, backref="users")
 
-        return [Test, Users]
+        return State({"test": Test, "users": Users})
 
-    changes = diff_many(current_models(), prev_models())
+    changes = diff_many(from_state(), to_state())
     # we create model first
     assert isinstance(changes[0], CreateModel)
     # we add fk to it after

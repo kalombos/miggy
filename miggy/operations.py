@@ -1,5 +1,8 @@
 import re
+from collections import namedtuple
 from collections.abc import Callable
+from enum import Enum
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 import peewee as pw
@@ -25,6 +28,19 @@ if TYPE_CHECKING:
 RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
+class Dependency(namedtuple("Dependency", "model_name field_name type")):
+    class Type(Enum):
+        CREATE = 0
+        REMOVE = 1
+        ALTER = 2
+        REMOVE_ORDER_WRT = 3
+        ALTER_FOO_TOGETHER = 4
+
+    @cached_property
+    def field_name_lower(self) -> str:
+        return self.field_name.lower()
+
+
 class MigrateOperation:
     """
     Base class for a migrate operation
@@ -33,6 +49,7 @@ class MigrateOperation:
     def __new__(cls, *args, **kwargs):
         self = object.__new__(cls)
         self._constructor_args = (args, kwargs)
+        self.deps = []
         return self
 
     def get_operation_call(self) -> str:

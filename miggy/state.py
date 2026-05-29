@@ -1,4 +1,4 @@
-from collections.abc import ValuesView
+from collections.abc import Generator, ItemsView, ValuesView
 from typing import Any
 
 import peewee as pw
@@ -32,6 +32,10 @@ class State:
                 self._snapshot[_key] = copy_model(self._snapshot[_key])
         return _key
 
+    def __iter__(self) -> Generator[str, None]:
+        for name in self.data:
+            yield name
+
     def __setitem__(self, key: str, val: ModelCls) -> None:
         self.data[self.normalize_key(key)] = val
 
@@ -43,6 +47,9 @@ class State:
 
     def __contains__(self, key: str) -> bool:
         return self.normalize_key(key) in self.data
+
+    def items(self) -> ItemsView[str, ModelCls]:
+        return self.data.items()
 
     def values(self) -> ValuesView[ModelCls]:
         return self.data.values()

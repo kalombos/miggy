@@ -1,4 +1,3 @@
-import collections
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
@@ -16,6 +15,7 @@ from miggy.operations import (
     RemoveModel,
     RenameTable,
 )
+from miggy.state import State
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
 from .types import ModelCls
@@ -186,47 +186,48 @@ def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
     return changes
 
 
-def diff_many(current_models, prev_models, reverse=False) -> list[MigrateOperation]:
+def diff_many(from_state: State, to_state: State, reverse=False) -> list[MigrateOperation]:
     """Calculate changes for migrations from models2 to models1."""
     if reverse:
-        prev_models, current_models = current_models, prev_models
-    current_models = pw.sort_models(current_models)
-    prev_models = pw.sort_models(prev_models)
+        from_state, to_state = to_state, from_state
 
+    current_models = pw.sort_models(to_state.values())
+    prev_models = pw.sort_models(from_state.values())
     if reverse:
         current_models = reversed(current_models)
         prev_models = reversed(prev_models)
 
-    current_models = collections.OrderedDict([(m._meta.name, m) for m in current_models])
-    prev_models = collections.OrderedDict([(m._meta.name, m) for m in prev_models])
+    from_state = State({m._meta.name: m for m in prev_models})
+    to_state = State({m._meta.name: m for m in current_models})
 
     changes: list[MigrateOperation] = []
 
-    for name, current_model in current_models.items():
+    for name in to_state:
+        current_model = to_state[name]
         # Add new models
-        if name not in prev_models:
-            index_meta = extract_index_meta(current_models[name])
-            deconstructed = ModelDeconstructor(current_models[name]).deconstruct()
+        if name not in from_state:
+            index_meta = extract_index_meta(to_state[name])
+            deconstructed = ModelDeconstructor(to_state[name]).deconstruct()
             changes.append(CreateModel(**deconstructed))
             for i in index_meta:
                 changes.append(i.as_operation())
         # Change existing models
         else:
-            prev_model = prev_models[name]
+            prev_model = from_state[name]
             changes += diff_one(current_model, prev_model)
 
     # Remove models
-    for name in [m for m in prev_models if m not in current_models]:
-        changes.append(RemoveModel(prev_models[name]._meta.name))
+    for name in [m for m in from_state if m not in to_state]:
+        changes.append(RemoveModel(from_state[name]._meta.name))
 
     return changes
 
 
 class MigrationAutodetector:
-    def __init__(self, from_state: list[ModelCls], to_state: list[ModelCls], reverse: bool = False) -> None:
+    def __init__(self, from_state: State, to_state: State, reverse: bool = False) -> None:
         self.from_state = from_state
         self.to_state = to_state
         self.reverse = reverse
 
-    def changes(self):
-        return diff_many(self.to_state, self.from_state, reverse=self.reverse)
+    def changes(self) -> list[MigrateOperation]:
+        return diff_many(self.from_state, self.to_state, reverse=self.reverse)

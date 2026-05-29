@@ -11,6 +11,7 @@ import peewee as pw
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
+from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import exec_in
 from miggy.writer import OperationWriter
@@ -337,14 +338,16 @@ def _check_model(obj, models=None):
 
 
 def compile_migrations(
-    from_state: list[ModelCls], to_state: list[ModelCls], reverse: bool = False
+    prev_models: list[ModelCls], current_models: list[ModelCls], reverse: bool = False
 ) -> str | typing.Literal[False]:
     """Compile migrations for given models."""
 
+    from_state = State({m._meta.name: m for m in prev_models})
+    to_state = State({m._meta.name: m for m in current_models})
     changes = MigrationAutodetector(from_state, to_state, reverse).changes()
     if not changes:
         return False
-    changes = [OperationWriter(o).serialize() for o in changes]
+    serialized_changes = [OperationWriter(o).serialize() for o in changes]
 
-    changes = NEWLINE + NEWLINE.join("\n\n".join(changes).split("\n"))
-    return CLEAN_RE.sub("\n", changes)
+    line = NEWLINE + NEWLINE.join("\n\n".join(serialized_changes).split("\n"))
+    return CLEAN_RE.sub("\n", line)
