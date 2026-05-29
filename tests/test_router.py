@@ -94,7 +94,7 @@ def test_router_schema(tmpdir):
     schema_name = "test"
     migrations = tmpdir.mkdir("migrations")
 
-    with mock.patch("miggy.router.BaseRouter.done"):
+    with mock.patch("miggy.router.Router.done"):
         router = get_router(str(migrations), "postgres:///fake", schema=schema_name)
 
         assert router.schema == schema_name

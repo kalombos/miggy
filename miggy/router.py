@@ -36,8 +36,10 @@ class Migration:
         pass
 
 
-class BaseRouter(object):
+class Router(object):
     """Abstract base class for router."""
+
+    filemask = re.compile(r"[\d]{3}_[^\.]+\.py$")
 
     def __init__(self, database, migrate_table="migratehistory", ignore=None, schema=None, logger=LOGGER):
         self.database = database
@@ -59,7 +61,11 @@ class BaseRouter(object):
 
     @property
     def todo(self):
-        raise NotImplementedError
+        """Scan migrations in file system."""
+        if not os.path.exists(self.migrate_dir):
+            self.logger.warning("Migration directory: %s does not exist.", self.migrate_dir)
+            os.makedirs(self.migrate_dir)
+        return sorted(f[:-3] for f in os.listdir(self.migrate_dir) if self.filemask.match(f))
 
     @property
     def done(self):
@@ -142,11 +148,52 @@ class BaseRouter(object):
         """Clear migrations."""
         self.model.delete().execute()
 
+        """Remove migrations from fs."""
+        for name in self.todo:
+            filename = os.path.join(self.migrate_dir, name + ".py")
+            os.remove(filename)
+
     def compile(self, name, migrate="", rollback="", num=None):
-        raise NotImplementedError
+        """Create a migration."""
+        if num is None:
+            num = len(self.todo)
+
+        name = "{:03}_".format(num + 1) + name
+        filename = name + ".py"
+        path = os.path.join(self.migrate_dir, filename)
+        with open(path, "w") as f:
+            f.write(
+                MIGRATE_TEMPLATE.format(
+                    migrate=migrate, rollback=rollback, name=filename, ext_import=make_ext_import(self.database)
+                )
+            )
+
+        return name
 
     def read(self, name):
-        raise NotImplementedError
+        """Read migration from file."""
+        call_params = {}
+        if os.name == "nt" and sys.version_info >= (3, 0):
+            # if system is windows - force utf-8 encoding
+            call_params["encoding"] = "utf-8"
+        with open(os.path.join(self.migrate_dir, name + ".py"), **call_params) as f:
+            code = f.read()
+            scope = {}
+            exec_in(code, scope)
+
+            atomic, migrate, rollback = (
+                scope.get("__ATOMIC", True),
+                scope.get("migrate", VOID),
+                scope.get("rollback", VOID),
+            )
+
+            class _Migration(Migration):
+                pass
+
+            _Migration.atomic = atomic
+            _Migration.migrate = migrate
+            _Migration.rollback = rollback
+            return _Migration
 
     def run_one(
         self,
@@ -232,70 +279,6 @@ def make_ext_import(database: pw.Database) -> str:
         return "import playhouse.postgres_ext as pw_pext"
     return ""
 
-
-class Router(BaseRouter):
-    filemask = re.compile(r"[\d]{3}_[^\.]+\.py$")
-
-    def __init__(self, database, migrate_dir=DEFAULT_MIGRATE_DIR, **kwargs):
-        super(Router, self).__init__(database, **kwargs)
-        self.migrate_dir = migrate_dir
-
-    @property
-    def todo(self):
-        """Scan migrations in file system."""
-        if not os.path.exists(self.migrate_dir):
-            self.logger.warning("Migration directory: %s does not exist.", self.migrate_dir)
-            os.makedirs(self.migrate_dir)
-        return sorted(f[:-3] for f in os.listdir(self.migrate_dir) if self.filemask.match(f))
-
-    def compile(self, name, migrate="", rollback="", num=None):
-        """Create a migration."""
-        if num is None:
-            num = len(self.todo)
-
-        name = "{:03}_".format(num + 1) + name
-        filename = name + ".py"
-        path = os.path.join(self.migrate_dir, filename)
-        with open(path, "w") as f:
-            f.write(
-                MIGRATE_TEMPLATE.format(
-                    migrate=migrate, rollback=rollback, name=filename, ext_import=make_ext_import(self.database)
-                )
-            )
-
-        return name
-
-    def read(self, name):
-        """Read migration from file."""
-        call_params = {}
-        if os.name == "nt" and sys.version_info >= (3, 0):
-            # if system is windows - force utf-8 encoding
-            call_params["encoding"] = "utf-8"
-        with open(os.path.join(self.migrate_dir, name + ".py"), **call_params) as f:
-            code = f.read()
-            scope = {}
-            exec_in(code, scope)
-
-            atomic, migrate, rollback = (
-                scope.get("__ATOMIC", True),
-                scope.get("migrate", VOID),
-                scope.get("rollback", VOID),
-            )
-
-            class _Migration(Migration):
-                pass
-
-            _Migration.atomic = atomic
-            _Migration.migrate = migrate
-            _Migration.rollback = rollback
-            return _Migration
-
-    def clear(self):
-        """Remove migrations from fs."""
-        super(Router, self).clear()
-        for name in self.todo:
-            filename = os.path.join(self.migrate_dir, name + ".py")
-            os.remove(filename)
 
 
 def load_models(module):
