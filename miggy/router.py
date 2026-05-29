@@ -41,7 +41,15 @@ class Router(object):
 
     filemask = re.compile(r"[\d]{3}_[^\.]+\.py$")
 
-    def __init__(self, database, migrate_table="migratehistory", ignore=None, schema=None, logger=LOGGER):
+    def __init__(
+        self,
+        database,
+        migrate_table="migratehistory",
+        migrate_dir=DEFAULT_MIGRATE_DIR,
+        ignore=None,
+        schema=None,
+        logger=LOGGER,
+    ):
         self.database = database
         self.migrate_table = migrate_table
         self.schema = schema
@@ -49,6 +57,7 @@ class Router(object):
         self.logger = logger
         if not isinstance(self.database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
+        self.migrate_dir = migrate_dir
 
     @cached_property
     def model(self) -> typing.Type[MigrateHistory]:
@@ -278,7 +287,6 @@ def make_ext_import(database: pw.Database) -> str:
     if isinstance(database, pw.PostgresqlDatabase):
         return "import playhouse.postgres_ext as pw_pext"
     return ""
-
 
 
 def load_models(module):
