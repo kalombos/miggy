@@ -12,7 +12,6 @@ from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
 from miggy.state import State
-from miggy.types import ModelCls
 from miggy.utils import exec_in
 from miggy.writer import OperationWriter
 
@@ -44,7 +43,7 @@ class BaseRouter(object):
         self.database = database
         self.migrate_table = migrate_table
         self.schema = schema
-        self.ignore = ignore
+        self.ignore = ignore or []
         self.logger = logger
         if not isinstance(self.database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
@@ -82,11 +81,11 @@ class BaseRouter(object):
         return migrator
 
     @property
-    def migration_state(self) -> list[ModelCls]:
+    def migration_state(self) -> State:
         """Create migrator and setup it with fake migrations."""
-        return list(self.migrator.state.values())
+        return self.migrator.state
 
-    def load_project_state(self, auto) -> list[ModelCls]:
+    def load_project_state(self, auto) -> State:
         # Need to append the CURDIR to the path for import to work.
         sys.path.append(CURDIR)
         modules = [auto]
@@ -95,9 +94,7 @@ class BaseRouter(object):
 
         models = [m for module in modules for m in load_models(module)]
 
-        if self.ignore:
-            models = [m for m in models if m._meta.name not in self.ignore]
-        return models
+        return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
     def create(self, name="auto", auto=False):
         """Create a migration.
@@ -127,14 +124,14 @@ class BaseRouter(object):
     def merge(self, name="initial"):
         """Merge migrations into one."""
         migrator = Migrator(self.database)
-        migrate = compile_migrations(migrator.state.values(), self.migration_state)
+        migrate = compile_migrations(migrator.state, self.migration_state)
         if not migrate:
             return self.logger.error("Can't merge migrations")
 
         self.clear()
 
         self.logger.info('Merge migrations into "%s"', name)
-        rollback = compile_migrations(self.migration_state, [])
+        rollback = compile_migrations(self.migration_state, State())
         name = self.compile(name, migrate, rollback, 0)
 
         migrator = Migrator(self.database)
@@ -337,13 +334,9 @@ def _check_model(obj, models=None):
     return isinstance(obj, type) and issubclass(obj, pw.Model) and hasattr(obj, "_meta")
 
 
-def compile_migrations(
-    prev_models: list[ModelCls], current_models: list[ModelCls], reverse: bool = False
-) -> str | typing.Literal[False]:
+def compile_migrations(from_state: State, to_state: State, reverse: bool = False) -> str | typing.Literal[False]:
     """Compile migrations for given models."""
 
-    from_state = State({m._meta.name: m for m in prev_models})
-    to_state = State({m._meta.name: m for m in current_models})
     changes = MigrationAutodetector(from_state, to_state, reverse).changes()
     if not changes:
         return False

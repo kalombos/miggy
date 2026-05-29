@@ -10,6 +10,7 @@ from playhouse.postgres_ext import Psycopg3Database
 
 from miggy.cli import get_router
 from miggy.router import MIGRATE_TEMPLATE, Router, compile_migrations
+from miggy.state import State
 from tests.conftest import POSTGRES_DSN
 
 
@@ -117,16 +118,16 @@ def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration
 
 
 def test_compile_migrations() -> None:
-    def _old_model():
+    def from_state():
         class Test(pw.Model):
             first_name = pw.CharField()
 
             class Meta:
                 table_name = "test"
 
-        return Test
+        return State({"test": Test})
 
-    def _current_model():
+    def _to_state():
         class Test(pw.Model):
             first_name = pw.CharField()
             field = pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])
@@ -134,9 +135,9 @@ def test_compile_migrations() -> None:
             class Meta:
                 table_name = "test"
 
-        return Test
+        return State({"test": Test})
 
-    changes = compile_migrations([_old_model()], [_current_model()])
+    changes = compile_migrations(from_state(), _to_state())
     template = MIGRATE_TEMPLATE.format(migrate=changes, name="", ext_import="", rollback="")
 
     assert (

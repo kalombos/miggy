@@ -193,9 +193,6 @@ def diff_many(from_state: State, to_state: State, reverse=False) -> list[Migrate
 
     current_models = pw.sort_models(to_state.values())
     prev_models = pw.sort_models(from_state.values())
-    if reverse:
-        current_models = reversed(current_models)
-        prev_models = reversed(prev_models)
 
     from_state = State({m._meta.name: m for m in prev_models})
     to_state = State({m._meta.name: m for m in current_models})
