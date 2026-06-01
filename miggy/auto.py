@@ -146,15 +146,53 @@ class MigrationAutodetector:
         self.from_state = from_state
         self.to_state = to_state
 
+    def generate_added_fields(self, model_name: str) -> list[AddField]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_fields = prev._meta.fields
+        current_fields = current._meta.fields
+        changes = []
+        for name in set(current_fields) - set(prev_fields):
+            changes.append(AddField(model_name=current._meta.name, name=name, field=current_fields[name]))
+        return changes
+
+    def generate_removed_fields(self, model_name: str) -> list[RemoveField]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_fields = prev._meta.fields
+        current_fields = current._meta.fields
+        changes = []
+        for name in set(prev_fields) - set(current_fields):
+            changes.append(RemoveField(model_name=current._meta.name, name=name))
+        return changes
+
+    def generate_altered_fields(self, model_name: str) -> list[AlterField]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_fields = prev._meta.fields
+        current_fields = current._meta.fields
+        changes = []
+        fields_ = []
+        for name in set(current_fields).intersection(prev_fields):
+            current_field, prev_field = current_fields[name], prev_fields[name]
+            if deep_deconstruct(current_field) != deep_deconstruct(prev_field):
+                fields_.append(current_field)
+
+        if fields_:
+            fields_ = _primary_key_last(fields_)
+            for f in fields_:
+                changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
+        return changes
+
     def diff_one(self, model_name: str) -> list[MigrateOperation]:
         """Find difference between given peewee models."""
 
         prev = self.from_state[model_name]
         current = self.to_state[model_name]
         changes: list[MigrateOperation] = []
-
-        fields1 = current._meta.fields
-        fields2 = prev._meta.fields
 
         if current._meta.table_name != prev._meta.table_name:
             changes.append(RenameTable(prev._meta.name, current._meta.table_name))
@@ -164,29 +202,9 @@ class MigrationAutodetector:
         # Drop non-field indexes before dropping and creating fields
         changes.extend(drop_index_changes)
 
-        # Add fields
-        names1 = set(fields1) - set(fields2)
-        if names1:
-            for name in names1:
-                changes.append(AddField(model_name=current._meta.name, name=name, field=fields1[name]))
-
-        # Drop fields
-        names2 = set(fields2) - set(fields1)
-        if names2:
-            for name in names2:
-                changes.append(RemoveField(model_name=current._meta.name, name=name))
-
-        # Change fields
-        fields_ = []
-        for name in set(fields1) - names1 - names2:
-            field1, field2 = fields1[name], fields2[name]
-            if deep_deconstruct(field1) != deep_deconstruct(field2):
-                fields_.append(field1)
-
-        if fields_:
-            fields_ = _primary_key_last(fields_)
-            for f in fields_:
-                changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
+        changes.extend(self.generate_added_fields(model_name))
+        changes.extend(self.generate_removed_fields(model_name))
+        changes.extend(self.generate_altered_fields(model_name))
 
         # Create non-field indexes after dropping and creating fields
         changes.extend(create_index_changes)
