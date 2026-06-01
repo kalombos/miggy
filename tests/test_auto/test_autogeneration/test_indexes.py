@@ -3,10 +3,9 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from miggy.auto import diff_one
 from miggy.types import ModelCls
 from miggy.utils import ModelIndex
-from tests.helpers import operation_to_one_line
+from tests.helpers import diff_one, operation_to_one_line
 
 
 @pytest.mark.parametrize(
@@ -75,7 +74,7 @@ def test_field_index(
 
         return Test
 
-    diff = diff_one(create_model(after_params), create_model(before_params))
+    diff = diff_one(create_model(before_params), create_model(after_params))
     diff = [operation_to_one_line(o) for o in diff]  # type: ignore
 
     assert diff == changes
@@ -164,7 +163,7 @@ def test_tuple_indexes__from_meta(indexes_before: list[Any], indexes_after: list
 
         return Test
 
-    diffs = diff_one(create_model(indexes_after), create_model(indexes_before))
+    diffs = diff_one(create_model(indexes_before), create_model(indexes_after))
     assert [operation_to_one_line(d) for d in diffs] == changes  # type: ignore
 
 
@@ -215,13 +214,22 @@ def test_advanced_indexes(before_kwargs: dict[str, Any], after_kwargs: dict[str,
         Test.add_index(Test.first_name, Test.last_name, **indexes_kwrags)
         return Test
 
-    diffs = diff_one(create_model(after_kwargs), create_model(before_kwargs))
+    diffs = diff_one(create_model(before_kwargs), create_model(after_kwargs))
 
     assert [operation_to_one_line(d) for d in diffs] == changes  # type: ignore
 
 
 def test_indexes_rebuilding() -> None:
-    def create_model1() -> type[pw.Model]:
+
+    def prev_model() -> type[pw.Model]:
+        class Test(pw.Model):
+            first_name = pw.CharField()
+            last_name = pw.CharField()
+
+        Test._meta.indexes_state = {"test_first_name": ModelIndex(Test, (Test.first_name,))}
+        return Test
+
+    def current_model() -> type[pw.Model]:
         class Test(pw.Model):
             first_name = pw.CharField()
             last_name = pw.CharField()
@@ -234,15 +242,7 @@ def test_indexes_rebuilding() -> None:
 
         return Test
 
-    def create_model2() -> type[pw.Model]:
-        class Test(pw.Model):
-            first_name = pw.CharField()
-            last_name = pw.CharField()
-
-        Test._meta.indexes_state = {"test_first_name": ModelIndex(Test, (Test.first_name,))}
-        return Test
-
-    changes = diff_one(create_model1(), create_model2())
+    changes = diff_one(prev_model(), current_model())
     assert [operation_to_one_line(c) for c in changes] == [  # type: ignore
         "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)"
     ]

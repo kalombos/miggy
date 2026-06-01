@@ -1,10 +1,11 @@
 import peewee as pw
 import pytest
 
-from miggy.auto import diff_one
+from miggy.auto import MigrationAutodetector
+from miggy.state import State
 from miggy.utils import copy_model
 from miggy.writer import OperationWriter
-from tests.helpers import compare_dedent, operation_to_one_line, to_one_line
+from tests.helpers import compare_dedent, diff_one, operation_to_one_line, to_one_line
 
 
 class _M1(pw.Model):
@@ -111,7 +112,7 @@ def test_alter_field(age_field_before: pw.Field, age_field_after: pw.Field, expe
 
     Test._meta.add_field("age", age_field_after)
 
-    changes = diff_one(Test, OldTest)
+    changes = diff_one(OldTest, Test)
     changes = [operation_to_one_line(c) for c in changes]  # type: ignore
     assert changes == [to_one_line(expected)]
 
@@ -133,7 +134,7 @@ def test_alter_few_fields() -> None:
         class Meta:
             table_name = "test"
 
-    operations = diff_one(Test, OldTest)
+    operations = diff_one(OldTest, Test)
     assert len(operations) == 2
 
     serialized = sorted([OperationWriter(o).serialize() for o in operations])
@@ -174,4 +175,7 @@ def test_alter_field__no_changes(field_before: pw.Field, field_after: pw.Field) 
 
         return Test
 
-    assert diff_one(create_model(field_after), create_model(field_before)) == []
+    changes = MigrationAutodetector(
+        State({"test": create_model(field_before)}), State({"test": create_model(field_after)})
+    ).diff_one("test")
+    assert changes == []

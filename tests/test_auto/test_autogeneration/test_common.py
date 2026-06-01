@@ -4,12 +4,12 @@ from pathlib import Path
 import peewee as pw
 import pytest
 
-from miggy.auto import MigrationAutodetector, diff_one
+from miggy.auto import MigrationAutodetector
 from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
 from miggy.state import State
 from miggy.utils import copy_model
-from tests.helpers import operation_to_one_line
+from tests.helpers import diff_one, operation_to_one_line
 
 
 def test_on_real_migrations(migrations_dir: Path):
@@ -32,7 +32,7 @@ def test_on_real_migrations(migrations_dir: Path):
         class Meta:
             table_name = "person"
 
-    changes = diff_one(Person1, Person_)
+    changes = diff_one(Person_, Person1)
     assert len(changes) == 5
     assert isinstance(changes[0], AddField)
 
@@ -46,7 +46,7 @@ def test_on_real_migrations(migrations_dir: Path):
         class Meta:
             table_name = "person"
 
-    changes = diff_one(Person_, Person2)
+    changes = diff_one(Person2, Person_)
     assert not changes
 
 
@@ -64,7 +64,7 @@ def test_drop_field_w_constraint() -> None:
         class Meta:
             table_name = "test"
 
-    operation = diff_one(Test, OldTest)[0]
+    operation = diff_one(OldTest, Test)[0]
     assert operation_to_one_line(operation) == "migrator.remove_field(model_name='test',name='age',)"  # type: ignore
 
 
@@ -149,6 +149,6 @@ def test_primary_key_order(
     Test = copy_model(OldTest)
     for n, f in fields_after.items():
         Test._meta.add_field(n, f)
-    diffs = diff_one(Test, OldTest)
+    diffs = diff_one(OldTest, Test)
     diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
     assert diffs == expected

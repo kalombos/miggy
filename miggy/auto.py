@@ -141,55 +141,57 @@ def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
     return _fields
 
 
-def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
-    """Find difference between given peewee models."""
-    changes: list[MigrateOperation] = []
-
-    fields1 = current._meta.fields
-    fields2 = prev._meta.fields
-
-    if current._meta.table_name != prev._meta.table_name:
-        changes.append(RenameTable(prev._meta.name, current._meta.table_name))
-
-    create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
-
-    # Drop non-field indexes before dropping and creating fields
-    changes.extend(drop_index_changes)
-
-    # Add fields
-    names1 = set(fields1) - set(fields2)
-    if names1:
-        for name in names1:
-            changes.append(AddField(model_name=current._meta.name, name=name, field=fields1[name]))
-
-    # Drop fields
-    names2 = set(fields2) - set(fields1)
-    if names2:
-        for name in names2:
-            changes.append(RemoveField(model_name=current._meta.name, name=name))
-
-    # Change fields
-    fields_ = []
-    for name in set(fields1) - names1 - names2:
-        field1, field2 = fields1[name], fields2[name]
-        if deep_deconstruct(field1) != deep_deconstruct(field2):
-            fields_.append(field1)
-
-    if fields_:
-        fields_ = _primary_key_last(fields_)
-        for f in fields_:
-            changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
-
-    # Create non-field indexes after dropping and creating fields
-    changes.extend(create_index_changes)
-
-    return changes
-
-
 class MigrationAutodetector:
     def __init__(self, from_state: State, to_state: State) -> None:
         self.from_state = from_state
         self.to_state = to_state
+
+    def diff_one(self, model_name: str) -> list[MigrateOperation]:
+        """Find difference between given peewee models."""
+
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+        changes: list[MigrateOperation] = []
+
+        fields1 = current._meta.fields
+        fields2 = prev._meta.fields
+
+        if current._meta.table_name != prev._meta.table_name:
+            changes.append(RenameTable(prev._meta.name, current._meta.table_name))
+
+        create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
+
+        # Drop non-field indexes before dropping and creating fields
+        changes.extend(drop_index_changes)
+
+        # Add fields
+        names1 = set(fields1) - set(fields2)
+        if names1:
+            for name in names1:
+                changes.append(AddField(model_name=current._meta.name, name=name, field=fields1[name]))
+
+        # Drop fields
+        names2 = set(fields2) - set(fields1)
+        if names2:
+            for name in names2:
+                changes.append(RemoveField(model_name=current._meta.name, name=name))
+
+        # Change fields
+        fields_ = []
+        for name in set(fields1) - names1 - names2:
+            field1, field2 = fields1[name], fields2[name]
+            if deep_deconstruct(field1) != deep_deconstruct(field2):
+                fields_.append(field1)
+
+        if fields_:
+            fields_ = _primary_key_last(fields_)
+            for f in fields_:
+                changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
+
+        # Create non-field indexes after dropping and creating fields
+        changes.extend(create_index_changes)
+
+        return changes
 
     def diff_many(self) -> list[MigrateOperation]:
         """Calculate changes for migrations from models2 to models1."""
@@ -203,7 +205,6 @@ class MigrationAutodetector:
         changes: list[MigrateOperation] = []
 
         for name in to_state:
-            current_model = to_state[name]
             # Add new models
             if name not in from_state:
                 index_meta = extract_index_meta(to_state[name])
@@ -213,8 +214,7 @@ class MigrationAutodetector:
                     changes.append(i.as_operation())
             # Change existing models
             else:
-                prev_model = from_state[name]
-                changes += diff_one(current_model, prev_model)
+                changes += self.diff_one(name)
 
         # Remove models
         for name in [m for m in from_state if m not in to_state]:

@@ -1,8 +1,11 @@
 from enum import IntEnum
 from textwrap import dedent
 
+from miggy.auto import MigrationAutodetector
 from miggy.ext.utils import StrEnum
 from miggy.operations import MigrateOperation
+from miggy.state import State
+from miggy.types import ModelCls
 from miggy.writer import OperationWriter
 
 
@@ -27,3 +30,7 @@ class Rating(IntEnum):
 
 def compare_dedent(s1: str, s2: str) -> None:
     assert dedent(s1).strip() == dedent(s2).strip()
+
+
+def diff_one(prev: ModelCls, current: ModelCls) -> list[MigrateOperation]:
+    return MigrationAutodetector(State({"test": prev}), State({"test": current})).diff_one("test")
