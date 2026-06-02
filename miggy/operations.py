@@ -40,8 +40,15 @@ class MigrateOperation:
     def __new__(cls, *args, **kwargs):
         self = object.__new__(cls)
         self._constructor_args = (args, kwargs)
-        self.deps = []
         return self
+
+    @property
+    def deps(self) -> list[Dependency]:
+        # Workaround to avoid initializing deps in the constructor
+        # and calling super() in every MigrateOperation subclass.
+        if not hasattr(self, "_deps"):
+            self._deps: list[Dependency] = []
+        return self._deps
 
     def get_operation_call(self) -> str:
         name = self.__class__.__name__

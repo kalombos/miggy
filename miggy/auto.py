@@ -1,4 +1,6 @@
 from collections.abc import Sequence
+from functools import lru_cache
+from graphlib import TopologicalSorter
 from typing import Any, NamedTuple
 
 import peewee as pw
@@ -9,6 +11,7 @@ from miggy.operations import (
     AddIndex,
     AlterField,
     CreateModel,
+    Dependency,
     DropIndex,
     MigrateOperation,
     RemoveField,
@@ -128,23 +131,56 @@ def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[AddI
     return create_changes, drop_changes
 
 
-def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
-    _fields = []
-    pk_field = None
-    for f in fields:
-        if f.primary_key:
-            pk_field = f
-        else:
-            _fields.append(f)
-    if pk_field:
-        _fields.append(pk_field)
-    return _fields
+def _get_primary_keys(m: ModelCls):
+    meta = m._meta
+    if meta.composite_key:
+        return meta.primary_key.field_names
+    if meta.primary_key is not False:
+        return meta.primary_key.name
+    return None
 
 
 class MigrationAutodetector:
     def __init__(self, from_state: State, to_state: State) -> None:
         self.from_state = from_state
         self.to_state = to_state
+
+    def _sort_operations(self, operations: list[MigrateOperation]) -> list[MigrateOperation]:
+        """
+        Reorder to make things possible. Reordering may be needed so FKs work
+        nicely inside the same app.
+        """
+        ts: TopologicalSorter = TopologicalSorter()
+        for op in operations:
+            ts.add(op)
+            for dep in op.deps:
+                ts.add(op, *(x for x in operations if self.check_dependency(x, dep)))
+        return list(ts.static_order())
+
+    def check_dependency(self, operation, dependency):
+        """
+        Return True if the given operation depends on the given dependency,
+        False otherwise.
+        """
+        # Remove pk
+        if dependency.type == Dependency.Type.REMOVE_PK:
+            return (isinstance(operation, RemoveField) or isinstance(operation, AlterField)) and self.is_old_pk(
+                operation.name, operation.model_name
+            )
+        else:
+            raise ValueError("Can't handle dependency %r" % (dependency,))
+
+    @lru_cache  # noqa: B019
+    def is_old_pk(self, field_name: str, model_name: str) -> list[Dependency]:
+        old_pks = _get_primary_keys(self.from_state[model_name])
+        new_pks = _get_primary_keys(self.to_state[model_name])
+        return old_pks != new_pks and old_pks == field_name
+
+    @lru_cache  # noqa: B019
+    def is_new_pk(self, field_name: str, model_name: str) -> list[Dependency]:
+        old_pks = _get_primary_keys(self.from_state[model_name])
+        new_pks = _get_primary_keys(self.to_state[model_name])
+        return old_pks != new_pks and new_pks == field_name
 
     def generate_added_fields(self, model_name: str) -> list[AddField]:
         prev = self.from_state[model_name]
@@ -154,7 +190,10 @@ class MigrationAutodetector:
         current_fields = current._meta.fields
         changes = []
         for name in set(current_fields) - set(prev_fields):
-            changes.append(AddField(model_name=current._meta.name, name=name, field=current_fields[name]))
+            o = AddField(model_name=model_name, name=name, field=current_fields[name])
+            if self.is_new_pk(name, model_name):
+                o.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))
+            changes.append(o)
         return changes
 
     def generate_removed_fields(self, model_name: str) -> list[RemoveField]:
@@ -165,7 +204,7 @@ class MigrationAutodetector:
         current_fields = current._meta.fields
         changes = []
         for name in set(prev_fields) - set(current_fields):
-            changes.append(RemoveField(model_name=current._meta.name, name=name))
+            changes.append(RemoveField(model_name=model_name, name=name))
         return changes
 
     def generate_altered_fields(self, model_name: str) -> list[AlterField]:
@@ -175,16 +214,13 @@ class MigrationAutodetector:
         prev_fields = prev._meta.fields
         current_fields = current._meta.fields
         changes = []
-        fields_ = []
         for name in set(current_fields).intersection(prev_fields):
             current_field, prev_field = current_fields[name], prev_fields[name]
             if deep_deconstruct(current_field) != deep_deconstruct(prev_field):
-                fields_.append(current_field)
-
-        if fields_:
-            fields_ = _primary_key_last(fields_)
-            for f in fields_:
-                changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
+                o = AlterField(model_name=model_name, name=name, field=current_field)
+                if self.is_new_pk(name, model_name):
+                    o.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))
+                changes.append(o)
         return changes
 
     def diff_one(self, model_name: str) -> list[MigrateOperation]:
@@ -192,24 +228,27 @@ class MigrationAutodetector:
 
         prev = self.from_state[model_name]
         current = self.to_state[model_name]
-        changes: list[MigrateOperation] = []
+        ops: list[MigrateOperation] = []
 
         if current._meta.table_name != prev._meta.table_name:
-            changes.append(RenameTable(prev._meta.name, current._meta.table_name))
+            ops.append(RenameTable(prev._meta.name, current._meta.table_name))
 
-        create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
+        create_index_ops, drop_index_ops = diff_indexes_from_meta(current, prev)
 
         # Drop non-field indexes before dropping and creating fields
-        changes.extend(drop_index_changes)
+        ops.extend(drop_index_ops)
 
-        changes.extend(self.generate_added_fields(model_name))
-        changes.extend(self.generate_removed_fields(model_name))
-        changes.extend(self.generate_altered_fields(model_name))
+        field_ops: list[MigrateOperation] = []
+        field_ops.extend(self.generate_added_fields(model_name))
+        field_ops.extend(self.generate_removed_fields(model_name))
+        field_ops.extend(self.generate_altered_fields(model_name))
+        field_ops = self._sort_operations(field_ops)
 
+        ops.extend(field_ops)
         # Create non-field indexes after dropping and creating fields
-        changes.extend(create_index_changes)
+        ops.extend(create_index_ops)
 
-        return changes
+        return ops
 
     def diff_many(self) -> list[MigrateOperation]:
         """Calculate changes for migrations from models2 to models1."""

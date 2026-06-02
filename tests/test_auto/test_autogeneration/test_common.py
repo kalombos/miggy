@@ -109,8 +109,8 @@ def test_proper_order_for_fk() -> None:
                 "guid": pw.IntegerField(primary_key=True),
             },
             [
-                "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(primary_key=True),)",
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
+                "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(primary_key=True),)",
             ],
         ),
         pytest.param(
@@ -127,8 +127,34 @@ def test_proper_order_for_fk() -> None:
                 "guid": pw.IntegerField(),
             },
             [
-                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(primary_key=True),)",
+                "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(),)",
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
+            ],
+        ),
+        pytest.param(
+            {
+                "id": pw.AutoField(),
+                "uid": pw.IntegerField(),
+            },
+            {
+                "uid": pw.IntegerField(primary_key=True),
+            },
+            [
+                "migrator.remove_field(model_name='test',name='id',)",
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
+            ],
+        ),
+        pytest.param(
+            {
+                "uid": pw.IntegerField(primary_key=True),
+            },
+            {
+                "id": pw.AutoField(),
+                "uid": pw.IntegerField(),
+            },
+            [
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
+                "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
             ],
         ),
     ],
@@ -143,12 +169,20 @@ def test_primary_key_order(
             table_name = "test"
             primary_key = False
 
-    for n, f in fields_before.items():
-        OldTest._meta.add_field(n, f)
-
     Test = copy_model(OldTest)
-    for n, f in fields_after.items():
-        Test._meta.add_field(n, f)
-    diffs = diff_one(OldTest, Test)
+
+    def make_from_state() -> State:
+        s = State({"test": OldTest})
+        for n, f in fields_before.items():
+            s.add_field("test", n, f)
+        return s
+
+    def make_to_state() -> State:
+        s = State({"test": Test})
+        for n, f in fields_after.items():
+            s.add_field("test", n, f)
+        return s
+
+    diffs = MigrationAutodetector(make_from_state(), make_to_state()).diff_one("test")
     diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
     assert diffs == expected

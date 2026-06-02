@@ -81,7 +81,10 @@ class State:
     def add_field(self, model_name: str, name: str, field: pw.Field) -> None:
         model = self[model_name]
         self._resolve_relation(field)
-        model._meta.add_field(name, field)
+        if field.primary_key:
+            model._meta.set_primary_key(name, field)
+        else:
+            model._meta.add_field(name, field)
 
     def remove_field(self, model_name: str, name: str) -> None:
         model = self[model_name]
