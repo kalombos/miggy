@@ -9,6 +9,9 @@ from miggy.utils import copy_model
 ModelDict = dict[str, ModelCls]
 
 
+COMPOSITE_KEY_NAME = "__composite_key__"
+
+
 class State:
     """
     Current state containing historical models that match the operation’s place in the project history.
@@ -77,6 +80,16 @@ class State:
             rel_model = field.rel_model
             if isinstance(rel_model, str) and rel_model != "self":
                 field.rel_model = self[rel_model]
+
+    def add_composite_key(self, model_name: str, field: pw.CompositeKey) -> None:
+        model = self[model_name]
+        model._meta.set_primary_key(COMPOSITE_KEY_NAME, field)
+
+    def remove_composite_key(self, model_name: str) -> None:
+        model = self[model_name]
+        delattr(model, COMPOSITE_KEY_NAME)
+        model._meta.composite_key = None
+        model._meta.primary_key = False
 
     def add_field(self, model_name: str, name: str, field: pw.Field) -> None:
         model = self[model_name]
