@@ -9,6 +9,7 @@ from miggy.deconstructor import ModelDeconstructor, deep_deconstruct
 from miggy.operations import (
     AddField,
     AddIndex,
+    AddPrimaryKeyConstraint,
     AlterField,
     CreateModel,
     Dependency,
@@ -16,6 +17,7 @@ from miggy.operations import (
     MigrateOperation,
     RemoveField,
     RemoveModel,
+    RemovePrimaryKeyConstraint,
     RenameTable,
 )
 from miggy.state import State
@@ -223,6 +225,27 @@ class MigrationAutodetector:
                 changes.append(o)
         return changes
 
+    def generate_altered_primary_keys(self, model_name: str) -> list[MigrateOperation]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_has_composite = bool(prev._meta.composite_key)
+        current_has_composite = bool(current._meta.composite_key)
+
+        ops: list[MigrateOperation] = []
+
+        if prev_has_composite:
+            prev_fields = prev._meta.primary_key.field_names
+            if not current_has_composite or prev_fields != current._meta.primary_key.field_names:
+                ops.append(RemovePrimaryKeyConstraint(model_name))
+
+        if current_has_composite:
+            current_fields = current._meta.primary_key.field_names
+            if not prev_has_composite or prev._meta.primary_key.field_names != current_fields:
+                ops.append(AddPrimaryKeyConstraint(model_name, *current_fields))
+
+        return ops
+
     def diff_one(self, model_name: str) -> list[MigrateOperation]:
         """Find difference between given peewee models."""
 
@@ -245,6 +268,7 @@ class MigrationAutodetector:
         field_ops = self._sort_operations(field_ops)
 
         ops.extend(field_ops)
+        ops.extend(self.generate_altered_primary_keys(model_name))
         # Create non-field indexes after dropping and creating fields
         ops.extend(create_index_ops)
 
