@@ -120,6 +120,7 @@ def test_proper_order_for_fk() -> None:
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
                 "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(primary_key=True),)",
             ],
+            id="single_pk_to_single",
         ),
         pytest.param(
             {
@@ -144,6 +145,7 @@ def test_proper_order_for_fk() -> None:
                 "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(),)",
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
             ],
+            id="single_pk_to_single_reverse",
         ),
         pytest.param(
             {
@@ -161,6 +163,7 @@ def test_proper_order_for_fk() -> None:
                 "migrator.remove_field(model_name='test',name='id',)",
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
             ],
+            id="auto_to_single_pk",
         ),
         pytest.param(
             {
@@ -180,6 +183,101 @@ def test_proper_order_for_fk() -> None:
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
                 "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
             ],
+            id="single_pk_to_auto",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField()},
+                "meta": {"primary_key": False},
+            },
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            [
+                "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
+                "migrator.add_primary_key_constraint('test','a','b',)",
+            ],
+            id="no_pk_to_composite",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"b": pw.CharField()},
+                "meta": {"primary_key": False},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.remove_field(model_name='test',name='a',)",
+            ],
+            id="composite_pk_to_none",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"a": pw.CharField(), "c": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "c")},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.add_field(model_name='test',name='c',field=pw.CharField(),)",
+                "migrator.remove_field(model_name='test',name='b',)",
+                "migrator.add_primary_key_constraint('test','a','c',)",
+            ],
+            id="composite_changed",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
+            ],
+            id="composite_to_auto",
+        ),
+        pytest.param(
+            {
+                "fields": {"pk": pw.IntegerField(primary_key=True)},
+                "meta": {},
+            },
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            [
+                "migrator.add_field(model_name='test',name='a',field=pw.CharField(),)",
+                "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
+                "migrator.remove_field(model_name='test',name='pk',)",
+                "migrator.add_primary_key_constraint('test','a','b',)",
+            ],
+            id="single_pk_to_composite",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"a": pw.CharField(primary_key=True), "b": pw.CharField()},
+                "meta": {},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.alter_field(model_name='test',name='a',field=pw.CharField(primary_key=True),)",
+            ],
+            id="composite_to_single_pk",
         ),
     ],
 )
