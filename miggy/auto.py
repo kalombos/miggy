@@ -159,7 +159,7 @@ class MigrationAutodetector:
                 ts.add(op, *(x for x in operations if self.check_dependency(x, dep)))
         return list(ts.static_order())
 
-    def check_dependency(self, operation, dependency):
+    def check_dependency(self, operation: MigrateOperation, dependency: Dependency) -> bool:
         """
         Return True if the given operation depends on the given dependency,
         False otherwise.
@@ -181,13 +181,13 @@ class MigrationAutodetector:
         raise ValueError("Can't handle dependency %r" % (dependency,))
 
     @lru_cache  # noqa: B019
-    def is_old_pk(self, field_name: str, model_name: str) -> list[Dependency]:
+    def is_old_pk(self, field_name: str, model_name: str) -> bool:
         old_pks = _get_primary_keys(self.from_state[model_name])
         new_pks = _get_primary_keys(self.to_state[model_name])
         return old_pks != new_pks and old_pks == field_name
 
     @lru_cache  # noqa: B019
-    def is_new_pk(self, field_name: str, model_name: str) -> list[Dependency]:
+    def is_new_pk(self, field_name: str, model_name: str) -> bool:
         old_pks = _get_primary_keys(self.from_state[model_name])
         new_pks = _get_primary_keys(self.to_state[model_name])
         return old_pks != new_pks and new_pks == field_name
@@ -270,7 +270,7 @@ class MigrationAutodetector:
         ops: list[MigrateOperation] = []
 
         if current._meta.table_name != prev._meta.table_name:
-            ops.append(RenameTable(prev._meta.name, current._meta.table_name))
+            ops.append(RenameTable(model_name, current._meta.table_name))
 
         create_index_ops, drop_index_ops = diff_indexes_from_meta(current, prev)
 

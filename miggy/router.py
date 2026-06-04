@@ -157,7 +157,7 @@ class Router(object):
         """Clear migrations."""
         self.model.delete().execute()
 
-        """Remove migrations from fs."""
+        # Remove migrations from fs
         for name in self.todo:
             filename = os.path.join(self.migrate_dir, name + ".py")
             os.remove(filename)
