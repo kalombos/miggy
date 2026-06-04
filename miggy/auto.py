@@ -173,8 +173,8 @@ class MigrationAutodetector:
 
         if dependency.type == Dependency.Type.CREATE:
             return (
-                isinstance(operation, AddField) 
-                and operation.model_name == dependency.model_name 
+                isinstance(operation, AddField)
+                and operation.model_name == dependency.model_name
                 and operation.name == dependency.field_name
             )
 
@@ -215,7 +215,7 @@ class MigrationAutodetector:
         changes = []
         for name in set(prev_fields) - set(current_fields):
             op = RemoveField(model_name=model_name, name=name)
-            # We make removing pk constraint first before removing fields 
+            # We make removing pk constraint first before removing fields
             # except the field is the single pk field to avoid cycle dependency
             if not self.is_old_pk(name, model_name):
                 op.deps.append(Dependency(model_name, name, Dependency.Type.REMOVE_PK))

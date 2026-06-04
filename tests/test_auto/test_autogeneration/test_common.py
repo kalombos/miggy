@@ -9,7 +9,6 @@ from miggy.auto import MigrationAutodetector
 from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
 from miggy.state import State
-from miggy.utils import copy_model
 from tests.helpers import diff_one, operation_to_one_line
 
 
@@ -93,7 +92,6 @@ def test_proper_order_for_fk() -> None:
     assert isinstance(changes[1], AddField)
 
 
-
 @pytest.mark.parametrize(
     ("prev", "current", "expected"),
     [
@@ -105,7 +103,7 @@ def test_proper_order_for_fk() -> None:
                     "name": pw.CharField(),
                     "guid": pw.IntegerField(),
                 },
-                "meta": {}
+                "meta": {},
             },
             {
                 "fields": {
@@ -114,7 +112,7 @@ def test_proper_order_for_fk() -> None:
                     "name": pw.CharField(),
                     "guid": pw.IntegerField(primary_key=True),
                 },
-                "meta": {}
+                "meta": {},
             },
             [
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
@@ -130,7 +128,7 @@ def test_proper_order_for_fk() -> None:
                     "name": pw.CharField(),
                     "guid": pw.IntegerField(primary_key=True),
                 },
-                "meta": {}
+                "meta": {},
             },
             {
                 "fields": {
@@ -139,7 +137,7 @@ def test_proper_order_for_fk() -> None:
                     "name": pw.CharField(),
                     "guid": pw.IntegerField(),
                 },
-                "meta": {}
+                "meta": {},
             },
             [
                 "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(),)",
@@ -153,12 +151,9 @@ def test_proper_order_for_fk() -> None:
                     "id": pw.AutoField(),
                     "uid": pw.IntegerField(),
                 },
-                "meta": {}
+                "meta": {},
             },
-            {
-                "fields":{"uid": pw.IntegerField(primary_key=True)},
-                "meta": {}
-            },
+            {"fields": {"uid": pw.IntegerField(primary_key=True)}, "meta": {}},
             [
                 "migrator.remove_field(model_name='test',name='id',)",
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
@@ -169,15 +164,15 @@ def test_proper_order_for_fk() -> None:
             {
                 "fields": {
                     "uid": pw.IntegerField(primary_key=True),
-                    },
-                "meta": {}
+                },
+                "meta": {},
             },
             {
                 "fields": {
                     "id": pw.AutoField(),
                     "uid": pw.IntegerField(),
                 },
-                "meta": {}
+                "meta": {},
             },
             [
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
@@ -281,10 +276,8 @@ def test_proper_order_for_fk() -> None:
         ),
     ],
 )
-def test_primary_key_order(
-    prev: dict[str, Any], current: dict[str, Any], expected: list[str]
-) -> None:
-    
+def test_primary_key_order(prev: dict[str, Any], current: dict[str, Any], expected: list[str]) -> None:
+
     from_state = State()
     from_state.add_model("Test", **prev)
 
