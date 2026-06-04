@@ -1,5 +1,6 @@
 import datetime as dt
 from pathlib import Path
+from typing import Any
 
 import peewee as pw
 import pytest
@@ -92,21 +93,28 @@ def test_proper_order_for_fk() -> None:
     assert isinstance(changes[1], AddField)
 
 
+
 @pytest.mark.parametrize(
-    ("fields_before", "fields_after", "expected"),
+    ("prev", "current", "expected"),
     [
         pytest.param(
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(primary_key=True),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(primary_key=True),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(),
+                },
+                "meta": {}
             },
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(primary_key=True),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(primary_key=True),
+                },
+                "meta": {}
             },
             [
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
@@ -115,16 +123,22 @@ def test_proper_order_for_fk() -> None:
         ),
         pytest.param(
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(primary_key=True),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(primary_key=True),
+                },
+                "meta": {}
             },
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(primary_key=True),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(primary_key=True),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(),
+                },
+                "meta": {}
             },
             [
                 "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(),)",
@@ -133,11 +147,15 @@ def test_proper_order_for_fk() -> None:
         ),
         pytest.param(
             {
-                "id": pw.AutoField(),
-                "uid": pw.IntegerField(),
+                "fields": {
+                    "id": pw.AutoField(),
+                    "uid": pw.IntegerField(),
+                },
+                "meta": {}
             },
             {
-                "uid": pw.IntegerField(primary_key=True),
+                "fields":{"uid": pw.IntegerField(primary_key=True)},
+                "meta": {}
             },
             [
                 "migrator.remove_field(model_name='test',name='id',)",
@@ -146,11 +164,17 @@ def test_proper_order_for_fk() -> None:
         ),
         pytest.param(
             {
-                "uid": pw.IntegerField(primary_key=True),
+                "fields": {
+                    "uid": pw.IntegerField(primary_key=True),
+                    },
+                "meta": {}
             },
             {
-                "id": pw.AutoField(),
-                "uid": pw.IntegerField(),
+                "fields": {
+                    "id": pw.AutoField(),
+                    "uid": pw.IntegerField(),
+                },
+                "meta": {}
             },
             [
                 "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
@@ -160,29 +184,15 @@ def test_proper_order_for_fk() -> None:
     ],
 )
 def test_primary_key_order(
-    fields_before: dict[str, pw.Field], fields_after: dict[str, pw.Field], expected: list[str]
+    prev: dict[str, Any], current: dict[str, Any], expected: list[str]
 ) -> None:
-    class OldTest(pw.Model):
-        mock_field = pw.CharField()
+    
+    from_state = State()
+    from_state.add_model("Test", **prev)
 
-        class Meta:
-            table_name = "test"
-            primary_key = False
+    to_state = State()
+    to_state.add_model("Test", **current)
 
-    Test = copy_model(OldTest)
-
-    def make_from_state() -> State:
-        s = State({"test": OldTest})
-        for n, f in fields_before.items():
-            s.add_field("test", n, f)
-        return s
-
-    def make_to_state() -> State:
-        s = State({"test": Test})
-        for n, f in fields_after.items():
-            s.add_field("test", n, f)
-        return s
-
-    diffs = MigrationAutodetector(make_from_state(), make_to_state()).diff_one("test")
+    diffs = MigrationAutodetector(from_state, to_state).diff_one("test")
     diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
     assert diffs == expected

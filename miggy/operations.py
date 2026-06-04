@@ -30,6 +30,7 @@ RunPythonF = Callable[["SchemaMigrator", "State"], None]
 class Dependency(namedtuple("Dependency", "model_name field_name type")):
     class Type(Enum):
         REMOVE_PK = auto()
+        CREATE = auto()
 
 
 class MigrateOperation:

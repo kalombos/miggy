@@ -67,10 +67,11 @@ class State:
 
     def add_model(self, name: str, fields: dict[str, pw.Field], meta: dict[str, Any]) -> None:
         attrs = {"Meta": type("Meta", (object,), meta)}
+        for field_name, field in fields.items():
+            self._resolve_relation(field)
+            attrs[field_name] = field
         model = type(name, (pw.Model,), attrs)
         self[name] = model
-        for field_name, field in fields.items():
-            self.add_field(name, field_name, field)
 
     def remove_model(self, name: str) -> None:
         del self[name]

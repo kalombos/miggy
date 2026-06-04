@@ -164,13 +164,21 @@ class MigrationAutodetector:
         Return True if the given operation depends on the given dependency,
         False otherwise.
         """
-        # Remove pk
         if dependency.type == Dependency.Type.REMOVE_PK:
+            if isinstance(operation, RemovePrimaryKeyConstraint):
+                return operation.model_name == dependency.model_name
             return (isinstance(operation, RemoveField) or isinstance(operation, AlterField)) and self.is_old_pk(
                 operation.name, operation.model_name
             )
-        else:
-            raise ValueError("Can't handle dependency %r" % (dependency,))
+
+        if dependency.type == Dependency.Type.CREATE:
+            return (
+                isinstance(operation, AddField) 
+                and operation.model_name == dependency.model_name 
+                and operation.name == dependency.field_name
+            )
+
+        raise ValueError("Can't handle dependency %r" % (dependency,))
 
     @lru_cache  # noqa: B019
     def is_old_pk(self, field_name: str, model_name: str) -> list[Dependency]:
@@ -206,7 +214,12 @@ class MigrationAutodetector:
         current_fields = current._meta.fields
         changes = []
         for name in set(prev_fields) - set(current_fields):
-            changes.append(RemoveField(model_name=model_name, name=name))
+            op = RemoveField(model_name=model_name, name=name)
+            # We make removing pk constraint first before removing fields 
+            # except the field is the single pk field to avoid cycle dependency
+            if not self.is_old_pk(name, model_name):
+                op.deps.append(Dependency(model_name, name, Dependency.Type.REMOVE_PK))
+            changes.append(op)
         return changes
 
     def generate_altered_fields(self, model_name: str) -> list[AlterField]:
@@ -242,7 +255,10 @@ class MigrationAutodetector:
         if current_has_composite:
             current_fields = current._meta.primary_key.field_names
             if not prev_has_composite or prev._meta.primary_key.field_names != current_fields:
-                ops.append(AddPrimaryKeyConstraint(model_name, *current_fields))
+                op = AddPrimaryKeyConstraint(model_name, *current_fields)
+                for f in current_fields:
+                    op.deps.append(Dependency(model_name, f, Dependency.Type.CREATE))
+                ops.append(op)
 
         return ops
 
@@ -262,13 +278,13 @@ class MigrationAutodetector:
         ops.extend(drop_index_ops)
 
         field_ops: list[MigrateOperation] = []
+        field_ops.extend(self.generate_altered_primary_keys(model_name))
         field_ops.extend(self.generate_added_fields(model_name))
         field_ops.extend(self.generate_removed_fields(model_name))
         field_ops.extend(self.generate_altered_fields(model_name))
         field_ops = self._sort_operations(field_ops)
 
         ops.extend(field_ops)
-        ops.extend(self.generate_altered_primary_keys(model_name))
         # Create non-field indexes after dropping and creating fields
         ops.extend(create_index_ops)
 
