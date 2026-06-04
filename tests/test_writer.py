@@ -4,12 +4,14 @@ import pytest
 from miggy.operations import (
     AddField,
     AddIndex,
+    AddPrimaryKeyConstraint,
     AlterField,
     CreateModel,
     DropIndex,
     MigrateOperation,
     RemoveField,
     RemoveModel,
+    RemovePrimaryKeyConstraint,
     RenameTable,
 )
 from miggy.writer import OperationWriter
@@ -143,6 +145,26 @@ class Car(pw.Model):
             )
             """,
             id="RemoveField",
+        ),
+        pytest.param(
+            AddPrimaryKeyConstraint("user", "name", "email"),
+            """
+            migrator.add_primary_key_constraint(
+                'user',
+                'name',
+                'email',
+            )
+            """,
+            id="AddPrimaryKeyConstraint",
+        ),
+        pytest.param(
+            RemovePrimaryKeyConstraint("user"),
+            """
+            migrator.remove_primary_key_constraint(
+                'user',
+            )
+            """,
+            id="RemovePrimaryKeyConstraint",
         ),
     ],
 )

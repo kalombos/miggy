@@ -1,6 +1,7 @@
 import peewee as pw
 
-from miggy.auto import diff_many
+from miggy.auto import MigrationAutodetector
+from miggy.state import State
 from tests.helpers import operation_to_one_line
 
 
@@ -13,6 +14,6 @@ def test_remove_model() -> None:
         class Meta:
             indexes = ((("i1", "i2"), True),)
 
-    diffs = diff_many([], [Test])
+    diffs = MigrationAutodetector(State({"test": Test}), State()).diff_many()
     changes = [operation_to_one_line(c) for c in diffs]
     assert changes == ["migrator.remove_model('test',)"]

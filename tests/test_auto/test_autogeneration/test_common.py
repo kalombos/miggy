@@ -1,26 +1,25 @@
 import datetime as dt
 from pathlib import Path
+from typing import Any
 
 import peewee as pw
 import pytest
 
-from miggy.auto import diff_many, diff_one
+from miggy.auto import MigrationAutodetector
 from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
-from miggy.types import ModelCls
-from miggy.utils import copy_model
-from tests.helpers import operation_to_one_line
+from miggy.state import State
+from tests.helpers import diff_one, operation_to_one_line
 
 
 def test_on_real_migrations(migrations_dir: Path):
     router = get_router(migrations_dir, "sqlite:///:memory:")
     router.run()
     migrator = router.migrator
-    models = migrator.state.values()
     Person_ = migrator.state["person"]
     Tag_ = migrator.state["tag"]
 
-    changes = diff_many(models, [])
+    changes = MigrationAutodetector(State(), migrator.state).diff_many()
     assert len(changes) == 2
     assert all(isinstance(c, CreateModel) for c in changes)
 
@@ -33,7 +32,7 @@ def test_on_real_migrations(migrations_dir: Path):
         class Meta:
             table_name = "person"
 
-    changes = diff_one(Person1, Person_)
+    changes = diff_one(Person_, Person1)
     assert len(changes) == 5
     assert isinstance(changes[0], AddField)
 
@@ -47,7 +46,7 @@ def test_on_real_migrations(migrations_dir: Path):
         class Meta:
             table_name = "person"
 
-    changes = diff_one(Person_, Person2)
+    changes = diff_one(Person2, Person_)
     assert not changes
 
 
@@ -65,18 +64,18 @@ def test_drop_field_w_constraint() -> None:
         class Meta:
             table_name = "test"
 
-    operation = diff_one(Test, OldTest)[0]
+    operation = diff_one(OldTest, Test)[0]
     assert operation_to_one_line(operation) == "migrator.remove_field(model_name='test',name='age',)"  # type: ignore
 
 
 def test_proper_order_for_fk() -> None:
-    def prev_models() -> list[ModelCls]:
+    def from_state() -> State:
         class Users(pw.Model):
             name = pw.TextField()
 
-        return [Users]
+        return State({"users": Users})
 
-    def current_models() -> list[ModelCls]:
+    def to_state() -> State:
         class Test(pw.Model):
             name = pw.TextField()
 
@@ -84,9 +83,9 @@ def test_proper_order_for_fk() -> None:
             name = pw.TextField()
             test = pw.ForeignKeyField(Test, null=True, backref="users")
 
-        return [Test, Users]
+        return State({"test": Test, "users": Users})
 
-    changes = diff_many(current_models(), prev_models())
+    changes = MigrationAutodetector(from_state(), to_state()).diff_many()
     # we create model first
     assert isinstance(changes[0], CreateModel)
     # we add fk to it after
@@ -94,62 +93,197 @@ def test_proper_order_for_fk() -> None:
 
 
 @pytest.mark.parametrize(
-    ("fields_before", "fields_after", "expected"),
+    ("prev", "current", "expected"),
     [
         pytest.param(
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(primary_key=True),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(primary_key=True),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(),
+                },
+                "meta": {},
             },
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(primary_key=True),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(primary_key=True),
+                },
+                "meta": {},
             },
             [
-                "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(primary_key=True),)",
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
+                "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(primary_key=True),)",
             ],
+            id="single_pk_to_single",
         ),
         pytest.param(
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(primary_key=True),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(primary_key=True),
+                },
+                "meta": {},
             },
             {
-                "age": pw.IntegerField(),
-                "uid": pw.IntegerField(primary_key=True),
-                "name": pw.CharField(),
-                "guid": pw.IntegerField(),
+                "fields": {
+                    "age": pw.IntegerField(),
+                    "uid": pw.IntegerField(primary_key=True),
+                    "name": pw.CharField(),
+                    "guid": pw.IntegerField(),
+                },
+                "meta": {},
             },
             [
-                "migrator.alter_field(model_name='oldtest',name='guid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='oldtest',name='uid',field=pw.IntegerField(primary_key=True),)",
+                "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(),)",
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
             ],
+            id="single_pk_to_single_reverse",
+        ),
+        pytest.param(
+            {
+                "fields": {
+                    "id": pw.AutoField(),
+                    "uid": pw.IntegerField(),
+                },
+                "meta": {},
+            },
+            {"fields": {"uid": pw.IntegerField(primary_key=True)}, "meta": {}},
+            [
+                "migrator.remove_field(model_name='test',name='id',)",
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
+            ],
+            id="auto_to_single_pk",
+        ),
+        pytest.param(
+            {
+                "fields": {
+                    "uid": pw.IntegerField(primary_key=True),
+                },
+                "meta": {},
+            },
+            {
+                "fields": {
+                    "id": pw.AutoField(),
+                    "uid": pw.IntegerField(),
+                },
+                "meta": {},
+            },
+            [
+                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
+                "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
+            ],
+            id="single_pk_to_auto",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField()},
+                "meta": {"primary_key": False},
+            },
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            [
+                "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
+                "migrator.add_primary_key_constraint('test','a','b',)",
+            ],
+            id="no_pk_to_composite",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"b": pw.CharField()},
+                "meta": {"primary_key": False},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.remove_field(model_name='test',name='a',)",
+            ],
+            id="composite_pk_to_none",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"a": pw.CharField(), "c": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "c")},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.add_field(model_name='test',name='c',field=pw.CharField(),)",
+                "migrator.remove_field(model_name='test',name='b',)",
+                "migrator.add_primary_key_constraint('test','a','c',)",
+            ],
+            id="composite_changed",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
+            ],
+            id="composite_to_auto",
+        ),
+        pytest.param(
+            {
+                "fields": {"pk": pw.IntegerField(primary_key=True)},
+                "meta": {},
+            },
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            [
+                "migrator.add_field(model_name='test',name='a',field=pw.CharField(),)",
+                "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
+                "migrator.remove_field(model_name='test',name='pk',)",
+                "migrator.add_primary_key_constraint('test','a','b',)",
+            ],
+            id="single_pk_to_composite",
+        ),
+        pytest.param(
+            {
+                "fields": {"a": pw.CharField(), "b": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("a", "b")},
+            },
+            {
+                "fields": {"a": pw.CharField(primary_key=True), "b": pw.CharField()},
+                "meta": {},
+            },
+            [
+                "migrator.remove_primary_key_constraint('test',)",
+                "migrator.alter_field(model_name='test',name='a',field=pw.CharField(primary_key=True),)",
+            ],
+            id="composite_to_single_pk",
         ),
     ],
 )
-def test_primary_key_order(
-    fields_before: dict[str, pw.Field], fields_after: dict[str, pw.Field], expected: list[str]
-) -> None:
-    class OldTest(pw.Model):
-        mock_field = pw.CharField()
+def test_primary_key_order(prev: dict[str, Any], current: dict[str, Any], expected: list[str]) -> None:
 
-        class Meta:
-            table_name = "test"
-            primary_key = False
+    from_state = State()
+    from_state.add_model("Test", **prev)
 
-    for n, f in fields_before.items():
-        OldTest._meta.add_field(n, f)
+    to_state = State()
+    to_state.add_model("Test", **current)
 
-    Test = copy_model(OldTest)
-    for n, f in fields_after.items():
-        Test._meta.add_field(n, f)
-    diffs = diff_one(Test, OldTest)
+    diffs = MigrationAutodetector(from_state, to_state).diff_one("test")
     diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
     assert diffs == expected

@@ -1,6 +1,7 @@
 import peewee as pw
 
-from miggy.auto import diff_many
+from miggy.auto import MigrationAutodetector
+from miggy.state import State
 from tests.helpers import operation_to_one_line, to_one_line
 
 
@@ -9,7 +10,7 @@ def test_create_model_w_constraint() -> None:
         first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
         age = pw.IntegerField()
 
-    diffs = diff_many([Test], [])
+    diffs = MigrationAutodetector(State(), State({"test": Test})).diff_many()
     changes = [operation_to_one_line(o) for o in diffs]
     assert changes == [
         to_one_line(
@@ -35,7 +36,7 @@ def test_create_model() -> None:
 
     Test.add_index(Test.i1, Test.i2, name="i3")
 
-    changes = diff_many([Test], [])
+    changes = MigrationAutodetector(State(), State({"test": Test})).diff_many()
     create_model_code = changes[0]
 
     assert operation_to_one_line(create_model_code) == to_one_line(

@@ -1,7 +1,8 @@
 import peewee as pw
 import pytest
 
-from miggy.auto import diff_one
+from miggy.auto import MigrationAutodetector
+from miggy.state import State
 from miggy.types import ModelCls
 from tests.helpers import operation_to_one_line
 
@@ -25,6 +26,9 @@ def test_rename_table(name_before: str | None, name_after: str | None, expected:
 
         return Test
 
-    changes = diff_one(create_model(name_after), create_model(name_before))
+    changes = MigrationAutodetector(
+        State({"test": create_model(name_before)}), State({"test": create_model(name_after)})
+    ).diff_one("test")
+
     changes = [operation_to_one_line(c) for c in changes]  # type: ignore
     assert changes == expected

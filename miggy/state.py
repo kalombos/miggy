@@ -1,4 +1,4 @@
-from collections.abc import ValuesView
+from collections.abc import Generator, ItemsView, ValuesView
 from typing import Any
 
 import peewee as pw
@@ -7,6 +7,9 @@ from miggy.types import ModelCls
 from miggy.utils import copy_model
 
 ModelDict = dict[str, ModelCls]
+
+
+COMPOSITE_KEY_NAME = "__composite_key__"
 
 
 class State:
@@ -32,6 +35,10 @@ class State:
                 self._snapshot[_key] = copy_model(self._snapshot[_key])
         return _key
 
+    def __iter__(self) -> Generator[str, None]:
+        for name in self.data:
+            yield name
+
     def __setitem__(self, key: str, val: ModelCls) -> None:
         self.data[self.normalize_key(key)] = val
 
@@ -43,6 +50,9 @@ class State:
 
     def __contains__(self, key: str) -> bool:
         return self.normalize_key(key) in self.data
+
+    def items(self) -> ItemsView[str, ModelCls]:
+        return self.data.items()
 
     def values(self) -> ValuesView[ModelCls]:
         return self.data.values()
@@ -57,10 +67,11 @@ class State:
 
     def add_model(self, name: str, fields: dict[str, pw.Field], meta: dict[str, Any]) -> None:
         attrs = {"Meta": type("Meta", (object,), meta)}
+        for field_name, field in fields.items():
+            self._resolve_relation(field)
+            attrs[field_name] = field
         model = type(name, (pw.Model,), attrs)
         self[name] = model
-        for field_name, field in fields.items():
-            self.add_field(name, field_name, field)
 
     def remove_model(self, name: str) -> None:
         del self[name]
@@ -71,10 +82,23 @@ class State:
             if isinstance(rel_model, str) and rel_model != "self":
                 field.rel_model = self[rel_model]
 
+    def add_composite_key(self, model_name: str, field: pw.CompositeKey) -> None:
+        model = self[model_name]
+        model._meta.set_primary_key(COMPOSITE_KEY_NAME, field)
+
+    def remove_composite_key(self, model_name: str) -> None:
+        model = self[model_name]
+        delattr(model, COMPOSITE_KEY_NAME)
+        model._meta.composite_key = None
+        model._meta.primary_key = False
+
     def add_field(self, model_name: str, name: str, field: pw.Field) -> None:
         model = self[model_name]
         self._resolve_relation(field)
-        model._meta.add_field(name, field)
+        if field.primary_key:
+            model._meta.set_primary_key(name, field)
+        else:
+            model._meta.add_field(name, field)
 
     def remove_field(self, model_name: str, name: str) -> None:
         model = self[model_name]

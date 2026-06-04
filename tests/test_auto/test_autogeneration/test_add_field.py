@@ -1,10 +1,9 @@
 import peewee as pw
 import pytest
 
-from miggy.auto import diff_one
 from miggy.operations import MigrateOperation
 from miggy.writer import OperationWriter
-from tests.helpers import compare_dedent
+from tests.helpers import compare_dedent, diff_one
 
 
 class _M1(pw.Model):
@@ -77,7 +76,7 @@ def test_add_fields(test_field: pw.Field, expected: str) -> None:
         class Meta:
             table_name = "test"
 
-    operations = diff_one(Test, OldTest)
+    operations = diff_one(OldTest, Test)
     assert len(operations) == 1
     assert isinstance(operations[0], MigrateOperation)
     compare_dedent(OperationWriter(operations[0]).serialize(), expected)
@@ -98,7 +97,7 @@ def test_add_few_fields() -> None:
         class Meta:
             table_name = "test"
 
-    operations = diff_one(Test, OldTest)
+    operations = diff_one(OldTest, Test)
     assert len(operations) == 2
     serialized = sorted([OperationWriter(o).serialize() for o in operations])
     compare_dedent(

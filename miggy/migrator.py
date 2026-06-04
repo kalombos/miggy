@@ -10,6 +10,7 @@ from miggy.deconstructor import ModelDeconstructor
 from miggy.operations import (
     AddField,
     AddIndex,
+    AddPrimaryKeyConstraint,
     AlterField,
     ChangeNullable,
     CreateModel,
@@ -17,6 +18,7 @@ from miggy.operations import (
     MigrateOperation,
     RemoveField,
     RemoveModel,
+    RemovePrimaryKeyConstraint,
     RenameField,
     RenameTable,
     RunPython,
@@ -207,3 +209,11 @@ class Migrator(object):
     def drop_not_null(self, model_name: str, *names: str) -> None:
         """Drop not null."""
         self.add_operation(ChangeNullable(model_name, *names, is_null=True))
+
+    def add_primary_key_constraint(self, model_name: str, *fields: str) -> None:
+        """A shortcut for adding a :class:`AddPrimaryKeyConstraint` operation."""
+        self.add_operation(AddPrimaryKeyConstraint(model_name, *fields))
+
+    def remove_primary_key_constraint(self, model_name: str) -> None:
+        """A shortcut for adding a :class:`RemovePrimaryKeyConstraint` operation."""
+        self.add_operation(RemovePrimaryKeyConstraint(model_name))

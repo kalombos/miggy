@@ -1,5 +1,6 @@
-import collections
 from collections.abc import Sequence
+from functools import lru_cache
+from graphlib import TopologicalSorter
 from typing import Any, NamedTuple
 
 import peewee as pw
@@ -8,14 +9,18 @@ from miggy.deconstructor import ModelDeconstructor, deep_deconstruct
 from miggy.operations import (
     AddField,
     AddIndex,
+    AddPrimaryKeyConstraint,
     AlterField,
     CreateModel,
+    Dependency,
     DropIndex,
     MigrateOperation,
     RemoveField,
     RemoveModel,
+    RemovePrimaryKeyConstraint,
     RenameTable,
 )
+from miggy.state import State
 from miggy.utils import ModelIndex, indexes_state, resolve_field
 
 from .types import ModelCls
@@ -128,105 +133,191 @@ def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[AddI
     return create_changes, drop_changes
 
 
-def _primary_key_last(fields: list[pw.Field]) -> list[pw.Field]:
-    _fields = []
-    pk_field = None
-    for f in fields:
-        if f.primary_key:
-            pk_field = f
-        else:
-            _fields.append(f)
-    if pk_field:
-        _fields.append(pk_field)
-    return _fields
-
-
-def diff_one(current: ModelCls, prev: ModelCls) -> list[MigrateOperation]:
-    """Find difference between given peewee models."""
-    changes: list[MigrateOperation] = []
-
-    fields1 = current._meta.fields
-    fields2 = prev._meta.fields
-
-    if current._meta.table_name != prev._meta.table_name:
-        changes.append(RenameTable(prev._meta.name, current._meta.table_name))
-
-    create_index_changes, drop_index_changes = diff_indexes_from_meta(current, prev)
-
-    # Drop non-field indexes before dropping and creating fields
-    changes.extend(drop_index_changes)
-
-    # Add fields
-    names1 = set(fields1) - set(fields2)
-    if names1:
-        for name in names1:
-            changes.append(AddField(model_name=current._meta.name, name=name, field=fields1[name]))
-
-    # Drop fields
-    names2 = set(fields2) - set(fields1)
-    if names2:
-        for name in names2:
-            changes.append(RemoveField(model_name=current._meta.name, name=name))
-
-    # Change fields
-    fields_ = []
-    for name in set(fields1) - names1 - names2:
-        field1, field2 = fields1[name], fields2[name]
-        if deep_deconstruct(field1) != deep_deconstruct(field2):
-            fields_.append(field1)
-
-    if fields_:
-        fields_ = _primary_key_last(fields_)
-        for f in fields_:
-            changes.append(AlterField(model_name=current._meta.name, name=f.name, field=f))
-
-    # Create non-field indexes after dropping and creating fields
-    changes.extend(create_index_changes)
-
-    return changes
-
-
-def diff_many(current_models, prev_models, reverse=False) -> list[MigrateOperation]:
-    """Calculate changes for migrations from models2 to models1."""
-    if reverse:
-        prev_models, current_models = current_models, prev_models
-    current_models = pw.sort_models(current_models)
-    prev_models = pw.sort_models(prev_models)
-
-    if reverse:
-        current_models = reversed(current_models)
-        prev_models = reversed(prev_models)
-
-    current_models = collections.OrderedDict([(m._meta.name, m) for m in current_models])
-    prev_models = collections.OrderedDict([(m._meta.name, m) for m in prev_models])
-
-    changes: list[MigrateOperation] = []
-
-    for name, current_model in current_models.items():
-        # Add new models
-        if name not in prev_models:
-            index_meta = extract_index_meta(current_models[name])
-            deconstructed = ModelDeconstructor(current_models[name]).deconstruct()
-            changes.append(CreateModel(**deconstructed))
-            for i in index_meta:
-                changes.append(i.as_operation())
-        # Change existing models
-        else:
-            prev_model = prev_models[name]
-            changes += diff_one(current_model, prev_model)
-
-    # Remove models
-    for name in [m for m in prev_models if m not in current_models]:
-        changes.append(RemoveModel(prev_models[name]._meta.name))
-
-    return changes
+def _get_primary_keys(m: ModelCls):
+    meta = m._meta
+    if meta.composite_key:
+        return meta.primary_key.field_names
+    if meta.primary_key is not False:
+        return meta.primary_key.name
+    return None
 
 
 class MigrationAutodetector:
-    def __init__(self, from_state: list[ModelCls], to_state: list[ModelCls], reverse: bool = False) -> None:
+    def __init__(self, from_state: State, to_state: State) -> None:
         self.from_state = from_state
         self.to_state = to_state
-        self.reverse = reverse
 
-    def changes(self):
-        return diff_many(self.to_state, self.from_state, reverse=self.reverse)
+    def _sort_operations(self, operations: list[MigrateOperation]) -> list[MigrateOperation]:
+        """
+        Reorder to make things possible. Reordering may be needed so FKs work
+        nicely inside the same app.
+        """
+        ts: TopologicalSorter = TopologicalSorter()
+        for op in operations:
+            ts.add(op)
+            for dep in op.deps:
+                ts.add(op, *(x for x in operations if self.check_dependency(x, dep)))
+        return list(ts.static_order())
+
+    def check_dependency(self, operation: MigrateOperation, dependency: Dependency) -> bool:
+        """
+        Return True if the given operation depends on the given dependency,
+        False otherwise.
+        """
+        if dependency.type == Dependency.Type.REMOVE_PK:
+            if isinstance(operation, RemovePrimaryKeyConstraint):
+                return operation.model_name == dependency.model_name
+            return (isinstance(operation, RemoveField) or isinstance(operation, AlterField)) and self.is_old_pk(
+                operation.name, operation.model_name
+            )
+
+        if dependency.type == Dependency.Type.CREATE:
+            return (
+                isinstance(operation, AddField)
+                and operation.model_name == dependency.model_name
+                and operation.name == dependency.field_name
+            )
+
+        raise ValueError("Can't handle dependency %r" % (dependency,))
+
+    @lru_cache  # noqa: B019
+    def is_old_pk(self, field_name: str, model_name: str) -> bool:
+        old_pks = _get_primary_keys(self.from_state[model_name])
+        new_pks = _get_primary_keys(self.to_state[model_name])
+        return old_pks != new_pks and old_pks == field_name
+
+    @lru_cache  # noqa: B019
+    def is_new_pk(self, field_name: str, model_name: str) -> bool:
+        old_pks = _get_primary_keys(self.from_state[model_name])
+        new_pks = _get_primary_keys(self.to_state[model_name])
+        return old_pks != new_pks and new_pks == field_name
+
+    def generate_added_fields(self, model_name: str) -> list[AddField]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_fields = prev._meta.fields
+        current_fields = current._meta.fields
+        changes = []
+        for name in set(current_fields) - set(prev_fields):
+            o = AddField(model_name=model_name, name=name, field=current_fields[name])
+            if self.is_new_pk(name, model_name):
+                o.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))
+            changes.append(o)
+        return changes
+
+    def generate_removed_fields(self, model_name: str) -> list[RemoveField]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_fields = prev._meta.fields
+        current_fields = current._meta.fields
+        changes = []
+        for name in set(prev_fields) - set(current_fields):
+            op = RemoveField(model_name=model_name, name=name)
+            # We make removing pk constraint first before removing fields
+            # except the field is the single pk field to avoid cycle dependency
+            if not self.is_old_pk(name, model_name):
+                op.deps.append(Dependency(model_name, name, Dependency.Type.REMOVE_PK))
+            changes.append(op)
+        return changes
+
+    def generate_altered_fields(self, model_name: str) -> list[AlterField]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_fields = prev._meta.fields
+        current_fields = current._meta.fields
+        changes = []
+        for name in set(current_fields).intersection(prev_fields):
+            current_field, prev_field = current_fields[name], prev_fields[name]
+            if deep_deconstruct(current_field) != deep_deconstruct(prev_field):
+                o = AlterField(model_name=model_name, name=name, field=current_field)
+                if self.is_new_pk(name, model_name):
+                    o.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))
+                changes.append(o)
+        return changes
+
+    def generate_altered_primary_keys(self, model_name: str) -> list[MigrateOperation]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_has_composite = bool(prev._meta.composite_key)
+        current_has_composite = bool(current._meta.composite_key)
+
+        ops: list[MigrateOperation] = []
+
+        if prev_has_composite:
+            prev_fields = prev._meta.primary_key.field_names
+            if not current_has_composite or prev_fields != current._meta.primary_key.field_names:
+                ops.append(RemovePrimaryKeyConstraint(model_name))
+
+        if current_has_composite:
+            current_fields = current._meta.primary_key.field_names
+            if not prev_has_composite or prev._meta.primary_key.field_names != current_fields:
+                op = AddPrimaryKeyConstraint(model_name, *current_fields)
+                for f in current_fields:
+                    op.deps.append(Dependency(model_name, f, Dependency.Type.CREATE))
+                ops.append(op)
+
+        return ops
+
+    def diff_one(self, model_name: str) -> list[MigrateOperation]:
+        """Find difference between given peewee models."""
+
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+        ops: list[MigrateOperation] = []
+
+        if current._meta.table_name != prev._meta.table_name:
+            ops.append(RenameTable(model_name, current._meta.table_name))
+
+        create_index_ops, drop_index_ops = diff_indexes_from_meta(current, prev)
+
+        # Drop non-field indexes before dropping and creating fields
+        ops.extend(drop_index_ops)
+
+        field_ops: list[MigrateOperation] = []
+        field_ops.extend(self.generate_altered_primary_keys(model_name))
+        field_ops.extend(self.generate_added_fields(model_name))
+        field_ops.extend(self.generate_removed_fields(model_name))
+        field_ops.extend(self.generate_altered_fields(model_name))
+        field_ops = self._sort_operations(field_ops)
+
+        ops.extend(field_ops)
+        # Create non-field indexes after dropping and creating fields
+        ops.extend(create_index_ops)
+
+        return ops
+
+    def diff_many(self) -> list[MigrateOperation]:
+        """Calculate changes for migrations from models2 to models1."""
+
+        current_models = pw.sort_models(self.to_state.values())
+        prev_models = pw.sort_models(self.from_state.values())
+
+        from_state = State({m._meta.name: m for m in prev_models})
+        to_state = State({m._meta.name: m for m in current_models})
+
+        changes: list[MigrateOperation] = []
+
+        for name in to_state:
+            # Add new models
+            if name not in from_state:
+                index_meta = extract_index_meta(to_state[name])
+                deconstructed = ModelDeconstructor(to_state[name]).deconstruct()
+                changes.append(CreateModel(**deconstructed))
+                for i in index_meta:
+                    changes.append(i.as_operation())
+            # Change existing models
+            else:
+                changes += self.diff_one(name)
+
+        # Remove models
+        for name in [m for m in from_state if m not in to_state]:
+            changes.append(RemoveModel(from_state[name]._meta.name))
+
+        return changes
+
+    def changes(self) -> list[MigrateOperation]:
+        return self.diff_many()

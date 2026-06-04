@@ -85,6 +85,44 @@ def test_add_field__fk() -> None:
     assert isinstance(model.self_related_field.rel_model.test, pw.CharField)
 
 
+def test_add_composite_key() -> None:
+    state = State()
+    state.add_model(
+        "User",
+        {
+            "age": pw.IntegerField(),
+            "email": pw.CharField(max_length=255, null=True),
+        },
+        {"table_name": "users"},
+    )
+
+    state.add_composite_key("User", pw.CompositeKey("age", "email"))
+    model = state["user"]
+
+    assert isinstance(model._meta.primary_key, pw.CompositeKey)
+    assert model._meta.composite_key is True
+    assert hasattr(model, "__composite_key__")
+
+
+def test_remove_composite_key() -> None:
+    state = State()
+    state.add_model(
+        "User",
+        {
+            "age": pw.IntegerField(),
+            "email": pw.CharField(max_length=255, null=True),
+        },
+        {"table_name": "users", "primary_key": pw.CompositeKey("age", "email")},
+    )
+
+    state.remove_composite_key("user")
+    model = state["user"]
+
+    assert model._meta.primary_key is False
+    assert model._meta.composite_key is None
+    assert not hasattr(model, "__composite_key__")
+
+
 def test_remove_field() -> None:
     class SomeModel(pw.Model):
         some_field = pw.CharField()

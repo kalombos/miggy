@@ -1,5 +1,7 @@
 import re
+from collections import namedtuple
 from collections.abc import Callable
+from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
 import peewee as pw
@@ -25,6 +27,12 @@ if TYPE_CHECKING:
 RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
 
+class Dependency(namedtuple("Dependency", "model_name field_name type")):
+    class Type(Enum):
+        REMOVE_PK = auto()
+        CREATE = auto()
+
+
 class MigrateOperation:
     """
     Base class for a migrate operation
@@ -34,6 +42,14 @@ class MigrateOperation:
         self = object.__new__(cls)
         self._constructor_args = (args, kwargs)
         return self
+
+    @property
+    def deps(self) -> list[Dependency]:
+        # Workaround to avoid initializing deps in the constructor
+        # and calling super() in every MigrateOperation subclass.
+        if not hasattr(self, "_deps"):
+            self._deps: list[Dependency] = []
+        return self._deps
 
     def get_operation_call(self) -> str:
         name = self.__class__.__name__
@@ -504,3 +520,33 @@ class ChangeNullable(MigrateOperation):
             _operation = schema_migrator.drop_not_null if self.is_null else schema_migrator.add_not_null
             ops.append(_operation(model._meta.table_name, field.column_name))
         return ops
+
+
+class AddPrimaryKeyConstraint(MigrateOperation):
+    def __init__(self, model_name: str, *fields: str) -> None:
+        self.model_name = model_name
+        self.fields = fields
+
+    def state_forwards(self, state: State) -> None:
+        state.add_composite_key(self.model_name, pw.CompositeKey(*self.fields))
+
+    def database_forwards(
+        self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
+    ) -> list[Operation]:
+        model = to_state[self.model_name]
+        columns = [model._meta.fields[f].column_name for f in self.fields]
+        return [schema_migrator.add_primary_key_constraint(model._meta.table_name, *columns)]
+
+
+class RemovePrimaryKeyConstraint(MigrateOperation):
+    def __init__(self, model_name: str) -> None:
+        self.model_name = model_name
+
+    def state_forwards(self, state: State) -> None:
+        state.remove_composite_key(self.model_name)
+
+    def database_forwards(
+        self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
+    ) -> list[Operation]:
+        model = from_state[self.model_name]
+        return [schema_migrator.drop_primary_key_constraint(model._meta.table_name)]

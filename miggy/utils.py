@@ -129,16 +129,22 @@ def indexes_state(model_cls: pw.Model) -> dict[str, ModelIndex]:
 def copy_model(model_cls: ModelCls) -> ModelCls:
     # this function based on ModelBase.__new__ logic
     attrs = {}
+
+    is_pk_already_determined = False
     # copying fields
     for k, v in model_cls.__dict__.items():
         if isinstance(v, pw.FieldAccessor):
             attrs[k] = deepcopy(v.field)
+            if v.field.primary_key:
+                is_pk_already_determined = True
     # copying Meta
     meta_options = {}
     if hasattr(model_cls, "_meta"):
         base_meta = model_cls._meta
-        meta_keys = ["legacy_table_names", "table_name", "database", "indexes_state"]
+        meta_keys = ["legacy_table_names", "table_name", "database", "indexes_state", "primary_key"]
         for k in meta_keys:
+            if is_pk_already_determined and k == "primary_key":
+                continue
             try:
                 meta_options[k] = base_meta.__dict__[k]
             except KeyError:
