@@ -105,6 +105,8 @@ class State:
         field = model._meta.fields[name]
         model._meta.remove_field(field.name)
         delattr(model, name)
+        if field.primary_key:
+            model._meta.primary_key = False
         if isinstance(field, pw.ForeignKeyField):
             delattr(model, field.object_id_name)
             delattr(field.rel_model, field.backref)

@@ -244,6 +244,21 @@ def test_proper_order_for_fk() -> None:
         ),
         pytest.param(
             {
+                "fields": {"email": pw.CharField(), "name": pw.CharField()},
+                "meta": {},
+            },
+            {
+                "fields": {"email": pw.CharField(), "name": pw.CharField()},
+                "meta": {"primary_key": pw.CompositeKey("email", "name")},
+            },
+            [
+                "migrator.remove_field(model_name='test',name='id',)",
+                "migrator.add_primary_key_constraint('test','email','name',)",
+            ],
+            id="auto_to_composite",
+        ),
+        pytest.param(
+            {
                 "fields": {"pk": pw.IntegerField(primary_key=True)},
                 "meta": {},
             },
@@ -252,9 +267,9 @@ def test_proper_order_for_fk() -> None:
                 "meta": {"primary_key": pw.CompositeKey("a", "b")},
             },
             [
+                "migrator.remove_field(model_name='test',name='pk',)",
                 "migrator.add_field(model_name='test',name='a',field=pw.CharField(),)",
                 "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
-                "migrator.remove_field(model_name='test',name='pk',)",
                 "migrator.add_primary_key_constraint('test','a','b',)",
             ],
             id="single_pk_to_composite",

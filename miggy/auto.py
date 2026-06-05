@@ -256,6 +256,7 @@ class MigrationAutodetector:
             current_fields = current._meta.primary_key.field_names
             if not prev_has_composite or prev._meta.primary_key.field_names != current_fields:
                 op = AddPrimaryKeyConstraint(model_name, *current_fields)
+                op.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))
                 for f in current_fields:
                     op.deps.append(Dependency(model_name, f, Dependency.Type.CREATE))
                 ops.append(op)
