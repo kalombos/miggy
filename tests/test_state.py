@@ -123,7 +123,7 @@ def test_remove_composite_key() -> None:
     assert not hasattr(model, "__composite_key__")
 
 
-def test_remove_field() -> None:
+def test_remove_fk_field() -> None:
     class SomeModel(pw.Model):
         some_field = pw.CharField()
 
@@ -139,3 +139,15 @@ def test_remove_field() -> None:
     assert not hasattr(SomeModel, "users")
     assert not hasattr(User, "my_pk")
     assert not hasattr(User, "fk_id")
+
+
+def test_remove_pk_field() -> None:
+    class SomeModel(pw.Model):
+        some_field = pw.CharField()
+
+    state = State({"somemodel": SomeModel})
+
+    assert isinstance(state["somemodel"]._meta.primary_key, pw.AutoField)
+
+    state.remove_field("somemodel", "id")
+    assert state["somemodel"]._meta.primary_key is False
