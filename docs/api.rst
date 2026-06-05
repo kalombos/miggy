@@ -18,15 +18,17 @@ Migrate operations
 .. autoclass:: miggy.operations::CreateModel
 .. autoclass:: miggy.operations::RemoveModel
 .. autoclass:: miggy.operations::AddIndex
-.. autoclass:: miggy.operations::DropIndex    
+.. autoclass:: miggy.operations::DropIndex
 .. autoclass:: miggy.operations::RenameTable
 .. autoclass:: miggy.operations::AddField
 .. autoclass:: miggy.operations::AlterField
 .. autoclass:: miggy.operations::RemoveField
 .. autoclass:: miggy.operations::RenameField
+.. autoclass:: miggy.operations::AddPrimaryKeyConstraint
+.. autoclass:: miggy.operations::RemovePrimaryKeyConstraint
 
 Migrator
 ++++++++++++++++++
 .. autoclass:: miggy.migrator::Migrator
-    :members: add_operation,python,sql,create_model,remove_model,add_field,alter_field,remove_field,rename_field,rename_table,add_index,drop_index
+    :members: add_operation,python,sql,create_model,remove_model,add_field,alter_field,remove_field,rename_field,rename_table,add_index,drop_index,add_primary_key_constraint,remove_primary_key_constraint
     :member-order: bysource
