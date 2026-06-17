@@ -35,7 +35,14 @@ class SchemaMigrator(ScM):
         raise NotImplementedError
 
     @operation
-    def _change_primary_key(self, old_field: pw.Field, new_field: pw.Field):
+    def _resolve_alter_column_type(self, old_field: pw.Field, new_field: pw.Field):
+        if old_field.field_type != new_field.field_type or old_field.get_modifiers() != new_field.get_modifiers():
+            table_name = new_field.model._meta.table_name
+            return self.alter_column_type(table_name, new_field.column_name, new_field)
+        return []
+
+    @operation
+    def _resolve_alter_primary_key(self, old_field: pw.Field, new_field: pw.Field):
         table_name = new_field.model._meta.table_name
         if not old_field.primary_key and new_field.primary_key:
             return self.add_primary_key_constraint(table_name, new_field.column_name)

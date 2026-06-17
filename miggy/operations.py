@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 from playhouse.migrate import Operation
 
-from miggy.deconstructor import ForeignKeyFieldDeconstructor, deconstructor_factory
+from miggy.deconstructor import ForeignKeyFieldDeconstructor
 from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
@@ -392,19 +392,6 @@ class AlterField(MigrateOperation):
                 ]
         return []
 
-    def handle_type(
-        self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
-    ) -> list[Operation]:
-        old_field_deconstructor = deconstructor_factory(old_field)
-        new_field_deconstructor = deconstructor_factory(new_field)
-        if (
-            old_field_deconstructor.field_type is not new_field_deconstructor.field_type
-            or old_field_deconstructor.get_type_modifiers() != new_field_deconstructor.get_type_modifiers()
-        ):
-            table_name = old_field.model._meta.table_name
-            return [schema_migrator.alter_column_type(table_name, new_field.column_name, new_field)]
-        return []
-
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
@@ -419,8 +406,8 @@ class AlterField(MigrateOperation):
 
         if old_column_name != field.column_name:
             _ops.append(schema_migrator.rename_field(table_name, old_field, field))
-        _ops.append(schema_migrator._change_primary_key(old_field, field))
-        _ops.extend(self.handle_type(old_field, field, schema_migrator))
+        _ops.append(schema_migrator._resolve_alter_column_type(old_field, field))
+        _ops.append(schema_migrator._resolve_alter_primary_key(old_field, field))
         _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
         _ops.extend(self.handle_default_constraint(old_field, field, schema_migrator))
         if old_field.null != field.null:

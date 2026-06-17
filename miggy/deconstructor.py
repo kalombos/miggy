@@ -32,7 +32,7 @@ class FieldDeconstructor(BaseDeconstructor):
             return field.default
         return None
 
-    def get_type_modifiers(self) -> dict[str, Any]:
+    def deconstruct_type_modifiers(self) -> dict[str, Any]:
         return {}
 
     def is_bound(self) -> bool:
@@ -66,7 +66,7 @@ class FieldDeconstructor(BaseDeconstructor):
 
     def deconstruct(self) -> dict[str, Any]:
         field = self.field
-        params = self.get_type_modifiers()
+        params: dict[str, Any] = {}
         if self.field.null:
             params["null"] = True
         if default := self._get_default(field):
@@ -75,6 +75,7 @@ class FieldDeconstructor(BaseDeconstructor):
             params["constraints"] = [default_constraint]
 
         params["type"] = self.field_type
+        params.update(self.deconstruct_type_modifiers())
         params.update(self.deconstruct_column_name())
         params.update(self.deconstruct_primary_key())
         params.update(self.deconstruct_index())
@@ -82,14 +83,14 @@ class FieldDeconstructor(BaseDeconstructor):
 
 
 class CharFieldDeconstructor(FieldDeconstructor):
-    def get_type_modifiers(self) -> dict[str, Any]:
+    def deconstruct_type_modifiers(self) -> dict[str, Any]:
         if self.field.max_length != 255:
             return {"max_length": self.field.max_length}
         return {}
 
 
 class DecimalFieldDeconstructor(FieldDeconstructor):
-    def get_type_modifiers(self) -> dict[str, Any]:
+    def deconstruct_type_modifiers(self) -> dict[str, Any]:
         return {"max_digits": self.field.max_digits, "decimal_places": self.field.decimal_places}
 
 
