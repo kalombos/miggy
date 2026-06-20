@@ -132,6 +132,11 @@ def test_handle_fk_constraint(
             pw.IntegerField(primary_key=True),
             ['ALTER TABLE "oldmodel" ADD PRIMARY KEY ("field")'],
         ),
+        pytest.param(
+            pw.CharField(),
+            pw.TextField(),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE TEXT'],
+        ),
     ],
 )
 def test__database_forwards(

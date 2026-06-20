@@ -4,7 +4,7 @@ from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
-from miggy.serializer import FieldSerializer, serialize_value
+from miggy.serializer import FieldSerializer, serializer_factory
 from tests.helpers import Rating, Status
 
 
@@ -23,7 +23,7 @@ from tests.helpers import Rating, Status
     ],
 )
 def test_serialize_value(value: int | str, expected: str) -> None:
-    assert serialize_value(value) == expected
+    assert serializer_factory(value).serialize().code == expected
 
 
 def test_field_serializer_serialize() -> None:
@@ -38,13 +38,13 @@ def test_field_serializer_serialize() -> None:
         link_model = pw.ForeignKeyField(LinkModel)
         index_field = pw.IntegerField(index=True, unique=True)
 
-    assert FieldSerializer(SomeModel.name).serialize() == (
+    assert FieldSerializer(SomeModel.name).serialize().code == (
         """pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
-    assert FieldSerializer(SomeModel.status).serialize() == (
+    assert FieldSerializer(SomeModel.status).serialize().code == (
         """pw.CharField(default='active', max_length=100, null=True)"""
     )
-    assert FieldSerializer(SomeModel.updated_at).serialize() == ("""pw_pext.DateTimeTZField()""")
-    assert FieldSerializer(SomeModel.rating).serialize() == ("""pw.SmallIntegerField()""")
-    assert FieldSerializer(SomeModel.link_model).serialize() == ("""pw.ForeignKeyField(model='linkmodel')""")
-    assert FieldSerializer(SomeModel.index_field).serialize() == ("""pw.IntegerField(unique=True)""")
+    assert FieldSerializer(SomeModel.updated_at).serialize().code == ("""pw_pext.DateTimeTZField()""")
+    assert FieldSerializer(SomeModel.rating).serialize().code == ("""pw.SmallIntegerField()""")
+    assert FieldSerializer(SomeModel.link_model).serialize().code == ("""pw.ForeignKeyField(model='linkmodel')""")
+    assert FieldSerializer(SomeModel.index_field).serialize().code == ("""pw.IntegerField(unique=True)""")

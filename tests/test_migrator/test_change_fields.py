@@ -214,7 +214,6 @@ class _M2(pw.Model):
             {"non_fk_field": pw.ForeignKeyField(_M1, on_delete="RESTRICT")},
             [
                 'ALTER TABLE "testmodel" RENAME COLUMN "non_fk_field" TO "non_fk_field_id"',
-                'ALTER TABLE "testmodel" ALTER COLUMN "non_fk_field_id" TYPE INTEGER',
                 (
                     'ALTER TABLE "testmodel" ADD CONSTRAINT "fk_testmodel_non_fk_field_id_refs__m1" '
                     'FOREIGN KEY ("non_fk_field_id") REFERENCES "_m1" ("id") ON DELETE RESTRICT'
@@ -237,7 +236,6 @@ class _M2(pw.Model):
             [
                 'ALTER TABLE "testmodel" RENAME COLUMN "fk_field_id" TO "fk_field"',
                 'ALTER INDEX "testmodel_fk_field_id" RENAME TO "testmodel_fk_field"',
-                'ALTER TABLE "testmodel" ALTER COLUMN "fk_field" TYPE INTEGER',
                 'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_fk_field_id_fkey"',
                 'DROP INDEX "testmodel_fk_field"',
             ],

@@ -33,8 +33,8 @@ class _M2(pw.Model):
         (pw.DecimalField(decimal_places=3), {"decimal_places": 3, "max_digits": 10}),
     ],
 )
-def test_get_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
-    assert deconstructor_factory(field).get_type_modifiers() == expected
+def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -> None:
+    assert deconstructor_factory(field).deconstruct_type_modifiers() == expected
 
 
 @pytest.mark.parametrize(

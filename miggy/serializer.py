@@ -1,4 +1,5 @@
 import enum
+from typing import Any, NamedTuple
 
 import peewee as pw
 
@@ -6,16 +7,34 @@ from miggy.deconstructor import deconstructor_factory
 from miggy.utils import Default
 
 
-class BaseSerializer:
+class SerializedCode(NamedTuple):
+    code: str
+    imports: set = set()
+
+
+class SerializeValueMixin:
+    imports: set[str]
+
+    def serialize_value(self, value: Any) -> str:
+        serialized = serializer_factory(value).serialize()
+        self.imports.update(serialized.imports)
+        return serialized.code
+
+
+class BaseSerializer(SerializeValueMixin):
     def __init__(self, value):
         self.value = value
+        self.imports = set()
 
-    def serialize(self) -> str:
+    def serialize_to_code(self) -> str:
         return repr(self.value)
+
+    def serialize(self) -> SerializedCode:
+        return SerializedCode(code=self.serialize_to_code(), imports=self.imports)
 
 
 class EnumSerializer(BaseSerializer):
-    def serialize(self) -> str:
+    def serialize_to_code(self) -> str:
         return repr(self.value.value)
 
 
@@ -23,10 +42,10 @@ class BaseSequenceSerializer(BaseSerializer):
     def _format(self) -> str:
         raise NotImplementedError("Subclasses of BaseSequenceSerializer must implement the _format() method.")
 
-    def serialize(self):
+    def serialize_to_code(self) -> str:
         strings = []
         for item in self.value:
-            strings.append(serialize_value(item))
+            strings.append(self.serialize_value(item))
         value = self._format()
         return value % (", ".join(strings))
 
@@ -44,25 +63,25 @@ class TupleSerializer(BaseSequenceSerializer):
 
 
 class SQLSerializer(BaseSerializer):
-    def serialize(self) -> str:
-        params = [serialize_value(self.value.sql)]
+    def serialize_to_code(self) -> str:
+        params = [self.serialize_value(self.value.sql)]
         if self.value.params is not None:
-            params.append(serialize_value(self.value.params))
+            params.append(self.serialize_value(self.value.params))
         return "pw.SQL(%s)" % ", ".join(params)
 
 
 class DefaultSerializer(BaseSerializer):
-    def serialize(self) -> str:
+    def serialize_to_code(self) -> str:
         default_constraint = self.value
-        return "pw.SQL(%s)" % serialize_value(f"DEFAULT {default_constraint.value}")
+        return "pw.SQL(%s)" % self.serialize_value(f"DEFAULT {default_constraint.value}")
 
 
 class CompositeKeySerializer(BaseSerializer):
-    def serialize(self) -> str:
-        return "pw.CompositeKey(%s)" % ", ".join(serialize_value(n) for n in self.value.field_names)
+    def serialize_to_code(self) -> str:
+        return "pw.CompositeKey(%s)" % ", ".join(self.serialize_value(n) for n in self.value.field_names)
 
 
-class FieldSerializer:
+class FieldSerializer(BaseSerializer):
     FIELD_MODULES_MAP = {
         "ArrayField": "pw_pext",
         "BinaryJSONField": "pw_pext",
@@ -73,35 +92,33 @@ class FieldSerializer:
         "TSVectorField": "pw_pext",
     }
 
-    def __init__(self, field: pw.Field) -> None:
-        self.field = field
-
-    def serialize(self) -> str:
-        deconstructed = deconstructor_factory(self.field).deconstruct()
+    def serialize_to_code(self) -> str:
+        field = self.value
+        deconstructed = deconstructor_factory(field).deconstruct()
 
         field_class = deconstructed["type"]
         del deconstructed["type"]
 
-        param_str = ", ".join("%s=%s" % (k, serialize_value(v)) for k, v in sorted(deconstructed.items()))
+        param_str = ", ".join("%s=%s" % (k, self.serialize_value(v)) for k, v in sorted(deconstructed.items()))
         field = "%s(%s)" % (field_class.__name__, param_str)
 
         module = self.FIELD_MODULES_MAP.get(field_class.__name__, "pw")
         return "{module}.{field}".format(field=field, module=module)
 
 
-def serialize_value(value) -> str:
+def serializer_factory(value) -> BaseSerializer:
     if isinstance(value, pw.CompositeKey):
-        return CompositeKeySerializer(value).serialize()
+        return CompositeKeySerializer(value)
     if isinstance(value, Default):
-        return DefaultSerializer(value).serialize()
+        return DefaultSerializer(value)
     if isinstance(value, pw.SQL):
-        return SQLSerializer(value).serialize()
+        return SQLSerializer(value)
     if isinstance(value, pw.Field):
-        return FieldSerializer(value).serialize()
+        return FieldSerializer(value)
     if isinstance(value, enum.Enum):
-        return EnumSerializer(value).serialize()
+        return EnumSerializer(value)
     if isinstance(value, tuple):
-        return TupleSerializer(value).serialize()
+        return TupleSerializer(value)
     if isinstance(value, list):
-        return ListSerializer(value).serialize()
-    return BaseSerializer(value=value).serialize()
+        return ListSerializer(value)
+    return BaseSerializer(value=value)
