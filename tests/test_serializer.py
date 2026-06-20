@@ -20,7 +20,7 @@ from tests.helpers import Rating, Status, get_active_status
         (pw.SQL("where name='%s'", params=["John"]), SerializedCode("""pw.SQL("where name='%s'", ['John'])""")),
         (pw.SQL("DEFAULT 5"), SerializedCode("pw.SQL('DEFAULT 5')")),
         (pw.SQL("where name='%s'", params=("John",)), SerializedCode("""pw.SQL("where name='%s'", ('John',))""")),
-        (get_active_status, SerializedCode("tests.helpers.get_active_status", imports={'import tests.helpers'})),
+        (get_active_status, SerializedCode("tests.helpers.get_active_status", imports={"import tests.helpers"})),
     ],
 )
 def test_serialize_value(value: int | str, expected: str) -> None:

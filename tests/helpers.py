@@ -12,6 +12,7 @@ from miggy.writer import OperationWriter
 def get_active_status() -> str:
     return "active"
 
+
 def get_inactive_status() -> str:
     return "inactive"
 

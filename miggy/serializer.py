@@ -9,6 +9,7 @@ from miggy.utils import Default
 
 FUNCTION_TYPES = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
 
+
 class SerializedCode(NamedTuple):
     code: str
     imports: set = set()
@@ -38,13 +39,11 @@ class BaseSerializer(SerializeValueMixin):
 class EnumSerializer(BaseSerializer):
     def serialize_to_code(self) -> str:
         return repr(self.value.value)
-    
+
 
 class FunctionTypeSerializer(BaseSerializer):
     def serialize_to_code(self) -> str:
-        if getattr(self.value, "__self__", None) and isinstance(
-            self.value.__self__, type
-        ):
+        if getattr(self.value, "__self__", None) and isinstance(self.value.__self__, type):
             klass = self.value.__self__
             module = klass.__module__
             self.imports.add("import %s" % module)
@@ -61,9 +60,7 @@ class FunctionTypeSerializer(BaseSerializer):
             self.imports.add("import %s" % self.value.__module__)
             return "%s.%s" % (module_name, self.value.__qualname__)
 
-        raise ValueError(
-            "Could not find function %s in %s.\n" % (self.value.__name__, module_name)
-        )
+        raise ValueError("Could not find function %s in %s.\n" % (self.value.__name__, module_name))
 
 
 class BaseSequenceSerializer(BaseSerializer):
@@ -136,7 +133,7 @@ class FieldSerializer(BaseSerializer):
 
 def serializer_factory(value) -> BaseSerializer:
     if isinstance(value, pw.CompositeKey):
-        return CompositeKeySerializer(value)    
+        return CompositeKeySerializer(value)
     if isinstance(value, Default):
         return DefaultSerializer(value)
     if isinstance(value, pw.SQL):
