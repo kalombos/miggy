@@ -1,3 +1,4 @@
+from email.policy import default
 from typing import Any
 
 import peewee as pw
@@ -14,7 +15,7 @@ from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
 from miggy.utils import Default
-from tests.helpers import Rating, Status
+from tests.helpers import Rating, Status, get_active_status, get_inactive_status
 
 
 class _M1(pw.Model):
@@ -207,6 +208,8 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         (pw.IntegerField(index=True, primary_key=True), {"type": pw.IntegerField, "primary_key": True}),
         # test autofield
         (pw.AutoField(index=True, unique=True, primary_key=True), {"type": pw.AutoField}),
+        # test default callable
+        (pw.CharField(default=get_active_status), {"default": get_active_status, 'type': pw.CharField}),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
@@ -299,6 +302,8 @@ def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> No
             pw.ForeignKeyField(_M1, on_update="RESTRICT"), pw.ForeignKeyField(_M1), True, id="different_on_update_fk"
         ),
         pytest.param(pw.ForeignKeyField(_M1), pw.ForeignKeyField(_M1, constraint_name="new_name"), True),
+        # test default callable equality
+        pytest.param(pw.CharField(default=get_active_status), pw.CharField(default=get_inactive_status), True),
     ],
 )
 def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
