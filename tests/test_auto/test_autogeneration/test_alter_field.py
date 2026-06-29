@@ -5,7 +5,7 @@ from miggy.auto import MigrationAutodetector
 from miggy.state import State
 from miggy.utils import copy_model
 from miggy.writer import OperationWriter
-from tests.helpers import compare_dedent, diff_one, operation_to_one_line, to_one_line
+from tests.helpers import compare_dedent, diff_one, get_active_status, operation_to_one_line, to_one_line
 
 
 class _M1(pw.Model):
@@ -40,12 +40,13 @@ class _M1(pw.Model):
         ),
         pytest.param(
             pw.IntegerField(),
-            pw.IntegerField(default=lambda: 5, constraints=[pw.SQL("DEFAULT 5")]),
+            pw.CharField(default=get_active_status, constraints=[pw.SQL("DEFAULT 'active'")]),
             (
                 "migrator.alter_field("
                 "model_name='test',"
                 "name='age',"
-                "field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),)"
+                "field="
+                """pw.CharField(constraints=[pw.SQL("DEFAULT 'active'")], default=tests.helpers.get_active_status),)"""
             ),
             id="default_callable",
         ),
