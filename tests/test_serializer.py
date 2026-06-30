@@ -5,6 +5,7 @@ from playhouse.postgres_ext import DateTimeTZField
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.serializer import FieldSerializer, SerializedCode, serializer_factory
+from miggy.utils import Default
 from tests.helpers import Rating, Status, get_active_status
 
 
@@ -16,10 +17,20 @@ from tests.helpers import Rating, Status, get_active_status
         ("O'neal", SerializedCode('"O\'neal"')),
         (Status.ACTIVE, SerializedCode("'active'")),
         (Rating.LOW, SerializedCode("1")),
-        (pw.CompositeKey("name", "age"), SerializedCode("pw.CompositeKey('name', 'age')")),
-        (pw.SQL("where name='%s'", params=["John"]), SerializedCode("""pw.SQL("where name='%s'", ['John'])""")),
-        (pw.SQL("DEFAULT 5"), SerializedCode("pw.SQL('DEFAULT 5')")),
-        (pw.SQL("where name='%s'", params=("John",)), SerializedCode("""pw.SQL("where name='%s'", ('John',))""")),
+        (
+            pw.CompositeKey("name", "age"),
+            SerializedCode("pw.CompositeKey('name', 'age')", imports={"import peewee as pw"}),
+        ),
+        (
+            pw.SQL("where name='%s'", params=["John"]),
+            SerializedCode("""pw.SQL("where name='%s'", ['John'])""", imports={"import peewee as pw"}),
+        ),
+        (Default("5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
+        (pw.SQL("DEFAULT 5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
+        (
+            pw.SQL("where name='%s'", params=("John",)),
+            SerializedCode("""pw.SQL("where name='%s'", ('John',))""", imports={"import peewee as pw"}),
+        ),
         (get_active_status, SerializedCode("tests.helpers.get_active_status", imports={"import tests.helpers"})),
     ],
 )

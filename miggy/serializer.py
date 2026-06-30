@@ -8,6 +8,7 @@ from miggy.deconstructor import deconstructor_factory
 from miggy.utils import Default
 
 FUNCTION_TYPES = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
+PEEWEE_IMPORT = "import peewee as pw"
 
 
 class SerializedCode(NamedTuple):
@@ -25,7 +26,7 @@ class SerializeValueMixin:
 
 
 class BaseSerializer(SerializeValueMixin):
-    def __init__(self, value):
+    def __init__(self, value) -> None:
         self.value = value
         self.imports = set()
 
@@ -92,17 +93,20 @@ class SQLSerializer(BaseSerializer):
         params = [self.serialize_value(self.value.sql)]
         if self.value.params is not None:
             params.append(self.serialize_value(self.value.params))
+        self.imports.add(PEEWEE_IMPORT)
         return "pw.SQL(%s)" % ", ".join(params)
 
 
 class DefaultSerializer(BaseSerializer):
     def serialize_to_code(self) -> str:
         default_constraint = self.value
+        self.imports.add(PEEWEE_IMPORT)
         return "pw.SQL(%s)" % self.serialize_value(f"DEFAULT {default_constraint.value}")
 
 
 class CompositeKeySerializer(BaseSerializer):
     def serialize_to_code(self) -> str:
+        self.imports.add(PEEWEE_IMPORT)
         return "pw.CompositeKey(%s)" % ", ".join(self.serialize_value(n) for n in self.value.field_names)
 
 
