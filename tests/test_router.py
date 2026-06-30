@@ -9,9 +9,10 @@ import pytest
 from playhouse.postgres_ext import Psycopg3Database
 
 from miggy.cli import get_router
-from miggy.router import MIGRATE_TEMPLATE, Router, compile_migrations
+from miggy.router import Router, detect_changes
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN
+from tests.helpers import get_active_status
 
 
 def test_router_run_already_applied_ok(router: Router) -> None:
@@ -73,21 +74,17 @@ def test_router_merge(router: Router, migrations_dir: pathlib.Path):
 @pytest.mark.parametrize(
     ("db", "expected"),
     [
-        (pw.PostgresqlDatabase(POSTGRES_DSN), "import playhouse.postgres_ext as pw_pext"),
-        (Psycopg3Database(POSTGRES_DSN), "import playhouse.postgres_ext as pw_pext"),
-        (pw.SqliteDatabase("sqlite:///:memory:"), ""),
+        (pw.PostgresqlDatabase(POSTGRES_DSN), True),
+        (Psycopg3Database(POSTGRES_DSN), True),
+        (pw.SqliteDatabase("sqlite:///:memory:"), False),
     ],
 )
-def test_router_compile(tmp_path: pathlib.Path, db: pw.Database, expected: str) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = get_router(d, db)
-    router.compile("test_router_compile")
+def test_pw_pext_import(tmp_path: pathlib.Path, db: pw.Database, expected: bool) -> None:
+    router = Router(db)
+    template = router._compile_template("test_router_compile", [], [])
+    import_added = "import playhouse.postgres_ext as pw_pext" in template
 
-    with open(d / "001_test_router_compile.py") as f:
-        content = f.read()
-        assert expected in content
-        assert "SQL = pw.SQL" in content
+    assert import_added is expected
 
 
 def test_router_schema(tmpdir):
@@ -117,8 +114,8 @@ def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration
         assert transaction_called is expected
 
 
-def test_compile_migrations() -> None:
-    def from_state():
+def test_compile(tmp_path: pathlib.Path) -> None:
+    def from_state() -> State:
         class Test(pw.Model):
             first_name = pw.CharField()
 
@@ -127,9 +124,9 @@ def test_compile_migrations() -> None:
 
         return State({"test": Test})
 
-    def _to_state():
+    def _to_state() -> State:
         class Test(pw.Model):
-            first_name = pw.CharField()
+            first_name = pw.CharField(default=get_active_status)
             field = pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")])
 
             class Meta:
@@ -137,25 +134,37 @@ def test_compile_migrations() -> None:
 
         return State({"test": Test})
 
-    changes = compile_migrations(from_state(), _to_state())
-    template = MIGRATE_TEMPLATE.format(migrate=changes, name="", ext_import="", rollback="")
+    changes = detect_changes(from_state(), _to_state())
 
-    assert (
-        dedent(
-            '''
-    def migrate(migrator, database, fake=False):
-        """Write your migrations here."""
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = get_router(d, Psycopg3Database(POSTGRES_DSN))
+    router.compile("test_router_compile", changes, [])
 
-        migrator.add_field(
-            model_name='test',
-            name='field',
-            field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),
+    with open(d / "001_test_router_compile.py") as f:
+        content = f.read()
+        assert (
+            dedent(
+                '''
+        def migrate(migrator, database, fake=False):
+            """Write your migrations here."""
+
+            migrator.add_field(
+                model_name='test',
+                name='field',
+                field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),
+            )
+
+            migrator.alter_field(
+                model_name='test',
+                name='first_name',
+                field=pw.CharField(default=tests.helpers.get_active_status),
+            )
+
+
+        def rollback(migrator, database, fake=False):
+            """Write your rollback migrations here."""
+        '''
+            )
+            in content
         )
-
-
-    def rollback(migrator, database, fake=False):
-        """Write your rollback migrations here."""
-    '''
-        )
-        in template
-    )

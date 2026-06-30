@@ -11,6 +11,7 @@ import peewee as pw
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
+from miggy.operations import MigrateOperation
 from miggy.state import State
 from miggy.utils import exec_in
 from miggy.writer import OperationWriter
@@ -115,7 +116,8 @@ class Router(object):
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
-        migrate = rollback = ""
+        migrate_changes = []
+        rollback_changes = []
         if auto:
             try:
                 project_state = self.load_project_state(auto)
@@ -125,29 +127,29 @@ class Router(object):
             for migration in self.diff:
                 self.run_one(migration, self.migrator)
 
-            migrate = compile_migrations(self.migration_state, project_state)
-            if not migrate:
+            migrate_changes = detect_changes(self.migration_state, project_state)
+            if not migrate_changes:
                 return self.logger.warning("No changes found.")
 
-            rollback = compile_migrations(project_state, self.migration_state)
+            rollback_changes = detect_changes(project_state, self.migration_state)
 
         self.logger.info('Creating migration "%s"', name)
-        name = self.compile(name, migrate, rollback)
+        name = self.compile(name, migrate_changes, rollback_changes)
         self.logger.info('Migration has been created as "%s"', name)
         return name
 
     def merge(self, name="initial"):
         """Merge migrations into one."""
         migrator = Migrator(self.database)
-        migrate = compile_migrations(migrator.state, self.migration_state)
-        if not migrate:
+        migrate_changes = detect_changes(migrator.state, self.migration_state)
+        if not migrate_changes:
             return self.logger.error("Can't merge migrations")
 
         self.clear()
 
         self.logger.info('Merge migrations into "%s"', name)
-        rollback = compile_migrations(self.migration_state, State())
-        name = self.compile(name, migrate, rollback, 0)
+        rollback_changes = detect_changes(self.migration_state, State())
+        name = self.compile(name, migrate_changes, rollback_changes, 0)
 
         migrator = Migrator(self.database)
         self.run_one(name, migrator, change_schema=False, change_history=True)
@@ -162,20 +164,44 @@ class Router(object):
             filename = os.path.join(self.migrate_dir, name + ".py")
             os.remove(filename)
 
-    def compile(self, name, migrate="", rollback="", num=None):
+    def _serialize_changes(self, changes: list[MigrateOperation]):
+        imports = set()
+        serialized_changes = []
+        for c in changes:
+            writer = OperationWriter(c)
+            serialized_changes.append(writer.serialize())
+            imports.update(writer.imports)
+
+        line = NEWLINE + NEWLINE.join("\n\n".join(serialized_changes).split("\n"))
+        return CLEAN_RE.sub("\n", line), imports
+
+    def _compile_template(
+        self, name: str, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation]
+    ) -> str:
+        migrate, imports = self._serialize_changes(migrate_changes)
+        rollback, rollback_imports = self._serialize_changes(rollback_changes)
+        imports.update(rollback_imports)
+
+        ext_import = make_ext_import(self.database)
+        if ext_import:
+            imports.add(ext_import)
+
+        return MIGRATE_TEMPLATE.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
+
+    def compile(
+        self, name, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation], num=None
+    ) -> str:
         """Create a migration."""
+
         if num is None:
             num = len(self.todo)
 
-        name = "{:03}_".format(num + 1) + name
-        filename = name + ".py"
+        name = f"{num + 1:03}_{name}"
+        filename = f"{name}.py"
         path = os.path.join(self.migrate_dir, filename)
+        template = self._compile_template(filename, migrate_changes=migrate_changes, rollback_changes=rollback_changes)
         with open(path, "w") as f:
-            f.write(
-                MIGRATE_TEMPLATE.format(
-                    migrate=migrate, rollback=rollback, name=filename, ext_import=make_ext_import(self.database)
-                )
-            )
+            f.write(template)
 
         return name
 
@@ -325,16 +351,8 @@ def _check_model(obj, models=None):
     return isinstance(obj, type) and issubclass(obj, pw.Model) and hasattr(obj, "_meta")
 
 
-def compile_migrations(
+def detect_changes(
     from_state: State,
     to_state: State,
-) -> str | typing.Literal[False]:
-    """Compile migrations for given models."""
-
-    changes = MigrationAutodetector(from_state, to_state).changes()
-    if not changes:
-        return False
-    serialized_changes = [OperationWriter(o).serialize() for o in changes]
-
-    line = NEWLINE + NEWLINE.join("\n\n".join(serialized_changes).split("\n"))
-    return CLEAN_RE.sub("\n", line)
+) -> list[MigrateOperation]:
+    return MigrationAutodetector(from_state, to_state).changes()
