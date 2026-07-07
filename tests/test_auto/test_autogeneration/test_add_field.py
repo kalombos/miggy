@@ -3,7 +3,7 @@ import pytest
 
 from miggy.operations import MigrateOperation
 from miggy.writer import OperationWriter
-from tests.helpers import compare_dedent, diff_one
+from tests.helpers import compare_dedent, diff_one, get_active_status
 
 
 class _M1(pw.Model):
@@ -39,12 +39,12 @@ class _M1(pw.Model):
             id="add_default",
         ),
         pytest.param(
-            pw.IntegerField(default=lambda: 5),
+            pw.CharField(default=get_active_status),
             """
             migrator.add_field(
                 model_name='test',
                 name='field',
-                field=pw.IntegerField(),
+                field=pw.CharField(default=tests.helpers.get_active_status),
             )
             """,
             id="add_default_callable",

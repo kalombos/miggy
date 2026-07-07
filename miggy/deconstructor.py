@@ -27,11 +27,6 @@ class FieldDeconstructor(BaseDeconstructor):
             return pw.SmallIntegerField
         return type(self.field)
 
-    def _get_default(self, field: pw.Field) -> Any:
-        if field.default is not None and not callable(field.default):
-            return field.default
-        return None
-
     def deconstruct_type_modifiers(self) -> dict[str, Any]:
         return {}
 
@@ -69,8 +64,8 @@ class FieldDeconstructor(BaseDeconstructor):
         params: dict[str, Any] = {}
         if self.field.null:
             params["null"] = True
-        if default := self._get_default(field):
-            params["default"] = default
+        if field.default is not None:
+            params["default"] = field.default
         if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
 

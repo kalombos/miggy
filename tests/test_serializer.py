@@ -4,26 +4,38 @@ from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
-from miggy.serializer import FieldSerializer, serializer_factory
-from tests.helpers import Rating, Status
+from miggy.serializer import FieldSerializer, SerializedCode, serializer_factory
+from miggy.utils import Default
+from tests.helpers import Rating, Status, get_active_status
 
 
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        (5, "5"),
-        ("5", "'5'"),
-        ("O'neal", '"O\'neal"'),
-        (Status.ACTIVE, "'active'"),
-        (Rating.LOW, "1"),
-        (pw.CompositeKey("name", "age"), "pw.CompositeKey('name', 'age')"),
-        (pw.SQL("where name='%s'", params=["John"]), """pw.SQL("where name='%s'", ['John'])"""),
-        (pw.SQL("DEFAULT 5"), "pw.SQL('DEFAULT 5')"),
-        (pw.SQL("where name='%s'", params=("John",)), """pw.SQL("where name='%s'", ('John',))"""),
+        (5, SerializedCode("5")),
+        ("5", SerializedCode("'5'")),
+        ("O'neal", SerializedCode('"O\'neal"')),
+        (Status.ACTIVE, SerializedCode("'active'")),
+        (Rating.LOW, SerializedCode("1")),
+        (
+            pw.CompositeKey("name", "age"),
+            SerializedCode("pw.CompositeKey('name', 'age')", imports={"import peewee as pw"}),
+        ),
+        (
+            pw.SQL("where name='%s'", params=["John"]),
+            SerializedCode("""pw.SQL("where name='%s'", ['John'])""", imports={"import peewee as pw"}),
+        ),
+        (Default("5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
+        (pw.SQL("DEFAULT 5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
+        (
+            pw.SQL("where name='%s'", params=("John",)),
+            SerializedCode("""pw.SQL("where name='%s'", ('John',))""", imports={"import peewee as pw"}),
+        ),
+        (get_active_status, SerializedCode("tests.helpers.get_active_status", imports={"import tests.helpers"})),
     ],
 )
 def test_serialize_value(value: int | str, expected: str) -> None:
-    assert serializer_factory(value).serialize().code == expected
+    assert serializer_factory(value).serialize() == expected
 
 
 def test_field_serializer_serialize() -> None:

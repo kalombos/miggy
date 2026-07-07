@@ -29,13 +29,9 @@ Some examples (model - class or model name)::
 
 """
 
-import datetime as dt
-
 import peewee as pw
 
-{ext_import}
-
-SQL = pw.SQL
+{imports}
 
 
 # Run the migration inside a single transaction
