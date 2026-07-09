@@ -126,12 +126,12 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
         ),
     ],
 )
-def test_foreignkey_field_deconstructor_deconstruct(field_name: str, field: pw.Field, expected: dict[str, Any]) -> None:
+def test_foreignkey_field_deconstructor_deconstruct_params(field_name: str, field: pw.Field, expected: dict[str, Any]) -> None:
     class MyTestModel(pw.Model):
         pass
 
     MyTestModel._meta.add_field(field_name, field)
-    assert ForeignKeyFieldDeconstructor(field).deconstruct() == expected
+    assert ForeignKeyFieldDeconstructor(field).deconstruct_params() == expected
 
 
 class _TestDeconstructFkParamsNamespace:
@@ -211,11 +211,11 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         (pw.CharField(default=get_active_status), {"default": get_active_status, "type": pw.CharField}),
     ],
 )
-def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
+def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> None:
     class MyTestModel(pw.Model):
         some_field = field
 
-    assert deconstructor_factory(MyTestModel.some_field).deconstruct() == expected
+    assert deconstructor_factory(MyTestModel.some_field).deconstruct_params() == expected
 
 
 @pytest.mark.parametrize(
@@ -247,8 +247,8 @@ def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
         ),
     ],
 )
-def test_deconstruct_unbound(field: pw.Field, expected: dict[str, Any]) -> None:
-    assert deconstructor_factory(field).deconstruct() == expected
+def test_deconstruct_params_unbound(field: pw.Field, expected: dict[str, Any]) -> None:
+    assert deconstructor_factory(field).deconstruct_params() == expected
 
 
 @pytest.mark.parametrize(
@@ -388,7 +388,9 @@ class _TestModelDeconstructNamespace:
 )
 def test_model_deconstructor__deconstruct(model: ModelCls, expected: dict[str, Any]) -> None:
     deconstructed = ModelDeconstructor(model).deconstruct()
-    deconstructed["fields"] = {n: deconstructor_factory(f).deconstruct() for n, f in deconstructed["fields"].items()}
+    deconstructed["fields"] = {
+        n: deconstructor_factory(f).deconstruct_params() for n, f in deconstructed["fields"].items()
+    }
     if "primary_key" in deconstructed["meta"]:
         deconstructed["meta"]["primary_key"] = deconstructed["meta"]["primary_key"].field_names
     assert deconstructed == expected

@@ -54,9 +54,9 @@ def test_field_serializer_serialize() -> None:
         """pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
     assert FieldSerializer(SomeModel.status).serialize().code == (
-        """pw.CharField(default='active', max_length=100, null=True)"""
+        """m_ext.CharEnumField(default='active', max_length=100, null=True)"""
     )
     assert FieldSerializer(SomeModel.updated_at).serialize().code == ("""pw_pext.DateTimeTZField()""")
-    assert FieldSerializer(SomeModel.rating).serialize().code == ("""pw.SmallIntegerField()""")
+    assert FieldSerializer(SomeModel.rating).serialize().code == ("""m_ext.IntEnumField()""")
     assert FieldSerializer(SomeModel.link_model).serialize().code == ("""pw.ForeignKeyField(model='linkmodel')""")
     assert FieldSerializer(SomeModel.index_field).serialize().code == ("""pw.IntegerField(unique=True)""")

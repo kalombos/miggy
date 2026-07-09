@@ -111,28 +111,32 @@ class CompositeKeySerializer(BaseSerializer):
 
 
 class FieldSerializer(BaseSerializer):
-    FIELD_MODULES_MAP = {
-        "ArrayField": "pw_pext",
-        "BinaryJSONField": "pw_pext",
-        "DateTimeTZField": "pw_pext",
-        "HStoreField": "pw_pext",
-        "IntervalField": "pw_pext",
-        "JSONField": "pw_pext",
-        "TSVectorField": "pw_pext",
-    }
+
+    def serialize_path(self, path: str) -> str:
+        module, field = path.rsplit(".", 1)
+        match module:
+            case "peewee":
+                import_ = "import peewee as pw"
+                field = f"pw.{field}"
+            case "playhouse.postgres_ext":
+                import_ = "import playhouse.postgres_ext as pw_pext"
+                field = f"pw_pext.{field}"
+            case "miggy.ext.fields":
+                import_ = "import miggy.ext.fields as m_ext"
+                field = f"m_ext.{field}"
+            case _:
+                import_ = "import %s" % module
+                field = path
+        self.imports.add(import_)
+        return field
+
 
     def serialize_to_code(self) -> str:
-        field = self.value
-        deconstructed = deconstructor_factory(field).deconstruct()
-
-        field_class = deconstructed["type"]
-        del deconstructed["type"]
-
-        param_str = ", ".join("%s=%s" % (k, self.serialize_value(v)) for k, v in sorted(deconstructed.items()))
-        field = "%s(%s)" % (field_class.__name__, param_str)
-
-        module = self.FIELD_MODULES_MAP.get(field_class.__name__, "pw")
-        return "{module}.{field}".format(field=field, module=module)
+        deconstructed_field = deconstructor_factory(self.value).deconstruct()
+        path, params = deconstructed_field
+        field = self.serialize_path(path)
+        param_str = ", ".join("%s=%s" % (k, self.serialize_value(v)) for k, v in sorted(params.items()))
+        return f"{field}({param_str})"
 
 
 def serializer_factory(value) -> BaseSerializer:

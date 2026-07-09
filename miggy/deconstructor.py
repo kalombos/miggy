@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import peewee as pw
 
@@ -11,11 +11,15 @@ if TYPE_CHECKING:
     from miggy.types import ModelCls
 
 
-class BaseDeconstructor(Protocol):
-    def deconstruct(self) -> dict[str, Any]: ...
+from typing import NamedTuple
 
 
-class FieldDeconstructor(BaseDeconstructor):
+class DeconstructedField(NamedTuple):
+    path: str
+    params: dict[str, Any]
+
+
+class FieldDeconstructor:
     def __init__(self, field: pw.Field) -> None:
         self.field = field
 
@@ -59,7 +63,7 @@ class FieldDeconstructor(BaseDeconstructor):
             return {"primary_key": True}
         return {}
 
-    def deconstruct(self) -> dict[str, Any]:
+    def deconstruct_params(self) -> dict[str, Any]:
         field = self.field
         params: dict[str, Any] = {}
         if self.field.null:
@@ -69,12 +73,17 @@ class FieldDeconstructor(BaseDeconstructor):
         if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
 
-        params["type"] = self.field_type
         params.update(self.deconstruct_type_modifiers())
         params.update(self.deconstruct_column_name())
         params.update(self.deconstruct_primary_key())
         params.update(self.deconstruct_index())
         return params
+
+    def deconstruct_path(self) -> str:
+        return "%s.%s" % (self.field.__class__.__module__, self.field.__class__.__qualname__)
+
+    def deconstruct(self) -> DeconstructedField:
+        return DeconstructedField(path=self.deconstruct_path(), params=self.deconstruct_params())
 
 
 class CharFieldDeconstructor(FieldDeconstructor):
@@ -120,8 +129,8 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
                 params["index"] = False
         return params
 
-    def deconstruct(self) -> dict[str, Any]:
-        params = super().deconstruct()
+    def deconstruct_params(self) -> dict[str, Any]:
+        params = super().deconstruct_params()
         params.update(self.deconstruct_fk_params())
         return params
 
@@ -131,7 +140,7 @@ class AutoFieldDeconstructor(FieldDeconstructor):
         return {}
 
 
-class ModelDeconstructor(BaseDeconstructor):
+class ModelDeconstructor:
     def __init__(self, model: ModelCls) -> None:
         self.model = model
 
@@ -162,7 +171,7 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
 
 
 def deep_deconstruct(field: pw.Field) -> Any:
-    params = deconstructor_factory(field).deconstruct()
+    params = deconstructor_factory(field).deconstruct_params()
     if "constraints" in params:
         params["constraints"] = [
             {"type": Default, "value": c.value} if isinstance(c, Default) else c for c in params["constraints"]
