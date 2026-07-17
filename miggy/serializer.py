@@ -111,7 +111,6 @@ class CompositeKeySerializer(BaseSerializer):
 
 
 class FieldSerializer(BaseSerializer):
-
     def serialize_path(self, path: str) -> str:
         module, field = path.rsplit(".", 1)
         match module:
@@ -129,7 +128,6 @@ class FieldSerializer(BaseSerializer):
                 field = path
         self.imports.add(import_)
         return field
-
 
     def serialize_to_code(self) -> str:
         deconstructed_field = deconstructor_factory(self.value).deconstruct()

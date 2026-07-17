@@ -25,6 +25,7 @@ class FieldDeconstructor:
 
     @property
     def field_type(self) -> type[pw.Field]:
+        # TODO remove this workaround. Make Enum deconstructors
         if isinstance(self.field, CharEnumField):
             return pw.CharField
         elif isinstance(self.field, IntEnumField):
@@ -171,9 +172,10 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
 
 
 def deep_deconstruct(field: pw.Field) -> Any:
-    params = deconstructor_factory(field).deconstruct_params()
+    path, params = deconstructor_factory(field).deconstruct()
+
     if "constraints" in params:
         params["constraints"] = [
             {"type": Default, "value": c.value} if isinstance(c, Default) else c for c in params["constraints"]
         ]
-    return params
+    return DeconstructedField(path, params)

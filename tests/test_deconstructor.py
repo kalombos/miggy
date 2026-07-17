@@ -2,8 +2,10 @@ from typing import Any
 
 import peewee as pw
 import pytest
+from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.deconstructor import (
+    DeconstructedField,
     FieldDeconstructor,
     ForeignKeyFieldDeconstructor,
     ModelDeconstructor,
@@ -51,7 +53,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
                 "on_delete": "CASCADE",
                 "on_update": "RESTRICT",
                 "null": True,
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -59,7 +60,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             pw.ForeignKeyField(_M1, column_name="some_field_id"),
             {
                 "model": "_m1",
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -67,7 +67,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             pw.ForeignKeyField(_M1, column_name="some_field_id"),
             {
                 "model": "_m1",
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -76,7 +75,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             {
                 "model": "_m1",
                 "column_name": "some_field",
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -84,7 +82,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             pw.ForeignKeyField(_M1),
             {
                 "model": "_m1",
-                "type": pw.ForeignKeyField,
             },
         ),
         # test indexes
@@ -94,7 +91,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             {
                 "model": "_m1",
                 "index": False,
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -103,7 +99,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             {
                 "model": "_m1",
                 "unique": True,
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -112,7 +107,6 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             {
                 "model": "_m1",
                 "unique": True,
-                "type": pw.ForeignKeyField,
             },
         ),
         (
@@ -121,12 +115,13 @@ def test_deconstruct_type_modifiers(field: pw.Field, expected: type[pw.Field]) -
             {
                 "model": "_m1",
                 "primary_key": True,
-                "type": pw.ForeignKeyField,
             },
         ),
     ],
 )
-def test_foreignkey_field_deconstructor_deconstruct_params(field_name: str, field: pw.Field, expected: dict[str, Any]) -> None:
+def test_foreignkey_field_deconstructor_deconstruct_params(
+    field_name: str, field: pw.Field, expected: dict[str, Any]
+) -> None:
     class MyTestModel(pw.Model):
         pass
 
@@ -192,23 +187,22 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
             {
                 "model": "_m1",
                 "null": True,
-                "type": pw.ForeignKeyField,
             },
         ),
         # test column_name
-        (pw.IntegerField(column_name="some_name"), {"column_name": "some_name", "type": pw.IntegerField}),
+        (pw.IntegerField(column_name="some_name"), {"column_name": "some_name"}),
         # test indexes
         (
             pw.CharField(max_length=55, index=True, unique=True),
-            {"unique": True, "type": pw.CharField, "max_length": 55},
+            {"unique": True, "max_length": 55},
         ),
-        (pw.IntegerField(unique=True), {"unique": True, "type": pw.IntegerField}),
-        (pw.IntegerField(index=True), {"index": True, "type": pw.IntegerField}),
-        (pw.IntegerField(index=True, primary_key=True), {"type": pw.IntegerField, "primary_key": True}),
+        (pw.IntegerField(unique=True), {"unique": True}),
+        (pw.IntegerField(index=True), {"index": True}),
+        (pw.IntegerField(index=True, primary_key=True), {"primary_key": True}),
         # test autofield
-        (pw.AutoField(index=True, unique=True, primary_key=True), {"type": pw.AutoField}),
+        (pw.AutoField(index=True, unique=True, primary_key=True), {}),
         # test default callable
-        (pw.CharField(default=get_active_status), {"default": get_active_status, "type": pw.CharField}),
+        (pw.CharField(default=get_active_status), {"default": get_active_status}),
     ],
 )
 def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> None:
@@ -221,12 +215,30 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
 @pytest.mark.parametrize(
     ("field", "expected"),
     [
+        (
+            pw.IntegerField(column_name="some_name"),
+            DeconstructedField("peewee.IntegerField", {"column_name": "some_name"}),
+        ),
+        (DateTimeTZField(), DeconstructedField("playhouse.postgres_ext.DateTimeTZField", {})),
+        # TODO add params to test
+        (IntEnumField(Rating), DeconstructedField("miggy.ext.fields.IntEnumField", {})),
+    ],
+)
+def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
+    class MyTestModel(pw.Model):
+        some_field = field
+
+    assert deconstructor_factory(MyTestModel.some_field).deconstruct() == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
         pytest.param(
             pw.ForeignKeyField(_M1, null=True),
             {
                 "model": "_m1",
                 "null": True,
-                "type": pw.ForeignKeyField,
             },
             id="default_rel_field",
         ),
@@ -235,14 +247,13 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
             {
                 "model": "_m1",
                 "field": "name",
-                "type": pw.ForeignKeyField,
             },
             id="custom_rel_field",
         ),
-        pytest.param(pw.IntegerField(), {"type": pw.IntegerField}, id="default_column_name"),
+        pytest.param(pw.IntegerField(), {}, id="default_column_name"),
         pytest.param(
             pw.IntegerField(column_name="some_name"),
-            {"column_name": "some_name", "type": pw.IntegerField},
+            {"column_name": "some_name"},
             id="custom_column_name",
         ),
     ],
@@ -321,18 +332,20 @@ def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) 
     [
         (
             pw.CharField(max_length=50),
-            {"max_length": 50, "type": pw.CharField},
+            DeconstructedField("peewee.CharField", {"max_length": 50}),
         ),
         (
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
-            {
-                "constraints": [{"type": Default, "value": "'words'"}],
-                "type": pw.IntegerField,
-            },
+            DeconstructedField(
+                "peewee.IntegerField",
+                {
+                    "constraints": [{"type": Default, "value": "'words'"}],
+                },
+            ),
         ),
     ],
 )
-def test_deep_deconstruct(f: pw.Field, expected: dict[str, Any]) -> None:
+def test_deep_deconstruct(f: pw.Field, expected: DeconstructedField) -> None:
     class TestModel(pw.Model):
         some_field = f
 
@@ -360,11 +373,7 @@ class _TestModelDeconstructNamespace:
             _TestModelDeconstructNamespace.SimpleModel,
             {
                 "name": "SimpleModel",
-                "fields": {
-                    "name": {
-                        "type": pw.CharField,
-                    }
-                },
+                "fields": {"name": {}},
                 "meta": {},
             },
         ),
@@ -375,11 +384,8 @@ class _TestModelDeconstructNamespace:
                 "fields": {
                     "name": {
                         "max_length": 5,
-                        "type": pw.CharField,
                     },
-                    "age": {
-                        "type": pw.IntegerField,
-                    },
+                    "age": {},
                 },
                 "meta": {"table_name": "custom_name", "schema": "new_schema", "primary_key": ("name", "age")},
             },
