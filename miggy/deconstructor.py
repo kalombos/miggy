@@ -23,15 +23,6 @@ class FieldDeconstructor:
     def __init__(self, field: pw.Field) -> None:
         self.field = field
 
-    @property
-    def field_type(self) -> type[pw.Field]:
-        # TODO remove this workaround. Make Enum deconstructors
-        if isinstance(self.field, CharEnumField):
-            return pw.CharField
-        elif isinstance(self.field, IntEnumField):
-            return pw.SmallIntegerField
-        return type(self.field)
-
     def deconstruct_type_modifiers(self) -> dict[str, Any]:
         return {}
 
@@ -92,6 +83,19 @@ class CharFieldDeconstructor(FieldDeconstructor):
         if self.field.max_length != 255:
             return {"max_length": self.field.max_length}
         return {}
+    
+class CharEnumFieldDeconstructor(CharFieldDeconstructor):
+    def deconstruct_params(self) -> dict[str, Any]:
+        params = super().deconstruct_params()
+        params['enum'] = self.field._enum
+        return params
+    
+
+class IntEnumFieldDeconstructor(FieldDeconstructor):
+    def deconstruct_params(self) -> dict[str, Any]:
+        params = super().deconstruct_params()
+        params['enum'] = self.field._enum
+        return params
 
 
 class DecimalFieldDeconstructor(FieldDeconstructor):
@@ -160,6 +164,10 @@ class ModelDeconstructor:
 
 
 def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstructor:
+    if isinstance(f, IntEnumField):
+        return IntEnumFieldDeconstructor(f)
+    if isinstance(f, CharEnumField):
+        return CharEnumFieldDeconstructor(f)
     if isinstance(f, pw.ForeignKeyField):
         return ForeignKeyFieldDeconstructor(f)
     if isinstance(f, pw.CharField):

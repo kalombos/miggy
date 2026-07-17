@@ -220,8 +220,14 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
             DeconstructedField("peewee.IntegerField", {"column_name": "some_name"}),
         ),
         (DateTimeTZField(), DeconstructedField("playhouse.postgres_ext.DateTimeTZField", {})),
-        # TODO add params to test
-        (IntEnumField(Rating), DeconstructedField("miggy.ext.fields.IntEnumField", {})),
+        (
+            CharEnumField(Status, max_length=50), 
+            DeconstructedField("miggy.ext.fields.CharEnumField", {"enum": Status, 'max_length': 50})
+        ),
+        (
+            IntEnumField(Rating), 
+            DeconstructedField("miggy.ext.fields.IntEnumField", {"enum": Rating})
+        ),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
@@ -260,20 +266,6 @@ def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
 )
 def test_deconstruct_params_unbound(field: pw.Field, expected: dict[str, Any]) -> None:
     assert deconstructor_factory(field).deconstruct_params() == expected
-
-
-@pytest.mark.parametrize(
-    ("field", "expected"),
-    [
-        (CharEnumField(Status), pw.CharField),
-        (IntEnumField(Rating), pw.SmallIntegerField),
-        (pw.CharField(), pw.CharField),
-        (pw.SmallIntegerField(), pw.SmallIntegerField),
-        (pw.IntegerField(), pw.IntegerField),
-    ],
-)
-def test_deconstructor_get_type(field: pw.Field, expected: type[pw.Field]) -> None:
-    assert FieldDeconstructor(field).field_type is expected
 
 
 @pytest.mark.parametrize(
