@@ -53,7 +53,6 @@ def test_field_serializer_serialize() -> None:
     assert FieldSerializer(SomeModel.name).serialize().code == (
         """pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
     )
-    # TODO fix this
     assert FieldSerializer(SomeModel.status).serialize().code == (
         """pw.CharField(default='active', max_length=100, null=True)"""
     )
