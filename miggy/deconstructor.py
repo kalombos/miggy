@@ -83,19 +83,20 @@ class CharFieldDeconstructor(FieldDeconstructor):
         if self.field.max_length != 255:
             return {"max_length": self.field.max_length}
         return {}
-    
+
+
 class CharEnumFieldDeconstructor(CharFieldDeconstructor):
-    def deconstruct_params(self) -> dict[str, Any]:
-        params = super().deconstruct_params()
-        params['enum'] = self.field._enum
-        return params
-    
+    def deconstruct_path(self) -> str:
+        # turn it to CharField
+        cls = pw.CharField
+        return "%s.%s" % (cls.__module__, cls.__qualname__)
+
 
 class IntEnumFieldDeconstructor(FieldDeconstructor):
-    def deconstruct_params(self) -> dict[str, Any]:
-        params = super().deconstruct_params()
-        params['enum'] = self.field._enum
-        return params
+    def deconstruct_path(self) -> str:
+        # turn it to IntegerField
+        cls = pw.IntegerField
+        return "%s.%s" % (cls.__module__, cls.__qualname__)
 
 
 class DecimalFieldDeconstructor(FieldDeconstructor):

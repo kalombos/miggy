@@ -6,7 +6,6 @@ from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.deconstructor import (
     DeconstructedField,
-    FieldDeconstructor,
     ForeignKeyFieldDeconstructor,
     ModelDeconstructor,
     deconstructor_factory,
@@ -220,14 +219,8 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
             DeconstructedField("peewee.IntegerField", {"column_name": "some_name"}),
         ),
         (DateTimeTZField(), DeconstructedField("playhouse.postgres_ext.DateTimeTZField", {})),
-        (
-            CharEnumField(Status, max_length=50), 
-            DeconstructedField("miggy.ext.fields.CharEnumField", {"enum": Status, 'max_length': 50})
-        ),
-        (
-            IntEnumField(Rating), 
-            DeconstructedField("miggy.ext.fields.IntEnumField", {"enum": Rating})
-        ),
+        (CharEnumField(Status, max_length=50), DeconstructedField("peewee.CharField", {"max_length": 50})),
+        (IntEnumField(Rating), DeconstructedField("peewee.IntegerField", {})),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:

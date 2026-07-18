@@ -120,9 +120,6 @@ class FieldSerializer(BaseSerializer):
             case "playhouse.postgres_ext":
                 import_ = "import playhouse.postgres_ext as pw_pext"
                 field = f"pw_pext.{field}"
-            case "miggy.ext.fields":
-                import_ = "import miggy.ext.fields as m_ext"
-                field = f"m_ext.{field}"
             case _:
                 import_ = "import %s" % module
                 field = path
