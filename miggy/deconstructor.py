@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import peewee as pw
 
@@ -11,21 +11,17 @@ if TYPE_CHECKING:
     from miggy.types import ModelCls
 
 
-class BaseDeconstructor(Protocol):
-    def deconstruct(self) -> dict[str, Any]: ...
+from typing import NamedTuple
 
 
-class FieldDeconstructor(BaseDeconstructor):
+class DeconstructedField(NamedTuple):
+    path: str
+    params: dict[str, Any]
+
+
+class FieldDeconstructor:
     def __init__(self, field: pw.Field) -> None:
         self.field = field
-
-    @property
-    def field_type(self) -> type[pw.Field]:
-        if isinstance(self.field, CharEnumField):
-            return pw.CharField
-        elif isinstance(self.field, IntEnumField):
-            return pw.SmallIntegerField
-        return type(self.field)
 
     def deconstruct_type_modifiers(self) -> dict[str, Any]:
         return {}
@@ -59,7 +55,7 @@ class FieldDeconstructor(BaseDeconstructor):
             return {"primary_key": True}
         return {}
 
-    def deconstruct(self) -> dict[str, Any]:
+    def deconstruct_params(self) -> dict[str, Any]:
         field = self.field
         params: dict[str, Any] = {}
         if self.field.null:
@@ -69,12 +65,17 @@ class FieldDeconstructor(BaseDeconstructor):
         if default_constraint := get_default_constraint(field):
             params["constraints"] = [default_constraint]
 
-        params["type"] = self.field_type
         params.update(self.deconstruct_type_modifiers())
         params.update(self.deconstruct_column_name())
         params.update(self.deconstruct_primary_key())
         params.update(self.deconstruct_index())
         return params
+
+    def deconstruct_path(self) -> str:
+        return "%s.%s" % (self.field.__class__.__module__, self.field.__class__.__qualname__)
+
+    def deconstruct(self) -> DeconstructedField:
+        return DeconstructedField(path=self.deconstruct_path(), params=self.deconstruct_params())
 
 
 class CharFieldDeconstructor(FieldDeconstructor):
@@ -82,6 +83,20 @@ class CharFieldDeconstructor(FieldDeconstructor):
         if self.field.max_length != 255:
             return {"max_length": self.field.max_length}
         return {}
+
+
+class CharEnumFieldDeconstructor(CharFieldDeconstructor):
+    def deconstruct_path(self) -> str:
+        # turn it to CharField
+        cls = pw.CharField
+        return "%s.%s" % (cls.__module__, cls.__qualname__)
+
+
+class IntEnumFieldDeconstructor(FieldDeconstructor):
+    def deconstruct_path(self) -> str:
+        # turn it to IntegerField
+        cls = pw.IntegerField
+        return "%s.%s" % (cls.__module__, cls.__qualname__)
 
 
 class DecimalFieldDeconstructor(FieldDeconstructor):
@@ -120,8 +135,8 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
                 params["index"] = False
         return params
 
-    def deconstruct(self) -> dict[str, Any]:
-        params = super().deconstruct()
+    def deconstruct_params(self) -> dict[str, Any]:
+        params = super().deconstruct_params()
         params.update(self.deconstruct_fk_params())
         return params
 
@@ -131,7 +146,7 @@ class AutoFieldDeconstructor(FieldDeconstructor):
         return {}
 
 
-class ModelDeconstructor(BaseDeconstructor):
+class ModelDeconstructor:
     def __init__(self, model: ModelCls) -> None:
         self.model = model
 
@@ -150,6 +165,10 @@ class ModelDeconstructor(BaseDeconstructor):
 
 
 def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstructor:
+    if isinstance(f, IntEnumField):
+        return IntEnumFieldDeconstructor(f)
+    if isinstance(f, CharEnumField):
+        return CharEnumFieldDeconstructor(f)
     if isinstance(f, pw.ForeignKeyField):
         return ForeignKeyFieldDeconstructor(f)
     if isinstance(f, pw.CharField):
@@ -162,9 +181,10 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
 
 
 def deep_deconstruct(field: pw.Field) -> Any:
-    params = deconstructor_factory(field).deconstruct()
+    path, params = deconstructor_factory(field).deconstruct()
+
     if "constraints" in params:
         params["constraints"] = [
             {"type": Default, "value": c.value} if isinstance(c, Default) else c for c in params["constraints"]
         ]
-    return params
+    return DeconstructedField(path, params)
