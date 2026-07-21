@@ -5,7 +5,7 @@ import pytest
 from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.deconstructor import (
-    DeconstructedField,
+    Deconstructed,
     ForeignKeyFieldDeconstructor,
     ModelDeconstructor,
     deconstructor_factory,
@@ -14,7 +14,6 @@ from miggy.deconstructor import (
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
-from miggy.utils import Default
 from tests.helpers import Rating, Status, get_active_status, get_inactive_status
 
 
@@ -216,11 +215,11 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
     [
         (
             pw.IntegerField(column_name="some_name"),
-            DeconstructedField("peewee.IntegerField", {"column_name": "some_name"}),
+            Deconstructed("peewee.IntegerField", {"column_name": "some_name"}),
         ),
-        (DateTimeTZField(), DeconstructedField("playhouse.postgres_ext.DateTimeTZField", {})),
-        (CharEnumField(Status, max_length=50), DeconstructedField("peewee.CharField", {"max_length": 50})),
-        (IntEnumField(Rating), DeconstructedField("peewee.IntegerField", {})),
+        (DateTimeTZField(), Deconstructed("playhouse.postgres_ext.DateTimeTZField", {})),
+        (CharEnumField(Status, max_length=50), Deconstructed("peewee.CharField", {"max_length": 50})),
+        (IntEnumField(Rating), Deconstructed("peewee.SmallIntegerField", {})),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
@@ -317,20 +316,20 @@ def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) 
     [
         (
             pw.CharField(max_length=50),
-            DeconstructedField("peewee.CharField", {"max_length": 50}),
+            Deconstructed("peewee.CharField", {"max_length": 50}),
         ),
         (
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
-            DeconstructedField(
+            Deconstructed(
                 "peewee.IntegerField",
                 {
-                    "constraints": [{"type": Default, "value": "'words'"}],
+                    "constraints": [{"value": "'words'"}],
                 },
             ),
         ),
     ],
 )
-def test_deep_deconstruct(f: pw.Field, expected: DeconstructedField) -> None:
+def test_deep_deconstruct(f: pw.Field, expected: Deconstructed) -> None:
     class TestModel(pw.Model):
         some_field = f
 

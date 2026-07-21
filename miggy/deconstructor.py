@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from typing import NamedTuple
 
 
-class DeconstructedField(NamedTuple):
+class Deconstructed(NamedTuple):
     path: str
     params: dict[str, Any]
 
@@ -74,8 +74,8 @@ class FieldDeconstructor:
     def deconstruct_path(self) -> str:
         return "%s.%s" % (self.field.__class__.__module__, self.field.__class__.__qualname__)
 
-    def deconstruct(self) -> DeconstructedField:
-        return DeconstructedField(path=self.deconstruct_path(), params=self.deconstruct_params())
+    def deconstruct(self) -> Deconstructed:
+        return Deconstructed(path=self.deconstruct_path(), params=self.deconstruct_params())
 
 
 class CharFieldDeconstructor(FieldDeconstructor):
@@ -95,7 +95,7 @@ class CharEnumFieldDeconstructor(CharFieldDeconstructor):
 class IntEnumFieldDeconstructor(FieldDeconstructor):
     def deconstruct_path(self) -> str:
         # turn it to IntegerField
-        cls = pw.IntegerField
+        cls = pw.SmallIntegerField
         return "%s.%s" % (cls.__module__, cls.__qualname__)
 
 
@@ -184,7 +184,5 @@ def deep_deconstruct(field: pw.Field) -> Any:
     path, params = deconstructor_factory(field).deconstruct()
 
     if "constraints" in params:
-        params["constraints"] = [
-            {"type": Default, "value": c.value} if isinstance(c, Default) else c for c in params["constraints"]
-        ]
-    return DeconstructedField(path, params)
+        params["constraints"] = [{"value": c.value} if isinstance(c, Default) else c for c in params["constraints"]]
+    return Deconstructed(path, params)
