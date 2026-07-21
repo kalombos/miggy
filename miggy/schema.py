@@ -78,7 +78,7 @@ class SchemaMigrator(ScM):
             )
 
         is_foreign_key = isinstance(field, pw.ForeignKeyField)
-        if is_foreign_key and not field.rel_field:
+        if is_foreign_key and not field.rel_field:  # type: ignore[attr-defined]
             raise ValueError("Foreign keys must specify a `field`.")
 
         operations = [self.alter_add_column(table, column_name, field)]
@@ -96,10 +96,10 @@ class SchemaMigrator(ScM):
                 self.add_foreign_key_constraint(
                     table,
                     column_name,
-                    field.rel_model._meta.table_name,
-                    field.rel_field.column_name,
-                    field.on_delete,
-                    field.on_update,
+                    field.rel_model._meta.table_name,  # type: ignore[attr-defined]
+                    field.rel_field.column_name,  # type: ignore[attr-defined]
+                    field.on_delete,  # type: ignore[attr-defined]
+                    field.on_update,  # type: ignore[attr-defined]
                 )
             )
 
@@ -123,7 +123,7 @@ class SchemaMigrator(ScM):
         operations = []
         if old_model_index := get_single_index(old_field):
             new_single_index = make_single_index(new_field)
-            operations.append(self.rename_index(old_model_index._name, new_single_index._name))
+            operations.append(self.rename_index(old_model_index._name, new_single_index._name))  # type: ignore[attr-defined]
         return operations
 
     @operation

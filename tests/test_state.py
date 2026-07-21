@@ -18,7 +18,7 @@ def test_add_model() -> None:
     assert model.__name__ == "User"
     assert model._meta.table_name == "users"
 
-    assert model.email.max_length == 255
+    assert model.email.max_length == 255  # type: ignore[attr-defined]
     assert model.email.null is True
     assert isinstance(model.email, pw.CharField)
 

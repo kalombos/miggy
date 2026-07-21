@@ -80,8 +80,8 @@ class FieldDeconstructor:
 
 class CharFieldDeconstructor(FieldDeconstructor):
     def deconstruct_type_modifiers(self) -> dict[str, Any]:
-        if self.field.max_length != 255:
-            return {"max_length": self.field.max_length}
+        if self.field.max_length != 255:  # type: ignore[attr-defined]
+            return {"max_length": self.field.max_length}  # type: ignore[attr-defined]
         return {}
 
 
@@ -101,26 +101,26 @@ class IntEnumFieldDeconstructor(FieldDeconstructor):
 
 class DecimalFieldDeconstructor(FieldDeconstructor):
     def deconstruct_type_modifiers(self) -> dict[str, Any]:
-        return {"max_digits": self.field.max_digits, "decimal_places": self.field.decimal_places}
+        return {"max_digits": self.field.max_digits, "decimal_places": self.field.decimal_places}  # type: ignore[attr-defined]
 
 
 class ForeignKeyFieldDeconstructor(FieldDeconstructor):
     def deconstruct_fk_params(self) -> dict[str, Any]:
         field = self.field
-        params: dict[str, Any] = {"model": field.rel_model._meta.name}
-        if field.on_delete:
-            params["on_delete"] = field.on_delete
-        if field.on_update:
-            params["on_update"] = field.on_update
-        if field.constraint_name:
-            params["constraint_name"] = field.constraint_name
+        params: dict[str, Any] = {"model": field.rel_model._meta.name}  # type: ignore[attr-defined]
+        if field.on_delete:  # type: ignore[attr-defined]
+            params["on_delete"] = field.on_delete  # type: ignore[attr-defined]
+        if field.on_update:  # type: ignore[attr-defined]
+            params["on_update"] = field.on_update  # type: ignore[attr-defined]
+        if field.constraint_name:  # type: ignore[attr-defined]
+            params["constraint_name"] = field.constraint_name  # type: ignore[attr-defined]
 
         if self.is_bound():
-            if field.rel_field.name != field.rel_model._meta.primary_key.name:
-                params["field"] = field.rel_field.name
+            if field.rel_field.name != field.rel_model._meta.primary_key.name:  # type: ignore[attr-defined]
+                params["field"] = field.rel_field.name  # type: ignore[attr-defined]
         else:
-            if isinstance(field.rel_field, str):
-                params["field"] = field.rel_field
+            if isinstance(field.rel_field, str):  # type: ignore[attr-defined]
+                params["field"] = field.rel_field  # type: ignore[attr-defined]
         return params
 
     def is_custom_column_name(self) -> bool:
