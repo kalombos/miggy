@@ -66,7 +66,7 @@ class State:
         return State(_snapshot)
 
     def add_model(self, name: str, fields: dict[str, pw.Field], meta: dict[str, Any]) -> None:
-        attrs = {"Meta": type("Meta", (object,), meta)}
+        attrs: dict[str, Any] = {"Meta": type("Meta", (object,), meta)}
         for field_name, field in fields.items():
             self._resolve_relation(field)
             attrs[field_name] = field

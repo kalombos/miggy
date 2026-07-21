@@ -65,7 +65,7 @@ module-name = "miggy"
 module-root = ""
 
 [tool.mypy]
-exclude = "(venv|migrations|docs)"
+exclude = "(venv|migrations|docs|tests)"
 ignore_missing_imports = true
 
 

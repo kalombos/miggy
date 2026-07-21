@@ -226,7 +226,7 @@ class AddIndex(MigrateOperation):
     def state_forwards(self, state: State) -> None:
         model = state[self.model_name]
         model_index = self.build_index(model)
-        indexes_state(model)[model_index._name] = model_index
+        indexes_state(model)[model_index._name] = model_index  # type: ignore[attr-defined]
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
@@ -365,11 +365,11 @@ class AlterField(MigrateOperation):
                 schema_migrator.add_foreign_key_constraint(
                     table_name,
                     new_field.column_name,
-                    new_field.rel_model._meta.table_name,
-                    new_field.rel_field.column_name,
-                    new_field.on_delete,
-                    new_field.on_update,
-                    constraint_name=new_field.constraint_name,
+                    new_field.rel_model._meta.table_name,  # type: ignore[attr-defined]
+                    new_field.rel_field.column_name,  # type: ignore[attr-defined]
+                    new_field.on_delete,  # type: ignore[attr-defined]
+                    new_field.on_update,  # type: ignore[attr-defined]
+                    constraint_name=new_field.constraint_name,  # type: ignore[attr-defined]
                 )
             )
         return _ops

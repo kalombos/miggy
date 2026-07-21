@@ -111,19 +111,19 @@ def make_single_index(field: pw.Field) -> ModelIndex:
 
 
 def get_single_index_name(field: pw.Field) -> str:
-    return make_single_index(field)._name
+    return make_single_index(field)._name  # type: ignore[attr-defined]
 
 
-def get_single_index(field: pw.Field) -> pw.Model:
+def get_single_index(field: pw.Field) -> pw.ModelIndex | None:
     if has_single_index(field):
         return make_single_index(field)
     return None
 
 
-def indexes_state(model_cls: pw.Model) -> dict[str, ModelIndex]:
+def indexes_state(model_cls: ModelCls) -> dict[str, ModelIndex]:
     if not hasattr(model_cls._meta, "indexes_state"):
-        model_cls._meta.indexes_state = {}
-    return model_cls._meta.indexes_state
+        model_cls._meta.indexes_state = {}  # type: ignore[attr-defined]
+    return model_cls._meta.indexes_state  # type: ignore[attr-defined]
 
 
 def copy_model(model_cls: ModelCls) -> ModelCls:
@@ -157,7 +157,7 @@ def fk_postfix(name: str) -> str:
     return name if name.endswith("_id") else name + "_id"
 
 
-def resolve_field(model_cls: pw.Model, field: str) -> pw.Field:
+def resolve_field(model_cls: ModelCls, field: str) -> pw.Field:
     _field = model_cls._meta.combined.get(field, None)
     if _field is None:
         raise ValueError(f"{model_cls} does not have '{field}' field.")

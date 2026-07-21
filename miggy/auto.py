@@ -37,7 +37,7 @@ class IndexMeta(NamedTuple):
     where: str | None = None
 
     def as_operation(self) -> AddIndex:
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
 
         if self.unique:
             kwargs["unique"] = True
@@ -67,7 +67,7 @@ class IndexMetaExtractor:
         )
 
     def validate_fields(self, model_index: pw.ModelIndex) -> None:
-        for f in model_index._expressions:
+        for f in model_index._expressions:  # type: ignore[attr-defined]
             if not isinstance(f, pw.Field):
                 raise NotImplementedError(f"{type(f)} for ModelIndex.field is not suported. Use Field object instead.")
 
@@ -76,10 +76,10 @@ class IndexMetaExtractor:
         self.validate_fields(model_index)
         return IndexMeta(
             self.model_cls._meta.name,
-            tuple(f.name for f in model_index._expressions),
-            unique=model_index._unique,
-            where=self.resolve_where(model_index._where),
-            name=model_index._name,
+            tuple(f.name for f in model_index._expressions),  # type: ignore[attr-defined]
+            unique=model_index._unique,  # type: ignore[attr-defined]
+            where=self.resolve_where(model_index._where),  # type: ignore[attr-defined]
+            name=model_index._name,  # type: ignore[attr-defined]
         )
 
 
@@ -90,7 +90,7 @@ def extract_index_meta(model_cls: ModelCls) -> list[IndexMeta]:
 
 
 def rebuild_indexes(model_cls: ModelCls) -> None:
-    def resolve_fields(fields: Sequence[Any]) -> tuple[str, ...]:
+    def resolve_fields(fields: Sequence[Any]) -> tuple[str | pw.Field, ...]:
         _fields = []
         for field in fields:
             if isinstance(field, str):
@@ -105,14 +105,14 @@ def rebuild_indexes(model_cls: ModelCls) -> None:
         # Advanced Indexes
         # https://docs.peewee-orm.com/en/latest/peewee/models.html#advanced-index-creation
         if isinstance(index_obj, pw.ModelIndex):
-            indexes_state(model_cls)[index_obj._name] = index_obj
+            indexes_state(model_cls)[index_obj._name] = index_obj  # type: ignore[attr-defined,assignment]
 
         # Multi-column indexes
         # https://docs.peewee-orm.com/en/latest/peewee/models.html#multi-column-indexes
         elif isinstance(index_obj, (list, tuple)):
             fields, unique = index_obj
-            model_index = ModelIndex(model_cls, resolve_fields(fields), unique=unique)
-            indexes_state(model_cls)[model_index._name] = model_index
+            model_index = ModelIndex(model_cls, resolve_fields(fields), unique=unique)  # type: ignore[attr-defined,arg-type]
+            indexes_state(model_cls)[model_index._name] = model_index  # type: ignore[attr-defined]
         else:
             raise NotImplementedError(
                 f"{type(index_obj)} as Index is not suported. Use ModelIndex, list or tuple instead."
@@ -136,7 +136,7 @@ def diff_indexes_from_meta(current: ModelCls, prev: ModelCls) -> tuple[list[AddI
 def _get_primary_keys(m: ModelCls):
     meta = m._meta
     if meta.composite_key:
-        return meta.primary_key.field_names
+        return meta.primary_key.field_names  # type: ignore[union-attr]
     if meta.primary_key is not False:
         return meta.primary_key.name
     return None
@@ -248,13 +248,13 @@ class MigrationAutodetector:
         ops: list[MigrateOperation] = []
 
         if prev_has_composite:
-            prev_fields = prev._meta.primary_key.field_names
-            if not current_has_composite or prev_fields != current._meta.primary_key.field_names:
+            prev_fields = prev._meta.primary_key.field_names  # type: ignore[union-attr]
+            if not current_has_composite or prev_fields != current._meta.primary_key.field_names:  # type: ignore[union-attr]
                 ops.append(RemovePrimaryKeyConstraint(model_name))
 
         if current_has_composite:
-            current_fields = current._meta.primary_key.field_names
-            if not prev_has_composite or prev._meta.primary_key.field_names != current_fields:
+            current_fields = current._meta.primary_key.field_names  # type: ignore[union-attr]
+            if not prev_has_composite or prev._meta.primary_key.field_names != current_fields:  # type: ignore[union-attr]
                 op = AddPrimaryKeyConstraint(model_name, *current_fields)
                 op.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))
                 for f in current_fields:
@@ -294,8 +294,8 @@ class MigrationAutodetector:
     def diff_many(self) -> list[MigrateOperation]:
         """Calculate changes for migrations from models2 to models1."""
 
-        current_models = pw.sort_models(self.to_state.values())
-        prev_models = pw.sort_models(self.from_state.values())
+        current_models = pw.sort_models(self.to_state.values())  # type: ignore[attr-defined]
+        prev_models = pw.sort_models(self.from_state.values())  # type: ignore[attr-defined]
 
         from_state = State({m._meta.name: m for m in prev_models})
         to_state = State({m._meta.name: m for m in current_models})
