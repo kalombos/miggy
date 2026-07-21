@@ -29,8 +29,6 @@ Some examples (model - class or model name)::
 
 """
 
-import peewee as pw
-
 {imports}
 
 

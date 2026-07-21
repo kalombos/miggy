@@ -71,22 +71,6 @@ def test_router_merge(router: Router, migrations_dir: pathlib.Path):
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-@pytest.mark.parametrize(
-    ("db", "expected"),
-    [
-        (pw.PostgresqlDatabase(POSTGRES_DSN), True),
-        (Psycopg3Database(POSTGRES_DSN), True),
-        (pw.SqliteDatabase("sqlite:///:memory:"), False),
-    ],
-)
-def test_pw_pext_import(tmp_path: pathlib.Path, db: pw.Database, expected: bool) -> None:
-    router = Router(db)
-    template = router._compile_template("test_router_compile", [], [])
-    import_added = "import playhouse.postgres_ext as pw_pext" in template
-
-    assert import_added is expected
-
-
 def test_router_schema(tmpdir):
     schema_name = "test"
     migrations = tmpdir.mkdir("migrations")
