@@ -110,3 +110,6 @@ class State:
         if isinstance(field, pw.ForeignKeyField):
             delattr(model, field.object_id_name)
             delattr(field.rel_model, field.backref)
+
+    def clone(self) -> "State":
+        return State({n: copy_model(m) for n, m in self.items()})
