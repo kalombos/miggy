@@ -182,10 +182,6 @@ class Router(object):
         rollback, rollback_imports = self._serialize_changes(rollback_changes)
         imports.update(rollback_imports)
 
-        ext_import = make_ext_import(self.database)
-        if ext_import:
-            imports.add(ext_import)
-
         return MIGRATE_TEMPLATE.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
 
     def compile(
@@ -259,7 +255,7 @@ class Router(object):
 
                 self.logger.info("Done %s", name)
 
-            if migration.atomic:
+            if migration.atomic and change_schema:
                 with self.database.transaction():
                     run_migrator()
             else:
@@ -300,19 +296,6 @@ class Router(object):
         migrator = self.migrator
         self.run_one(name, migrator, change_schema=True, downgrade=True, change_history=True)
         self.logger.warning("Downgraded migration: %s", name)
-
-
-def make_ext_import(database: pw.Database) -> str:
-    try:
-        from playhouse.psycopg3_ext import Psycopg3Database
-    except ModuleNotFoundError:
-        pass
-    else:
-        if isinstance(database, Psycopg3Database):
-            return "import playhouse.psycopg3_ext as pw_pext"
-    if isinstance(database, pw.PostgresqlDatabase):
-        return "import playhouse.postgres_ext as pw_pext"
-    return ""
 
 
 def load_models(module):
