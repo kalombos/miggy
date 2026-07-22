@@ -6,6 +6,7 @@ from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import copy_model
 from tests.conftest import PatchedPgDatabase
+from tests.helpers import run_operations
 
 
 def test_state_forwards() -> None:
@@ -58,19 +59,21 @@ class _TestHandleFkConstraintNamespace:
             ],
             id="update_on_delete",
         ),
-        # TODO add test somehow
-        # pytest.param(
-        #     pw.ForeignKeyField(_TestHandleFkConstraintNamespace.RefModel, ),
-        #     pw.ForeignKeyField(_TestHandleFkConstraintNamespace.RefModel, on_delete="RESTRICT",
-        #      column_name="is_used"),
-        #     [
-        #         'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_is_used_fkey"',
-        #         'ALTER TABLE "testmodel" ADD CONSTRAINT '
-        #         '"fk_testmodel_is_used_refs_refmodel" FOREIGN KEY ("is_used") REFERENCES '
-        #         '"refmodel" ("id") ON DELETE RESTRICT',
-        #     ],
-        #     id="column_name_is_used_from_new_field_for_drop_constraint",
-        # ),
+        pytest.param(
+            pw.ForeignKeyField(
+                _TestHandleFkConstraintNamespace.RefModel,
+            ),
+            pw.ForeignKeyField(_TestHandleFkConstraintNamespace.RefModel, on_delete="RESTRICT", column_name="is_used"),
+            [
+                'ALTER TABLE "testmodel" RENAME COLUMN "some_field_id" TO "is_used"',
+                'ALTER INDEX "testmodel_some_field_id" RENAME TO "testmodel_is_used"',
+                'ALTER TABLE "testmodel" DROP CONSTRAINT "testmodel_some_field_id_fkey"',
+                'ALTER TABLE "testmodel" ADD CONSTRAINT '
+                '"fk_testmodel_is_used_refs_refmodel" FOREIGN KEY ("is_used") REFERENCES '
+                '"refmodel" ("id") ON DELETE RESTRICT',
+            ],
+            id="column_name_is_used_from_new_field_for_drop_constraint",
+        ),
         pytest.param(
             pw.ForeignKeyField(
                 _TestHandleFkConstraintNamespace.RefModel,
@@ -100,25 +103,29 @@ class _TestHandleFkConstraintNamespace:
 def test_handle_fk_constraint(
     old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
 ) -> None:
-    _TestHandleFkConstraintNamespace.RefModel._meta.database = patched_pg_db
-    _TestHandleFkConstraintNamespace.RefModel.create_table()
+    def init_states() -> tuple[State, State]:
+        _TestHandleFkConstraintNamespace.RefModel._meta.database = patched_pg_db
+        _TestHandleFkConstraintNamespace.RefModel.create_table()
 
-    class TestModel(pw.Model):
-        whatever_field = pw.CharField()
+        class TestModel(pw.Model):
+            whatever_field = pw.CharField()
 
-        class Meta:
-            database = patched_pg_db
+            class Meta:
+                database = patched_pg_db
 
-    TestModel._meta.add_field("some_field", old_field)
-    TestModel.create_table()
+        TestModel._meta.add_field("some_field", old_field)
+        TestModel.create_table()
+        patched_pg_db.clear_queries()
+        to_state = State({"testmodel": TestModel})
+        return to_state, to_state.clone()
 
-    TestModel._meta.add_field("some_field", new_field)
+    from_state, to_state = init_states()
 
-    patched_pg_db.clear_queries()
-    operation = AlterField("User", "some_field", new_field)
+    to_state["testmodel"]._meta.add_field("some_field", new_field)
 
-    for o in operation.handle_fk_constraint(old_field, new_field, SchemaMigrator.from_database(patched_pg_db)):
-        o.run()
+    operation = AlterField("testmodel", "some_field", new_field)
+    run_operations(operation.database_forwards(SchemaMigrator.from_database(patched_pg_db), from_state, to_state))
+
     # remove query for constraints
     queries = [q for q in patched_pg_db.queries if "FROM information_schema.table_constraints" not in q]
     assert queries == expected
@@ -164,8 +171,7 @@ def test__database_forwards(
     from_state = State({"oldmodel": OldModel})
     to_state = State({"oldmodel": NewModel})
 
-    for o in operation.database_forwards(SchemaMigrator.from_database(patched_pg_db), from_state, to_state):
-        o.run()
+    run_operations(operation.database_forwards(SchemaMigrator.from_database(patched_pg_db), from_state, to_state))
 
     queries = [q for q in patched_pg_db.queries if "FROM pg_constraint" not in q]
     assert queries == expected

@@ -1,6 +1,8 @@
 from enum import IntEnum
 from textwrap import dedent
 
+from playhouse.migrate import Operation
+
 from miggy.auto import MigrationAutodetector
 from miggy.ext.utils import StrEnum
 from miggy.operations import MigrateOperation
@@ -42,3 +44,8 @@ def compare_dedent(s1: str, s2: str) -> None:
 
 def diff_one(prev: ModelCls, current: ModelCls) -> list[MigrateOperation]:
     return MigrationAutodetector(State({"test": prev}), State({"test": current})).diff_one("test")
+
+
+def run_operations(operations: list[Operation]) -> None:
+    for o in operations:
+        o.run()
