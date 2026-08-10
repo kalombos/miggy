@@ -9,12 +9,12 @@ from miggy.deconstructor import (
     ForeignKeyFieldDeconstructor,
     ModelDeconstructor,
     deconstructor_factory,
-    deep_deconstruct,
+    fields_not_equal,
 )
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
-from miggy.utils import DefaultMeta
+from miggy.utils import CheckMeta, DefaultMeta
 from tests.helpers import Rating, Status, get_active_status, get_inactive_status
 
 
@@ -202,6 +202,18 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         (pw.AutoField(index=True, unique=True, primary_key=True), {}),
         # test default callable
         (pw.CharField(default=get_active_status), {"default": get_active_status}),
+        (pw.IntegerField(constraints=[pw.Default(5)]), {"constraints": [DefaultMeta("5")]}),
+        (
+            pw.IntegerField(
+                constraints=[pw.Check("some_field > 5", "chk_up"), pw.Check("some_field < 100", "chk_down")]
+            ),
+            {
+                "constraints": [
+                    CheckMeta(name="chk_down", constraint="some_field < 100"),
+                    CheckMeta(name="chk_up", constraint="some_field > 5"),
+                ]
+            },
+        ),
     ],
 )
 def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> None:
@@ -276,6 +288,12 @@ def test_deconstruct_params_unbound(field: pw.Field, expected: dict[str, Any]) -
             True,
             id="different_default_constraint",
         ),
+        pytest.param(
+            pw.IntegerField(constraints=[pw.Check("some_field < 10", name="test")]),
+            pw.IntegerField(constraints=[pw.Check("some_field < 9", name="test")]),
+            True,
+            id="different_check_constraint",
+        ),
         pytest.param(pw.IntegerField(default=5), pw.IntegerField(), True, id="default"),
         pytest.param(pw.IntegerField(), pw.IntegerField(unique=True), True, id="unique"),
         pytest.param(
@@ -301,40 +319,14 @@ def test_deconstruct_params_unbound(field: pw.Field, expected: dict[str, Any]) -
         pytest.param(pw.CharField(default=get_active_status), pw.CharField(default=get_active_status), False),
     ],
 )
-def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
+def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
     class TestModel1(pw.Model):
         some_field = f1
 
     class TestModel2(pw.Model):
         some_field = f2
 
-    not_equal = deep_deconstruct(TestModel1.some_field) != deep_deconstruct(TestModel2.some_field)
-    assert not_equal is expected
-
-
-@pytest.mark.parametrize(
-    ("f", "expected"),
-    [
-        (
-            pw.CharField(max_length=50),
-            Deconstructed("peewee.CharField", {"max_length": 50}),
-        ),
-        (
-            pw.IntegerField(constraints=[pw.SQL("DEFAULT 'words'")]),
-            Deconstructed(
-                "peewee.IntegerField",
-                {
-                    "constraints": [DefaultMeta("'words'")],
-                },
-            ),
-        ),
-    ],
-)
-def test_deep_deconstruct(f: pw.Field, expected: Deconstructed) -> None:
-    class TestModel(pw.Model):
-        some_field = f
-
-    assert deep_deconstruct(TestModel.some_field) == expected
+    assert fields_not_equal(TestModel1.some_field, TestModel2.some_field) is expected
 
 
 class _TestModelDeconstructNamespace:

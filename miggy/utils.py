@@ -73,6 +73,15 @@ def extract_default_meta(field: pw.Field) -> DefaultMeta | None:
     return result[0] if result else None
 
 
+def extract_check_meta(field: pw.Field) -> list[CheckMeta]:
+    constraints = field.constraints or []
+    result = []
+    for constraint in constraints:
+        if _constraint := CheckMeta.from_node(constraint):
+            result.append(_constraint)
+    return sorted(set(result))
+
+
 def get_default_constraint_value(field: pw.Field) -> str | None:
     if default_meta := extract_default_meta(field):
         return default_meta.value

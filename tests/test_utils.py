@@ -3,7 +3,7 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from miggy.utils import CheckMeta, DefaultMeta, copy_model, extract_default_meta
+from miggy.utils import CheckMeta, DefaultMeta, copy_model, extract_check_meta, extract_default_meta
 
 
 @pytest.mark.parametrize(
@@ -19,6 +19,40 @@ def test_extract_default_meta(field_params: dict[str, Any], expected: str) -> No
         name = pw.CharField(**field_params)
 
     default = extract_default_meta(User.name)
+
+    assert default == expected
+
+
+@pytest.mark.parametrize(
+    ("field_params", "expected"),
+    [
+        ({}, []),
+        (
+            {
+                "constraints": [
+                    pw.Check("price > 0", name="plus"),
+                    pw.Check("price > 0", name="plus"),
+                    pw.Check("price < 100", name="minus"),
+                ]
+            },
+            [CheckMeta("minus", "price < 100"), CheckMeta("plus", "price > 0")],
+        ),  # no doubles,
+        (
+            {
+                "constraints": [
+                    pw.Check("price < 100", name="minus"),
+                    pw.Check("price > 0", name="plus"),
+                ]
+            },
+            [CheckMeta("minus", "price < 100"), CheckMeta("plus", "price > 0")],
+        ),  # same order
+    ],
+)
+def test_extract_check_meta(field_params: dict[str, Any], expected: str) -> None:
+    class User(pw.Model):
+        name = pw.CharField(**field_params)
+
+    default = extract_check_meta(User.name)
 
     assert default == expected
 

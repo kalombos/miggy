@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deconstructor_factory
-from miggy.utils import DefaultMeta
+from miggy.utils import CheckMeta, DefaultMeta
 
 FUNCTION_TYPES = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
 PEEWEE_IMPORT = "import peewee as pw"
@@ -97,11 +97,21 @@ class SQLSerializer(BaseSerializer):
         return "pw.SQL(%s)" % ", ".join(params)
 
 
-class DefaultSerializer(BaseSerializer):
+class DefaultMetaSerializer(BaseSerializer):
     def serialize_to_code(self) -> str:
-        default_constraint = self.value
+        default_meta: DefaultMeta = self.value
         self.imports.add(PEEWEE_IMPORT)
-        return "pw.SQL(%s)" % self.serialize_value(f"DEFAULT {default_constraint.value}")
+        return "pw.SQL(%s)" % self.serialize_value(f"DEFAULT {default_meta.value}")
+
+
+class CheckMetaSerializer(BaseSerializer):
+    def serialize_to_code(self) -> str:
+        check_meta: CheckMeta = self.value
+        self.imports.add(PEEWEE_IMPORT)
+        return "pw.Check(%s, name=%s)" % (
+            self.serialize_value(check_meta.constraint),
+            self.serialize_value(check_meta.name),
+        )
 
 
 class CompositeKeySerializer(BaseSerializer):
@@ -138,7 +148,9 @@ def serializer_factory(value) -> BaseSerializer:
     if isinstance(value, pw.CompositeKey):
         return CompositeKeySerializer(value)
     if isinstance(value, DefaultMeta):
-        return DefaultSerializer(value)
+        return DefaultMetaSerializer(value)
+    if isinstance(value, CheckMeta):
+        return CheckMetaSerializer(value)
     if isinstance(value, pw.SQL):
         return SQLSerializer(value)
     if isinstance(value, pw.Field):

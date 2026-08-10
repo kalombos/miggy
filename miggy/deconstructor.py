@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 
 from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import extract_default_meta, fk_postfix
+from miggy.utils import extract_check_meta, extract_default_meta, fk_postfix
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -56,9 +56,10 @@ class FieldDeconstructor:
         return {}
 
     def deconstruct_constraints(self, field: pw.Field) -> dict[str, Any]:
-        constraints = []
+        constraints: list[Any] = []
         if dm := extract_default_meta(field):
             constraints.append(dm)
+        constraints.extend(extract_check_meta(field))
         if constraints:
             return {"constraints": constraints}
         return {}
@@ -187,6 +188,5 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
     return FieldDeconstructor(f)
 
 
-def deep_deconstruct(field: pw.Field) -> Any:
-    path, params = deconstructor_factory(field).deconstruct()
-    return Deconstructed(path, params)
+def fields_not_equal(f1: pw.Field, f2: pw.Field) -> bool:
+    return deconstructor_factory(f1).deconstruct() != deconstructor_factory(f2).deconstruct()
