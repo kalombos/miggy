@@ -14,6 +14,7 @@ from miggy.deconstructor import (
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
+from miggy.utils import DefaultMeta
 from tests.helpers import Rating, Status, get_active_status, get_inactive_status
 
 
@@ -323,7 +324,7 @@ def test_deep_deconstruct_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) 
             Deconstructed(
                 "peewee.IntegerField",
                 {
-                    "constraints": [{"value": "'words'"}],
+                    "constraints": [DefaultMeta("'words'")],
                 },
             ),
         ),

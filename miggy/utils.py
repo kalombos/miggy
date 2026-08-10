@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, NamedTuple
 
 import peewee as pw
 
@@ -21,46 +21,62 @@ def exec_in(code, glob, loc=None):
     exec(code, glob, loc)
 
 
-class Default(pw.ColumnBase):
-    def __init__(self, value: str) -> None:
-        self.value = value
+def node_to_string(node: pw.Node) -> str:
+    ctx = pw.Context()
+    sql, params = ctx.sql(node).query()
 
-    def __sql__(self, ctx) -> Any:
-        ctx.literal("DEFAULT (%s)" % self.value)
-        return ctx
+    if not params:
+        return sql.strip()
+    return ""
+
+
+class DefaultMeta(NamedTuple):
+    value: str
 
     @classmethod
-    def from_SQL(cls, sql: pw.SQL) -> None | Default:
-        """
-        Parse the constraint from raw sql
-        """
-        _sql = sql.sql.strip()
-        if sql.params or not _sql.lower().startswith("default "):
-            return None
-        value = _sql.split(maxsplit=1)[1]
-        if not value.strip():
-            return None
-        return Default(value=_sql.split(maxsplit=1)[1])
-
-
-def get_default_constraint(field: pw.Field) -> None | Default:
-    if field.constraints is None:
+    def from_node(cls, node: pw.Node) -> None | DefaultMeta:
+        sql = node_to_string(node)
+        match = re.search(r"^\s*DEFAULT\s+(.+)$", sql, re.I)
+        if match:
+            return cls(value=match.group(1).strip())
         return None
-    constraints = []
-    for constraint in field.constraints:
-        if isinstance(constraint, Default):
-            constraints.append(constraint)
-        elif isinstance(constraint, pw.SQL):
-            if _constraint := Default.from_SQL(constraint):
-                constraints.append(_constraint)
-    if len(constraints) > 1:
+
+
+class CheckMeta(NamedTuple):
+    name: str
+    constraint: str
+
+    @classmethod
+    def from_node(cls, node: pw.Node) -> None | CheckMeta:
+        pattern = r'(?:CONSTRAINT\s+["\']?(\w+)["\']?\s+)?CHECK\s*\((.+)\)'
+        sql = node_to_string(node)
+        match = re.search(pattern, sql, re.I)
+        if match:
+            name = match.group(1)
+            if name is None:
+                raise ValueError(
+                    f"Unnamed CHECK constraints not supported. Please add a name to the constraint: '{sql}'"
+                )
+            constraint = match.group(2).strip()
+            return CheckMeta(name.strip(), constraint.strip())
+        return None
+
+
+def extract_default_meta(field: pw.Field) -> DefaultMeta | None:
+    constraints = field.constraints or []
+    result = []
+    for constraint in constraints:
+        if _constraint := DefaultMeta.from_node(constraint):
+            result.append(_constraint)
+    if len(result) > 1:
         raise ValueError(f'"{field.name}" field has more than one default constraint')
-    return constraints[0] if constraints else None
+    return result[0] if result else None
 
 
-def get_default_constraint_value(field: pw.Field):
-    c = get_default_constraint(field)
-    return c.value if c else None
+def get_default_constraint_value(field: pw.Field) -> str | None:
+    if default_meta := extract_default_meta(field):
+        return default_meta.value
+    return None
 
 
 def _truncate_constraint_name(constraint, maxlen=64):

@@ -9,7 +9,12 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 
 from miggy.types import ModelCls
-from miggy.utils import ModelIndex, get_default_constraint, get_single_index, make_single_index
+from miggy.utils import (
+    ModelIndex,
+    get_default_constraint_value,
+    get_single_index,
+    make_single_index,
+)
 
 
 class SchemaMigrator(ScM):
@@ -70,7 +75,12 @@ class SchemaMigrator(ScM):
         table = field.model._meta.table_name
 
         default_required = all(
-            (get_default_constraint(field) is None, not field.auto_increment, field.sequence is None, not field.null)
+            (
+                get_default_constraint_value(field) is None,
+                not field.auto_increment,
+                field.sequence is None,
+                not field.null,
+            )
         )
         if default_required and field.default is None:
             raise ValueError(

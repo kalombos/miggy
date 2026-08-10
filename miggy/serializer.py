@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import peewee as pw
 
 from miggy.deconstructor import deconstructor_factory
-from miggy.utils import Default
+from miggy.utils import DefaultMeta
 
 FUNCTION_TYPES = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
 PEEWEE_IMPORT = "import peewee as pw"
@@ -137,7 +137,7 @@ class FieldSerializer(BaseSerializer):
 def serializer_factory(value) -> BaseSerializer:
     if isinstance(value, pw.CompositeKey):
         return CompositeKeySerializer(value)
-    if isinstance(value, Default):
+    if isinstance(value, DefaultMeta):
         return DefaultSerializer(value)
     if isinstance(value, pw.SQL):
         return SQLSerializer(value)

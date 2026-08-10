@@ -377,8 +377,8 @@ class AlterField(MigrateOperation):
     def handle_default_constraint(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
-        old_value = get_default_constraint_value(old_field) or ""
-        new_value = get_default_constraint_value(new_field) or ""
+        old_value = get_default_constraint_value(old_field)
+        new_value = get_default_constraint_value(new_field)
         table_name = old_field.model._meta.table_name
         if old_value != new_value:
             if new_value:

@@ -2,9 +2,10 @@ from typing import Any
 
 import peewee as pw
 import pytest
+from peewee import Default
 
 from miggy import Migrator
-from miggy.utils import Default, has_single_index
+from miggy.utils import has_single_index
 from tests.conftest import PatchedPgDatabase
 
 
