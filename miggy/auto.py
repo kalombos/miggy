@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 
 import peewee as pw
 
-from miggy.deconstructor import ModelDeconstructor, deep_deconstruct
+from miggy.deconstructor import ModelDeconstructor, fields_not_equal
 from miggy.operations import (
     AddField,
     AddIndex,
@@ -231,7 +231,7 @@ class MigrationAutodetector:
         changes = []
         for name in set(current_fields).intersection(prev_fields):
             current_field, prev_field = current_fields[name], prev_fields[name]
-            if deep_deconstruct(current_field) != deep_deconstruct(prev_field):
+            if fields_not_equal(current_field, prev_field):
                 o = AlterField(model_name=model_name, name=name, field=current_field)
                 if self.is_new_pk(name, model_name):
                     o.deps.append(Dependency(model_name, None, Dependency.Type.REMOVE_PK))

@@ -5,7 +5,7 @@ from playhouse.postgres_ext import DateTimeTZField
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.serializer import FieldSerializer, SerializedCode, serializer_factory
-from miggy.utils import Default
+from miggy.utils import CheckMeta, DefaultMeta
 from tests.helpers import Rating, Status, get_active_status
 
 
@@ -25,8 +25,12 @@ from tests.helpers import Rating, Status, get_active_status
             pw.SQL("where name='%s'", params=["John"]),
             SerializedCode("""pw.SQL("where name='%s'", ['John'])""", imports={"import peewee as pw"}),
         ),
-        (Default("5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
+        (DefaultMeta("5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
         (pw.SQL("DEFAULT 5"), SerializedCode("pw.SQL('DEFAULT 5')", imports={"import peewee as pw"})),
+        (
+            CheckMeta("check_price", "price > 10"),
+            SerializedCode("pw.Check('price > 10', name='check_price')", imports={"import peewee as pw"}),
+        ),
         (
             pw.SQL("where name='%s'", params=("John",)),
             SerializedCode("""pw.SQL("where name='%s'", ('John',))""", imports={"import peewee as pw"}),

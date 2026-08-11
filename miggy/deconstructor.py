@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 
 from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import Default, fk_postfix, get_default_constraint
+from miggy.utils import extract_check_meta, extract_default_meta, fk_postfix
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -55,6 +55,15 @@ class FieldDeconstructor:
             return {"primary_key": True}
         return {}
 
+    def deconstruct_constraints(self, field: pw.Field) -> dict[str, Any]:
+        constraints: list[Any] = []
+        if dm := extract_default_meta(field):
+            constraints.append(dm)
+        constraints.extend(extract_check_meta(field))
+        if constraints:
+            return {"constraints": constraints}
+        return {}
+
     def deconstruct_params(self) -> dict[str, Any]:
         field = self.field
         params: dict[str, Any] = {}
@@ -62,9 +71,8 @@ class FieldDeconstructor:
             params["null"] = True
         if field.default is not None:
             params["default"] = field.default
-        if default_constraint := get_default_constraint(field):
-            params["constraints"] = [default_constraint]
 
+        params.update(self.deconstruct_constraints(field))
         params.update(self.deconstruct_type_modifiers())
         params.update(self.deconstruct_column_name())
         params.update(self.deconstruct_primary_key())
@@ -180,9 +188,5 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
     return FieldDeconstructor(f)
 
 
-def deep_deconstruct(field: pw.Field) -> Any:
-    path, params = deconstructor_factory(field).deconstruct()
-
-    if "constraints" in params:
-        params["constraints"] = [{"value": c.value} if isinstance(c, Default) else c for c in params["constraints"]]
-    return Deconstructed(path, params)
+def fields_not_equal(f1: pw.Field, f2: pw.Field) -> bool:
+    return deconstructor_factory(f1).deconstruct() != deconstructor_factory(f2).deconstruct()
