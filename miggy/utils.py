@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from copy import deepcopy
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import peewee as pw
 
@@ -151,15 +151,27 @@ def indexes_state(model_cls: ModelCls) -> dict[str, ModelIndex]:
     return model_cls._meta.indexes_state  # type: ignore[attr-defined]
 
 
+def copy_field(field: pw.Field) -> pw.Field:
+    # workaround for check constraint
+    # https://github.com/coleifer/peewee/issues/3067
+    if tmp_constraints := field.constraints:
+        field.constraints = []
+    new_field = deepcopy(field)
+    if tmp_constraints:
+        field.constraints = tmp_constraints
+        new_field.constraints = [c.clone() for c in tmp_constraints]
+    return new_field
+
+
 def copy_model(model_cls: ModelCls) -> ModelCls:
     # this function based on ModelBase.__new__ logic
-    attrs = {}
+    attrs: dict[str, Any] = {}
 
     is_pk_already_determined = False
     # copying fields
     for k, v in model_cls.__dict__.items():
         if isinstance(v, pw.FieldAccessor):
-            attrs[k] = deepcopy(v.field)
+            attrs[k] = copy_field(v.field)
             if v.field.primary_key:
                 is_pk_already_determined = True
     # copying Meta

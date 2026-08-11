@@ -13,7 +13,6 @@ from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
     fk_postfix,
-    get_default_constraint_value,
     get_single_index,
     get_single_index_name,
     has_single_index,
@@ -374,24 +373,6 @@ class AlterField(MigrateOperation):
             )
         return _ops
 
-    def handle_default_constraint(
-        self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
-    ) -> list[Operation]:
-        old_value = get_default_constraint_value(old_field)
-        new_value = get_default_constraint_value(new_field)
-        table_name = old_field.model._meta.table_name
-        if old_value != new_value:
-            if new_value:
-                return [schema_migrator.add_column_default(table_name, new_field.column_name, new_value)]
-            else:
-                return [
-                    schema_migrator.drop_column_default(
-                        table_name,
-                        new_field.column_name,
-                    )
-                ]
-        return []
-
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
@@ -409,7 +390,8 @@ class AlterField(MigrateOperation):
         _ops.append(schema_migrator._resolve_alter_column_type(old_field, field))
         _ops.append(schema_migrator._resolve_alter_primary_key(old_field, field))
         _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
-        _ops.extend(self.handle_default_constraint(old_field, field, schema_migrator))
+        _ops.append(schema_migrator._resolve_alter_default_constraint(old_field, field))
+        _ops.append(schema_migrator._resolve_alter_check_constraints(old_field, field))
         if old_field.null != field.null:
             _operation = schema_migrator.drop_not_null if field.null else schema_migrator.add_not_null
             _ops.append(_operation(table_name, field.column_name))

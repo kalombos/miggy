@@ -175,3 +175,6 @@ def test__database_forwards(
 
     queries = [q for q in patched_pg_db.queries if "FROM pg_constraint" not in q]
     assert queries == expected
+
+
+# TODO: test default and check constraint

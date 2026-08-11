@@ -11,6 +11,7 @@ from playhouse.migrate import SqliteMigrator as SqM
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
+    extract_check_meta,
     get_default_constraint_value,
     get_single_index,
     make_single_index,
@@ -45,6 +46,37 @@ class SchemaMigrator(ScM):
             table_name = new_field.model._meta.table_name
             return self.alter_column_type(table_name, new_field.column_name, new_field)
         return []
+
+    @operation
+    def _resolve_alter_default_constraint(self, old_field: pw.Field, new_field: pw.Field):
+        old_value = get_default_constraint_value(old_field)
+        new_value = get_default_constraint_value(new_field)
+        table_name = old_field.model._meta.table_name
+        if old_value != new_value:
+            if new_value:
+                return [self.add_column_default(table_name, new_field.column_name, new_value)]
+            else:
+                return [
+                    self.drop_column_default(
+                        table_name,
+                        new_field.column_name,
+                    )
+                ]
+        return []
+
+    @operation
+    def _resolve_alter_check_constraints(self, old_field: pw.Field, new_field: pw.Field):
+        old_constraints = set(extract_check_meta(old_field))
+        new_constraints = set(extract_check_meta(new_field))
+        table_name = new_field.model._meta.table_name
+
+        ops = []
+        for constraint in sorted(old_constraints - new_constraints):
+            ops.append(self.drop_constraint(table_name, constraint.name))
+
+        for constraint in sorted(new_constraints - old_constraints):
+            ops.append(self.add_constraint(table_name, constraint.name, pw.SQL("CHECK (%s)" % constraint.constraint)))
+        return ops
 
     @operation
     def _resolve_alter_primary_key(self, old_field: pw.Field, new_field: pw.Field):

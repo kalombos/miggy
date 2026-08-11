@@ -106,7 +106,7 @@ def test_check_meta_from_node_unnamed() -> None:
 def test_copy_model() -> None:
     class User(pw.Model):
         my_pk = pw.CharField(primary_key=True)
-        name = pw.CharField(constraints=[pw.Default("5"), pw.Check("name > 0")])
+        name = pw.CharField(constraints=[pw.Default("5"), pw.Check("name > 0", name="some_name")])
 
     NewModel = copy_model(User)
 
@@ -116,4 +116,6 @@ def test_copy_model() -> None:
     assert NewModel.__name__ == "User"
     assert isinstance(NewModel.my_pk, pw.CharField)
     assert NewModel.my_pk.primary_key
-    assert [pw.SQL, pw.SQL] == [type(c) for c in NewModel.name.constraints]
+    default, check = NewModel.name.constraints
+    assert DefaultMeta.from_node(default) == DefaultMeta("5")
+    assert CheckMeta.from_node(check) == CheckMeta(name="some_name", constraint="name > 0")

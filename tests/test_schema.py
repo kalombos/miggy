@@ -182,3 +182,138 @@ def test__resolve_alter_column_type(
     schema_migrator._resolve_alter_column_type(old_field, new_field).run()
 
     assert patched_pg_db.queries == expected
+
+
+@pytest.mark.parametrize(
+    ("old_field", "new_field", "expected"),
+    [
+        pytest.param(
+            pw.CharField(constraints=[pw.Default("'5'")]),
+            pw.CharField(constraints=[pw.Default("'5'")]),
+            [],
+        ),
+        pytest.param(
+            pw.CharField(constraints=[pw.Default("'5'")]),
+            pw.CharField(constraints=[pw.Default("'6'")]),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" SET DEFAULT \'6\''],
+        ),
+        pytest.param(
+            pw.CharField(),
+            pw.CharField(constraints=[pw.Default("'6'")]),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" SET DEFAULT \'6\''],
+        ),
+        pytest.param(
+            pw.CharField(constraints=[pw.Default("'5'")]),
+            pw.CharField(),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" DROP DEFAULT'],
+        ),
+    ],
+)
+def test__resolve_alter_default_constraint(
+    old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
+) -> None:
+
+    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    class OldModel(pw.Model):
+        field = old_field
+
+        class Meta:
+            database = patched_pg_db
+
+    OldModel.create_table()
+    NewModel = copy_model(OldModel)
+
+    NewModel._meta.add_field("field", new_field)
+    patched_pg_db.clear_queries()
+
+    schema_migrator._resolve_alter_default_constraint(old_field, new_field).run()
+
+    assert patched_pg_db.queries == expected
+
+
+@pytest.mark.parametrize(
+    ("old_field", "new_field", "expected"),
+    [
+        pytest.param(
+            pw.IntegerField(
+                constraints=[pw.SQL("CONSTRAINT up CHECK (price > 5)"), pw.SQL("CONSTRAINT down CHECK (price < 10)")]
+            ),
+            pw.IntegerField(),
+            [
+                'ALTER TABLE "oldmodel" DROP CONSTRAINT "down"',
+                'ALTER TABLE "oldmodel" DROP CONSTRAINT "up"',
+            ],
+        ),
+        (
+            pw.CharField(
+                constraints=[
+                    pw.Check("price = '5'", name="check_price"),
+                ]
+            ),
+            pw.CharField(
+                constraints=[
+                    pw.Check("price = '0'", name="check_price"),
+                    pw.Check("price = '0'", name="check_price"),
+                ]
+            ),
+            [
+                'ALTER TABLE "oldmodel" DROP CONSTRAINT "check_price"',
+                'ALTER TABLE "oldmodel" ADD CONSTRAINT "check_price" CHECK (price = \'0\')',
+            ],
+        ),
+        pytest.param(
+            pw.IntegerField(
+                constraints=[
+                    pw.Check("price > 0", name="check_price"),
+                ]
+            ),
+            pw.IntegerField(
+                constraints=[
+                    pw.Check("price > 0", name="check_price"),
+                ]
+            ),
+            [],
+        ),
+        pytest.param(
+            pw.IntegerField(
+                constraints=[
+                    pw.Check("price > 0", name="check_price"),
+                ]
+            ),
+            pw.IntegerField(
+                constraints=[
+                    pw.Check("price > 0", name="new_name"),
+                ]
+            ),
+            [
+                'ALTER TABLE "oldmodel" DROP CONSTRAINT "check_price"',
+                'ALTER TABLE "oldmodel" ADD CONSTRAINT "new_name" CHECK (price > 0)',
+            ],
+        ),
+    ],
+)
+def test___resolve_alter_check_constraints(
+    old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
+) -> None:
+
+    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    class OldModel(pw.Model):
+        price = old_field
+
+        class Meta:
+            database = patched_pg_db
+
+    OldModel.create_table()
+    NewModel = copy_model(OldModel)
+
+    NewModel._meta.add_field("field", new_field)
+    patched_pg_db.clear_queries()
+
+    schema_migrator._resolve_alter_check_constraints(old_field, new_field).run()
+
+    assert patched_pg_db.queries == expected
+
+
+# TODO: test _resolve_alter_default_constraint
