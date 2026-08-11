@@ -138,11 +138,22 @@ def test_handle_fk_constraint(
             pw.IntegerField(primary_key=False),
             pw.IntegerField(primary_key=True),
             ['ALTER TABLE "oldmodel" ADD PRIMARY KEY ("field")'],
+            id="pk_constraint",
         ),
         pytest.param(
-            pw.CharField(),
-            pw.TextField(),
-            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE TEXT'],
+            pw.CharField(), pw.TextField(), ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE TEXT'], id="type"
+        ),
+        pytest.param(
+            pw.IntegerField(),
+            pw.IntegerField(constraints=[pw.Default(5)]),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" SET DEFAULT 5'],
+            id="default_constraint",
+        ),
+        pytest.param(
+            pw.IntegerField(),
+            pw.IntegerField(constraints=[pw.Check("field > 5", name="check")]),
+            ['ALTER TABLE "oldmodel" ADD CONSTRAINT "check" CHECK (field > 5)'],
+            id="check_constraint",
         ),
     ],
 )
@@ -175,6 +186,3 @@ def test__database_forwards(
 
     queries = [q for q in patched_pg_db.queries if "FROM pg_constraint" not in q]
     assert queries == expected
-
-
-# TODO: test default and check constraint

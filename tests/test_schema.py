@@ -314,6 +314,3 @@ def test___resolve_alter_check_constraints(
     schema_migrator._resolve_alter_check_constraints(old_field, new_field).run()
 
     assert patched_pg_db.queries == expected
-
-
-# TODO: test _resolve_alter_default_constraint
