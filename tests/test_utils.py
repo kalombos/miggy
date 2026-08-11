@@ -92,6 +92,10 @@ def test_default__from_node(sql: pw.SQL, expected: str) -> None:
             pw.SQL('CONSTRAINT "check_price" CHECK   (price > 10)'),
             CheckMeta(name="check_price", constraint="price > 10"),
         ),
+        (
+            pw.SQL('CONSTRAINT check_price CHECK   (price > 10)'),
+            CheckMeta(name="check_price", constraint="price > 10"),
+        ),
     ],
 )
 def test_check_meta_from_node(node: pw.Node, expected: str) -> None:
