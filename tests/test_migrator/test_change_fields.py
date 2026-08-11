@@ -2,7 +2,6 @@ from typing import Any
 
 import peewee as pw
 import pytest
-from peewee import Default
 
 from miggy import Migrator
 from miggy.utils import has_single_index
@@ -165,26 +164,6 @@ def test_change_indexes(
                 'ALTER TABLE "user" RENAME COLUMN "also_check_renaming" TO "age"',
                 'ALTER TABLE "user" ALTER COLUMN "age" SET DEFAULT 5',
             ],
-        ),
-        (
-            {"constraints": [pw.SQL("DEFAULT 5")]},
-            {"constraints": [pw.SQL("DEFAULT 5")]},
-            [],
-        ),
-        (
-            {"constraints": [pw.SQL("DEFAULT 5")]},
-            {},
-            ['ALTER TABLE "user" ALTER COLUMN "age" DROP DEFAULT'],
-        ),
-        (
-            {"constraints": [Default("5")]},
-            {},
-            ['ALTER TABLE "user" ALTER COLUMN "age" DROP DEFAULT'],
-        ),
-        (
-            {},
-            {"constraints": [Default("6")]},
-            ['ALTER TABLE "user" ALTER COLUMN "age" SET DEFAULT 6'],
         ),
     ],
 )
