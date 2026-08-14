@@ -295,7 +295,7 @@ class MigrationAutodetector:
         create_index_ops, drop_index_ops = diff_indexes_from_meta(current, prev)
         create_check_ops, drop_check_ops = self.generate_altered_check_constraints(model_name)
 
-        # Drop operations before dropping and creating fields
+        # Drop operations before dropping fields
         # Drop non-field indexes
         ops.extend(drop_index_ops)
         # Drop non-field check constraints
@@ -309,7 +309,7 @@ class MigrationAutodetector:
         field_ops = self._sort_operations(field_ops)
 
         ops.extend(field_ops)
-        # Create non-field indexes after dropping and creating fields
+        # Create operations after creating fields
         # Create non-field indexes
         ops.extend(create_index_ops)
         # Create non-field check constraints
