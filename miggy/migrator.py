@@ -8,6 +8,7 @@ from playhouse.migrate import (
 from miggy import LOGGER
 from miggy.deconstructor import ModelDeconstructor
 from miggy.operations import (
+    AddCheckConstraint,
     AddField,
     AddIndex,
     AddPrimaryKeyConstraint,
@@ -16,6 +17,7 @@ from miggy.operations import (
     CreateModel,
     DropIndex,
     MigrateOperation,
+    RemoveCheckConstraint,
     RemoveField,
     RemoveModel,
     RemovePrimaryKeyConstraint,
@@ -217,3 +219,11 @@ class Migrator(object):
     def remove_primary_key_constraint(self, model_name: str) -> None:
         """A shortcut for adding a :class:`RemovePrimaryKeyConstraint` operation."""
         self.add_operation(RemovePrimaryKeyConstraint(model_name))
+
+    def add_check_constraint(self, model_name: str, name: str, constraint: str) -> None:
+        """A shortcut for adding a :class:`AddCheckConstraint` operation."""
+        self.add_operation(AddCheckConstraint(model_name, name, constraint))
+
+    def remove_check_constraint(self, model_name: str, name: str) -> None:
+        """A shortcut for adding a :class:`RemoveCheckConstraint` operation."""
+        self.add_operation(RemoveCheckConstraint(model_name, name))

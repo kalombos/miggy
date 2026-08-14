@@ -302,3 +302,55 @@ def test_primary_key_order(prev: dict[str, Any], current: dict[str, Any], expect
     diffs = MigrationAutodetector(from_state, to_state).diff_one("test")
     diffs = [operation_to_one_line(o) for o in diffs]  # type: ignore
     assert diffs == expected
+
+
+
+@pytest.mark.parametrize(
+    ("constraints_before", "constraints_after", "changes"),
+    [
+        # Adding constraints
+        (
+            [
+                pw.Check("first_name != 'bob'", "check_name")
+            ],
+            [
+                pw.Check("first_name != 'bob'", "check_name"),
+                pw.Check("last_name != 'dylan'", "check_lastname", )
+            ],
+            ["migrator.add_check_constraint('test','check_lastname',\"last_name != \'dylan\'\",)"],
+        ),
+
+        # Remove constraints
+        (
+            [
+                pw.Check("first_name != 'bob'", "check_name"),
+                pw.Check("last_name != 'dylan'", "check_lastname", )
+            ],
+            [
+                pw.Check("first_name != 'bob'", "check_name"),
+                
+            ],
+            ["migrator.remove_check_constraint('test','check_lastname',)"],
+        ),
+
+        # Nothing to do
+        (
+            [pw.Check("first_name != 'bob'", "check_name")],
+            [pw.Check("first_name != 'bob'", "check_name")],
+            [],
+        ),
+    ],
+)
+def test_check_constraints(constraints_before: list[Any], constraints_after: list[Any], changes: list[str]) -> None:
+    def create_model(constraints_: list[Any]) -> type[pw.Model]:
+        class Test(pw.Model):
+            first_name = pw.CharField()
+            last_name = pw.CharField()
+
+            class Meta:
+                constraints = constraints_
+
+        return Test
+
+    diffs = diff_one(create_model(constraints_before), create_model(constraints_after))
+    assert [operation_to_one_line(d) for d in diffs] == changes  # type: ignore

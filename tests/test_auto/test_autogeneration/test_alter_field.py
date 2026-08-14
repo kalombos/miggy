@@ -34,6 +34,23 @@ class _M1(pw.Model):
         ),
         pytest.param(
             pw.IntegerField(),
+            pw.IntegerField(constraints=[pw.Check("age > 5", "check_age_5")]),
+            (
+                "migrator.alter_field("
+                "model_name='test',"
+                "name='age',"
+                "field=pw.IntegerField(constraints=[pw.Check('age > 5', name='check_age_5')]),)"
+            ),
+            id="add_check_constraint",
+        ),
+        pytest.param(
+            pw.IntegerField(constraints=[pw.Check("age > 5", "check_age_5")]),
+            pw.IntegerField(),
+            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(),)""",
+            id="remove_check_constraint",
+        ),
+        pytest.param(
+            pw.IntegerField(),
             pw.IntegerField(default=5),
             """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(default=5),)""",
             id="add_default",
