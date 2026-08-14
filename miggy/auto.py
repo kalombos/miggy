@@ -7,6 +7,7 @@ import peewee as pw
 
 from miggy.deconstructor import ModelDeconstructor, fields_not_equal
 from miggy.operations import (
+    AddCheckConstraint,
     AddField,
     AddIndex,
     AddPrimaryKeyConstraint,
@@ -15,13 +16,14 @@ from miggy.operations import (
     Dependency,
     DropIndex,
     MigrateOperation,
+    RemoveCheckConstraint,
     RemoveField,
     RemoveModel,
     RemovePrimaryKeyConstraint,
     RenameTable,
 )
 from miggy.state import State
-from miggy.utils import ModelIndex, indexes_state, resolve_field
+from miggy.utils import ModelIndex, extract_check_meta, indexes_state, resolve_field
 
 from .types import ModelCls
 
@@ -263,6 +265,23 @@ class MigrationAutodetector:
 
         return ops
 
+    def generate_altered_check_constraints(
+        self, model_name: str
+    ) -> tuple[list[AddCheckConstraint], list[RemoveCheckConstraint]]:
+        prev = self.from_state[model_name]
+        current = self.to_state[model_name]
+
+        prev_constraints = extract_check_meta(prev)
+        current_constraints = extract_check_meta(current)
+
+        create_ops: list[AddCheckConstraint] = []
+        drop_ops: list[RemoveCheckConstraint] = []
+        for check_meta in set(current_constraints) - set(prev_constraints):
+            create_ops.append(AddCheckConstraint(model_name, check_meta.name, check_meta.constraint))
+        for check_meta in set(prev_constraints) - set(current_constraints):
+            drop_ops.append(RemoveCheckConstraint(model_name, check_meta.name))
+        return create_ops, drop_ops
+
     def diff_one(self, model_name: str) -> list[MigrateOperation]:
         """Find difference between given peewee models."""
 
@@ -274,9 +293,13 @@ class MigrationAutodetector:
             ops.append(RenameTable(model_name, current._meta.table_name))
 
         create_index_ops, drop_index_ops = diff_indexes_from_meta(current, prev)
+        create_check_ops, drop_check_ops = self.generate_altered_check_constraints(model_name)
 
-        # Drop non-field indexes before dropping and creating fields
+        # Drop operations before dropping and creating fields
+        # Drop non-field indexes
         ops.extend(drop_index_ops)
+        # Drop non-field check constraints
+        ops.extend(drop_check_ops)
 
         field_ops: list[MigrateOperation] = []
         field_ops.extend(self.generate_altered_primary_keys(model_name))
@@ -287,7 +310,10 @@ class MigrationAutodetector:
 
         ops.extend(field_ops)
         # Create non-field indexes after dropping and creating fields
+        # Create non-field indexes
         ops.extend(create_index_ops)
+        # Create non-field check constraints
+        ops.extend(create_check_ops)
 
         return ops
 

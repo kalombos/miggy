@@ -75,8 +75,12 @@ class SchemaMigrator(ScM):
             ops.append(self.drop_constraint(table_name, constraint.name))
 
         for constraint in sorted(new_constraints - old_constraints):
-            ops.append(self.add_constraint(table_name, constraint.name, pw.SQL("CHECK (%s)" % constraint.constraint)))
+            ops.append(self.add_check_constraint(table_name, constraint.name, constraint.constraint))
         return ops
+
+    @operation
+    def add_check_constraint(self, table_name: str, name: str, constraint: str):
+        return self.add_constraint(table_name, name, pw.SQL("CHECK (%s)" % constraint))
 
     @operation
     def _resolve_alter_primary_key(self, old_field: pw.Field, new_field: pw.Field):

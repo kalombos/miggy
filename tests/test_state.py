@@ -1,6 +1,7 @@
 import peewee as pw
 
 from miggy.state import State
+from miggy.utils import CheckMeta, extract_check_meta
 
 
 def test_add_model() -> None:
@@ -102,6 +103,30 @@ def test_add_composite_key() -> None:
     assert isinstance(model._meta.primary_key, pw.CompositeKey)
     assert model._meta.composite_key is True
     assert hasattr(model, "__composite_key__")
+
+
+def test_add_remove_check_constraint() -> None:
+    state = State()
+    state.add_model(
+        "User",
+        {
+            "age": pw.IntegerField(),
+            "email": pw.CharField(max_length=255, null=True),
+        },
+        {"table_name": "users"},
+    )
+
+    state.add_check_constraint("User", "check_age", "age > 5")
+    model = state["user"]
+
+    constraints = extract_check_meta(model)
+    assert len(constraints) == 1
+    assert constraints[0] == CheckMeta("check_age", "age > 5")
+
+    state.remove_check_constraint("User", "wrong_name")
+    assert len(model._meta.constraints) == 1
+    state.remove_check_constraint("User", "check_age")
+    assert model._meta.constraints == []
 
 
 def test_remove_composite_key() -> None:

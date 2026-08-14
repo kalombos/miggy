@@ -14,6 +14,7 @@ from miggy.operations import (
     RemovePrimaryKeyConstraint,
     RenameTable,
 )
+from miggy.utils import CheckMeta
 from miggy.writer import OperationWriter
 from tests.helpers import compare_dedent
 
@@ -36,6 +37,7 @@ class Car(pw.Model):
                     "table_name": "some_table",
                     "schema": "some_schema",
                     "primary_key": pw.CompositeKey("name", "email"),
+                    "constraints": [CheckMeta("some_name", "name != 'bob'")],
                 },
             ),
             """
@@ -49,6 +51,7 @@ class Car(pw.Model):
                     'table_name': 'some_table',
                     'schema': 'some_schema',
                     'primary_key': pw.CompositeKey('name', 'email'),
+                    'constraints': [pw.Check("name != 'bob'", name='some_name')],
                 },
             )
             """,

@@ -491,6 +491,37 @@ class ChangeNullable(MigrateOperation):
         return ops
 
 
+class AddCheckConstraint(MigrateOperation):
+    def __init__(self, model_name: str, name: str, constraint: str) -> None:
+        self.model_name = model_name
+        self.name = name
+        self.constraint = constraint
+
+    def state_forwards(self, state: State) -> None:
+        state.add_check_constraint(self.model_name, self.name, self.constraint)
+
+    def database_forwards(
+        self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
+    ) -> list[Operation]:
+        table_name = to_state[self.model_name]._meta.table_name
+        return [schema_migrator.add_check_constraint(table_name, self.name, self.constraint)]
+
+
+class RemoveCheckConstraint(MigrateOperation):
+    def __init__(self, model_name: str, name: str) -> None:
+        self.model_name = model_name
+        self.name = name
+
+    def state_forwards(self, state: State) -> None:
+        state.remove_check_constraint(self.model_name, self.name)
+
+    def database_forwards(
+        self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
+    ) -> list[Operation]:
+        table_name = to_state[self.model_name]._meta.table_name
+        return [schema_migrator.drop_constraint(table_name, self.name)]
+
+
 class AddPrimaryKeyConstraint(MigrateOperation):
     def __init__(self, model_name: str, *fields: str) -> None:
         self.model_name = model_name

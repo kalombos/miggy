@@ -169,6 +169,9 @@ class ModelDeconstructor:
         if model._meta.primary_key and isinstance(model._meta.primary_key, pw.CompositeKey):
             meta["primary_key"] = model._meta.primary_key
 
+        if check_meta_lst := extract_check_meta(self.model):
+            meta["constraints"] = check_meta_lst
+
         return {"name": model.__name__, "fields": {f.name: f for f in fields}, "meta": meta}
 
 
