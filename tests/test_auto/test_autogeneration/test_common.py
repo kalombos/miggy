@@ -304,35 +304,35 @@ def test_primary_key_order(prev: dict[str, Any], current: dict[str, Any], expect
     assert diffs == expected
 
 
-
 @pytest.mark.parametrize(
     ("constraints_before", "constraints_after", "changes"),
     [
         # Adding constraints
         (
-            [
-                pw.Check("first_name != 'bob'", "check_name")
-            ],
+            [pw.Check("first_name != 'bob'", "check_name")],
             [
                 pw.Check("first_name != 'bob'", "check_name"),
-                pw.Check("last_name != 'dylan'", "check_lastname", )
+                pw.Check(
+                    "last_name != 'dylan'",
+                    "check_lastname",
+                ),
             ],
-            ["migrator.add_check_constraint('test','check_lastname',\"last_name != \'dylan\'\",)"],
+            ["migrator.add_check_constraint('test','check_lastname',\"last_name != 'dylan'\",)"],
         ),
-
         # Remove constraints
         (
             [
                 pw.Check("first_name != 'bob'", "check_name"),
-                pw.Check("last_name != 'dylan'", "check_lastname", )
+                pw.Check(
+                    "last_name != 'dylan'",
+                    "check_lastname",
+                ),
             ],
             [
                 pw.Check("first_name != 'bob'", "check_name"),
-                
             ],
             ["migrator.remove_check_constraint('test','check_lastname',)"],
         ),
-
         # Nothing to do
         (
             [pw.Check("first_name != 'bob'", "check_name")],

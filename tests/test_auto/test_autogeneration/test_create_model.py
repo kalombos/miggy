@@ -11,7 +11,7 @@ def test_create_model_w_constraint() -> None:
         age = pw.IntegerField()
 
         class Meta:
-            constraints = [pw.Check("age > 5", 'check_age')]
+            constraints = [pw.Check("age > 5", "check_age")]
 
     diffs = MigrationAutodetector(State(), State({"test": Test})).diff_many()
     changes = [operation_to_one_line(o) for o in diffs]
@@ -36,7 +36,6 @@ def test_create_model() -> None:
 
         class Meta:
             indexes = ((("i1", "i2"), True),)
-            
 
     Test.add_index(Test.i1, Test.i2, name="i3")
 
