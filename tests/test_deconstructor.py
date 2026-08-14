@@ -340,6 +340,7 @@ class _TestModelDeconstructNamespace:
         class Meta:
             schema = "new_schema"
             primary_key = pw.CompositeKey("name", "age")
+            constraints = [pw.Check("age > 5", name="check_age")]
             table_name = "custom_name"
 
 
@@ -364,7 +365,12 @@ class _TestModelDeconstructNamespace:
                     },
                     "age": {},
                 },
-                "meta": {"table_name": "custom_name", "schema": "new_schema", "primary_key": ("name", "age")},
+                "meta": {
+                    "table_name": "custom_name",
+                    "schema": "new_schema",
+                    "primary_key": ("name", "age"),
+                    "constraints": [CheckMeta(name="check_age", constraint="age > 5")],
+                },
             },
         ),
     ],

@@ -10,6 +10,9 @@ def test_create_model_w_constraint() -> None:
         first_name = pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")])
         age = pw.IntegerField()
 
+        class Meta:
+            constraints = [pw.Check("age > 5", "check_age")]
+
     diffs = MigrationAutodetector(State(), State({"test": Test})).diff_many()
     changes = [operation_to_one_line(o) for o in diffs]
     assert changes == [
@@ -20,7 +23,7 @@ def test_create_model_w_constraint() -> None:
                     'first_name': pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")]),
                     'age': pw.IntegerField(),
                 },
-                meta={},)"""
+                meta={'constraints': [pw.Check('age > 5', name='check_age')],},)"""
         )
     ]
 

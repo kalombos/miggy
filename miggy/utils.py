@@ -61,6 +61,9 @@ class CheckMeta(NamedTuple):
             return CheckMeta(name.strip(), constraint.strip())
         return None
 
+    def as_node(self) -> pw.Node:
+        return pw.Check(constraint=self.constraint, name=self.name)
+
 
 def extract_default_meta(field: pw.Field) -> DefaultMeta | None:
     constraints = field.constraints or []
@@ -73,8 +76,12 @@ def extract_default_meta(field: pw.Field) -> DefaultMeta | None:
     return result[0] if result else None
 
 
-def extract_check_meta(field: pw.Field) -> list[CheckMeta]:
-    constraints = field.constraints or []
+def extract_check_meta(field_or_model: pw.Field | ModelCls) -> list[CheckMeta]:
+    if isinstance(field_or_model, pw.Field):
+        constraints = field_or_model.constraints or []
+    else:
+        constraints = field_or_model._meta.constraints or []
+
     result = []
     for constraint in constraints:
         if _constraint := CheckMeta.from_node(constraint):
@@ -149,6 +156,12 @@ def indexes_state(model_cls: ModelCls) -> dict[str, ModelIndex]:
     if not hasattr(model_cls._meta, "indexes_state"):
         model_cls._meta.indexes_state = {}  # type: ignore[attr-defined]
     return model_cls._meta.indexes_state  # type: ignore[attr-defined]
+
+
+def costraints(models_cls: ModelCls) -> list[Any]:
+    if models_cls._meta.constraints is None:
+        models_cls._meta.constraints = []
+    return models_cls._meta.constraints
 
 
 def copy_field(field: pw.Field) -> pw.Field:

@@ -4,7 +4,7 @@ from typing import Any
 import peewee as pw
 
 from miggy.types import ModelCls
-from miggy.utils import copy_model
+from miggy.utils import copy_model, costraints, extract_check_meta
 
 ModelDict = dict[str, ModelCls]
 
@@ -81,6 +81,15 @@ class State:
             rel_model = field.rel_model
             if isinstance(rel_model, str) and rel_model != "self":
                 field.rel_model = self[rel_model]
+
+    def add_check_constraint(self, model_name: str, name: str, constraint: str) -> None:
+        model = self[model_name]
+        costraints(model).append(pw.Check(constraint, name))
+
+    def remove_check_constraint(self, model_name: str, name: str) -> None:
+        model = self[model_name]
+        check_meta_lst = extract_check_meta(model)
+        model._meta.constraints = [c.as_node() for c in check_meta_lst if c.name != name]
 
     def add_composite_key(self, model_name: str, field: pw.CompositeKey) -> None:
         model = self[model_name]
