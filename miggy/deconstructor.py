@@ -14,8 +14,12 @@ if TYPE_CHECKING:
 from typing import NamedTuple
 
 
+class Path(str):
+    pass
+
+
 class Deconstructed(NamedTuple):
-    path: str
+    path: Path
     params: dict[str, Any]
 
 
@@ -83,7 +87,7 @@ class FieldDeconstructor:
         return "%s.%s" % (self.field.__class__.__module__, self.field.__class__.__qualname__)
 
     def deconstruct(self) -> Deconstructed:
-        return Deconstructed(path=self.deconstruct_path(), params=self.deconstruct_params())
+        return Deconstructed(path=Path(self.deconstruct_path()), params=self.deconstruct_params())
 
 
 class CharFieldDeconstructor(FieldDeconstructor):
@@ -152,6 +156,19 @@ class ForeignKeyFieldDeconstructor(FieldDeconstructor):
 class AutoFieldDeconstructor(FieldDeconstructor):
     def deconstruct_primary_key(self) -> dict[str, Any]:
         return {}
+
+
+class ArrayFieldDeconstructor(FieldDeconstructor):
+    def deconstruct_params(self) -> dict[str, Any]:
+        params = super().deconstruct_params()
+        if self.field.dimensions != 1:  # type: ignore[attr-defined]
+            params["dimensions"] = self.field.dimensions  # type: ignore[attr-defined]
+        deconstructed_field = deconstructor_factory(self.field.__field).deconstruct()  # type: ignore[attr-defined]
+        if deconstructed_field.path != "peewee.IntegerField":
+            params["field_class"] = deconstructed_field.path
+        if deconstructed_field.params:
+            params["field_kwargs"] = deconstructed_field.params
+        return params
 
 
 class ModelDeconstructor:
