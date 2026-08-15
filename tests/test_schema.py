@@ -1,5 +1,6 @@
 import peewee as pw
 import pytest
+from playhouse.postgres_ext import ArrayField
 
 from miggy.schema import SchemaMigrator
 from miggy.utils import copy_model
@@ -158,6 +159,28 @@ def test__add_field__error(patched_pg_db: PatchedPgDatabase) -> None:
             pw.CharField(max_length=55),
             pw.CharField(),
             ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE VARCHAR(255)'],
+        ),
+        # array field
+        pytest.param(
+            ArrayField(field_class=pw.CharField), ArrayField(field_class=pw.CharField), [], id="array_nothing_changed"
+        ),
+        pytest.param(
+            ArrayField(field_class=pw.CharField),
+            ArrayField(field_class=pw.CharField, dimensions=2),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE VARCHAR(255)[][]'],
+            id="array_dimension_changed",
+        ),
+        pytest.param(
+            ArrayField(field_class=pw.CharField),
+            ArrayField(field_class=pw.TextField),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE TEXT[]'],
+            id="array_field_type_changed",
+        ),
+        pytest.param(
+            ArrayField(field_class=pw.CharField),
+            ArrayField(field_class=pw.CharField, field_kwargs={"max_length": 25}),
+            ['ALTER TABLE "oldmodel" ALTER COLUMN "field" TYPE VARCHAR(25)[]'],
+            id="array_modifiers_changed",
         ),
     ],
 )

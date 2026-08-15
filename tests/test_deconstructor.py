@@ -2,7 +2,7 @@ from typing import Any
 
 import peewee as pw
 import pytest
-from playhouse.postgres_ext import DateTimeTZField
+from playhouse.postgres_ext import ArrayField, DateTimeTZField
 
 from miggy.deconstructor import (
     Deconstructed,
@@ -203,6 +203,7 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         # test default callable
         (pw.CharField(default=get_active_status), {"default": get_active_status}),
         (pw.IntegerField(constraints=[pw.Default(5)]), {"constraints": [DefaultMeta("5")]}),
+        # test check constraints
         (
             pw.IntegerField(
                 constraints=[pw.Check("some_field > 5", "chk_up"), pw.Check("some_field < 100", "chk_down")]
@@ -212,6 +213,22 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
                     CheckMeta(name="chk_down", constraint="some_field < 100"),
                     CheckMeta(name="chk_up", constraint="some_field > 5"),
                 ]
+            },
+        ),
+        # test array field
+        (
+            ArrayField(
+                field_class=pw.CharField,
+                field_kwargs={"max_length": 50},
+                dimensions=2,
+                index=False,
+            ),
+            {
+                "field_class": "peewee.CharField",
+                "field_kwargs": {
+                    "max_length": 50,
+                },
+                "dimensions": 2,
             },
         ),
     ],
@@ -233,6 +250,7 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
         (DateTimeTZField(), Deconstructed("playhouse.postgres_ext.DateTimeTZField", {})),
         (CharEnumField(Status, max_length=50), Deconstructed("peewee.CharField", {"max_length": 50})),
         (IntEnumField(Rating), Deconstructed("peewee.SmallIntegerField", {})),
+        (ArrayField(), Deconstructed("playhouse.postgres_ext.ArrayField", {})),
     ],
 )
 def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
@@ -317,6 +335,9 @@ def test_deconstruct_params_unbound(field: pw.Field, expected: dict[str, Any]) -
         # test default callable equality
         pytest.param(pw.CharField(default=get_active_status), pw.CharField(default=get_inactive_status), True),
         pytest.param(pw.CharField(default=get_active_status), pw.CharField(default=get_active_status), False),
+        # test array field
+        pytest.param(ArrayField(field_class=pw.CharField), ArrayField(field_class=pw.TextField), True),
+        pytest.param(ArrayField(field_class=pw.CharField), ArrayField(field_class=pw.CharField), False),
     ],
 )
 def test_fields_not_equal(f1: pw.Field, f2: pw.Field, expected: bool) -> None:
