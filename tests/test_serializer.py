@@ -1,6 +1,6 @@
 import peewee as pw
 import pytest
-from playhouse.postgres_ext import DateTimeTZField
+from playhouse.postgres_ext import ArrayField, DateTimeTZField
 
 from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
@@ -53,6 +53,7 @@ def test_field_serializer_serialize() -> None:
         updated_at = DateTimeTZField()
         link_model = pw.ForeignKeyField(LinkModel)
         index_field = pw.IntegerField(index=True, unique=True)
+        array_field = ArrayField(field_class=pw.CharField, field_kwargs={"max_length": 10})
 
     assert FieldSerializer(SomeModel.name).serialize().code == (
         """pw.CharField(constraints=[pw.SQL("DEFAULT 'Some'")], max_length=5)"""
@@ -64,3 +65,7 @@ def test_field_serializer_serialize() -> None:
     assert FieldSerializer(SomeModel.rating).serialize().code == ("""pw.SmallIntegerField()""")
     assert FieldSerializer(SomeModel.link_model).serialize().code == ("""pw.ForeignKeyField(model='linkmodel')""")
     assert FieldSerializer(SomeModel.index_field).serialize().code == ("""pw.IntegerField(unique=True)""")
+    assert FieldSerializer(SomeModel.array_field).serialize() == SerializedCode(
+        "pw_pext.ArrayField(field_class=pw.CharField, field_kwargs={'max_length': 10})",
+        imports={"import peewee as pw", "import playhouse.postgres_ext as pw_pext"},
+    )

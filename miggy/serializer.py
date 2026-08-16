@@ -4,7 +4,7 @@ from typing import Any, NamedTuple
 
 import peewee as pw
 
-from miggy.deconstructor import deconstructor_factory
+from miggy.deconstructor import Path, deconstructor_factory
 from miggy.utils import CheckMeta, DefaultMeta
 
 FUNCTION_TYPES = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
@@ -120,8 +120,9 @@ class CompositeKeySerializer(BaseSerializer):
         return "pw.CompositeKey(%s)" % ", ".join(self.serialize_value(n) for n in self.value.field_names)
 
 
-class FieldSerializer(BaseSerializer):
-    def serialize_path(self, path: str) -> str:
+class PathSerializer(BaseSerializer):
+    def serialize_to_code(self) -> str:
+        path = self.value
         module, field = path.rsplit(".", 1)
         match module:
             case "peewee":
@@ -136,17 +137,21 @@ class FieldSerializer(BaseSerializer):
         self.imports.add(import_)
         return field
 
+
+class FieldSerializer(BaseSerializer):
     def serialize_to_code(self) -> str:
         deconstructed_field = deconstructor_factory(self.value).deconstruct()
         path, params = deconstructed_field
-        field = self.serialize_path(path)
+        field = self.serialize_value(path)
         param_str = ", ".join("%s=%s" % (k, self.serialize_value(v)) for k, v in sorted(params.items()))
         return f"{field}({param_str})"
 
 
-def serializer_factory(value) -> BaseSerializer:
+def serializer_factory(value) -> BaseSerializer:  # noqa: C901
     if isinstance(value, pw.CompositeKey):
         return CompositeKeySerializer(value)
+    if isinstance(value, Path):
+        return PathSerializer(value)
     if isinstance(value, DefaultMeta):
         return DefaultMetaSerializer(value)
     if isinstance(value, CheckMeta):

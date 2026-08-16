@@ -12,6 +12,8 @@ from miggy.types import ModelCls
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from playhouse.postgres_ext import ArrayField
+
     from miggy.types import ModelCls
 
 
@@ -162,6 +164,11 @@ def costraints(models_cls: ModelCls) -> list[Any]:
     if models_cls._meta.constraints is None:
         models_cls._meta.constraints = []
     return models_cls._meta.constraints
+
+
+def array_field(f: ArrayField) -> pw.Field:
+    # ArrayField.__field access
+    return f._ArrayField__field
 
 
 def copy_field(field: pw.Field) -> pw.Field:

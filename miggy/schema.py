@@ -7,10 +7,12 @@ from playhouse.migrate import MySQLMigrator as MqM
 from playhouse.migrate import PostgresqlMigrator as PgM
 from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
+from playhouse.postgres_ext import ArrayField
 
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
+    array_field,
     extract_check_meta,
     get_default_constraint_value,
     get_single_index,
@@ -40,9 +42,18 @@ class SchemaMigrator(ScM):
     def add_primary_key_constraint(self, table: str, column_name: str):
         raise NotImplementedError
 
+    def _types_not_equal(self, old_field: pw.Field, new_field: pw.Field) -> bool:
+        # corner case for array field
+        if isinstance(old_field, ArrayField) and isinstance(new_field, ArrayField):
+            if old_field.dimensions != new_field.dimensions:
+                return True
+            if array_field(old_field).get_modifiers() != array_field(new_field).get_modifiers():
+                return True
+        return old_field.field_type != new_field.field_type or old_field.get_modifiers() != new_field.get_modifiers()
+
     @operation
     def _resolve_alter_column_type(self, old_field: pw.Field, new_field: pw.Field):
-        if old_field.field_type != new_field.field_type or old_field.get_modifiers() != new_field.get_modifiers():
+        if self._types_not_equal(old_field, new_field):
             table_name = new_field.model._meta.table_name
             return self.alter_column_type(table_name, new_field.column_name, new_field)
         return []

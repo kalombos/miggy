@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import peewee as pw
+from playhouse.postgres_ext import ArrayField
 
 from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import extract_check_meta, extract_default_meta, fk_postfix
+from miggy.utils import array_field, extract_check_meta, extract_default_meta, fk_postfix
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -14,8 +15,12 @@ if TYPE_CHECKING:
 from typing import NamedTuple
 
 
+class Path(str):
+    pass
+
+
 class Deconstructed(NamedTuple):
-    path: str
+    path: Path
     params: dict[str, Any]
 
 
@@ -83,7 +88,7 @@ class FieldDeconstructor:
         return "%s.%s" % (self.field.__class__.__module__, self.field.__class__.__qualname__)
 
     def deconstruct(self) -> Deconstructed:
-        return Deconstructed(path=self.deconstruct_path(), params=self.deconstruct_params())
+        return Deconstructed(path=Path(self.deconstruct_path()), params=self.deconstruct_params())
 
 
 class CharFieldDeconstructor(FieldDeconstructor):
@@ -154,6 +159,22 @@ class AutoFieldDeconstructor(FieldDeconstructor):
         return {}
 
 
+class ArrayFieldDeconstructor(FieldDeconstructor):
+    def deconstruct_params(self) -> dict[str, Any]:
+        params = super().deconstruct_params()
+        if params.get("index", None):
+            params.pop("index")
+
+        deconstructed_field = deconstructor_factory(array_field(self.field)).deconstruct()  # type: ignore[attr-defined]
+        if deconstructed_field.path != "peewee.IntegerField":
+            params["field_class"] = deconstructed_field.path
+        if deconstructed_field.params:
+            params["field_kwargs"] = deconstructed_field.params
+        if self.field.dimensions != 1:  # type: ignore[attr-defined]
+            params["dimensions"] = self.field.dimensions  # type: ignore[attr-defined]
+        return params
+
+
 class ModelDeconstructor:
     def __init__(self, model: ModelCls) -> None:
         self.model = model
@@ -182,6 +203,8 @@ def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstr
         return CharEnumFieldDeconstructor(f)
     if isinstance(f, pw.ForeignKeyField):
         return ForeignKeyFieldDeconstructor(f)
+    if isinstance(f, ArrayField):
+        return ArrayFieldDeconstructor(f)
     if isinstance(f, pw.CharField):
         return CharFieldDeconstructor(f)
     if isinstance(f, pw.DecimalField):
