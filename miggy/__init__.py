@@ -24,6 +24,7 @@ class MigrateHistory(pw.Model):
     """Presents the migrations in database."""
 
     name = pw.CharField()
+    # TODO fix utcnow
     migrated_at = pw.DateTimeField(default=dt.datetime.utcnow)
 
     def __unicode__(self):

@@ -7,6 +7,7 @@ from functools import cached_property
 from importlib import import_module
 
 import peewee as pw
+from playhouse.db_url import connect
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
@@ -50,14 +51,17 @@ class Router(object):
         ignore=None,
         schema=None,
         logger=LOGGER,
-    ):
-        self.database = database
+    ) -> None:
+        
         self.migrate_table = migrate_table
         self.schema = schema
         self.ignore = ignore or []
         self.logger = logger
-        if not isinstance(self.database, (pw.Database, pw.Proxy)):
+        if isinstance(database, str):
+            database = connect(database)
+        if not isinstance(database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
+        self.database = database
         self.migrate_dir = migrate_dir
 
     @cached_property
