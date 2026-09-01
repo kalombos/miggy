@@ -8,21 +8,22 @@ from pathlib import Path
 import click
 
 from miggy.compat import deprecated_options
-import warnings
 from miggy.router import Router
 from miggy.utils import exec_in
 
 VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
 
 
-def get_router(directory, database, schema=None, verbose=0):
+def get_router(directory, database, schema=None, verbose=0, conf_path: Path  | None = None) -> Router:
     from miggy import LOGGER
     
     logging_level = VERBOSE[verbose]
     config = {}
     migrate_table = "migratehistory"
+    migrate_dir = directory
     ignore = None
-    conf_path = os.path.join(directory, "conf.py")
+    if conf_path is None or not conf_path.is_file():
+        conf_path = os.path.join(directory, "conf.py")
     if os.path.exists(conf_path):
         with open(conf_path) as cfg:
             exec_in(cfg.read(), config, config)
@@ -30,37 +31,21 @@ def get_router(directory, database, schema=None, verbose=0):
             ignore = config.get("IGNORE", ignore)
             schema = config.get("SCHEMA", schema)
             migrate_table = config.get("MIGRATE_TABLE", migrate_table)
+            migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
             logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
 
-    print(logging_level, '!!!!!!')
     LOGGER.setLevel(logging_level)
 
     try:
-        return Router(database, migrate_table=migrate_table, migrate_dir=directory, ignore=ignore, schema=schema)
+        return Router(database, migrate_table=migrate_table, migrate_dir=migrate_dir, ignore=ignore, schema=schema)
     except RuntimeError as exc:
         LOGGER.error(exc)
         return sys.exit(1)
 
-def get_router_from_config(conf_path: Path) -> Router | None:
-    if conf_path.is_file():
-        cwd = str(conf_path.parent)
-        if cwd not in sys.path:
-            sys.path.insert(0, cwd)
-
-        database = config.get("DATABASE", database)
-        ignore = config.get("IGNORE", ignore)
-        schema = config.get("SCHEMA", schema)
-        migrate_table = config.get("MIGRATE_TABLE", migrate_table)
-        logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
-    return None
-
 
 def _load_router(directory, database, schema=None, verbose=0) -> Router:
     ctx = click.get_current_context()
-    router = get_router_from_config(ctx.meta["config_path"])
-    if router is None:
-        return get_router(directory, database, schema, verbose)
-    return router
+    return get_router(directory, database, schema, verbose, ctx.meta["config_path"])
     
 
 @click.group()
@@ -133,7 +118,7 @@ def makemigrations(
 @deprecated_options
 def migrate(name=None, database=None, directory=None, schema=None, verbose=None, fake=False):
     """Migrate database."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     migrations = router.run(name, fake=fake)
     if migrations:
         click.echo("Migrations completed: %s" % ", ".join(migrations))
@@ -158,7 +143,7 @@ def migrate(name=None, database=None, directory=None, schema=None, verbose=None,
 @deprecated_options
 def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
     """Create a migration."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     if auto and auto_source:
         auto = auto_source
     router.create(name, auto=auto)
@@ -179,12 +164,12 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
     Rollback a migration with given name or number of last migrations
     with given --count option as integer number
     """
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     if not name:
         if len(router.done) < count:
             raise RuntimeError("Unable to rollback %s migrations from %s: %s" % (count, len(router.done), router.done))
         for _ in range(count):
-            router = get_router(directory, database, schema, verbose)
+            router = _load_router(directory, database, schema, verbose)
             name = router.done[-1]
             router.rollback(name)
     else:
@@ -195,7 +180,7 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
 @deprecated_options
 def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A001
     """List migrations."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     click.echo("Migrations are done:")
     click.echo("\n".join(router.done))
     click.echo("")
@@ -207,5 +192,5 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
 @deprecated_options
 def merge(database=None, directory=None, schema=None, verbose=None):
     """Merge migrations into one."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     router.merge()
