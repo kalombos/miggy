@@ -5,6 +5,8 @@ import sys
 import typing
 from functools import cached_property
 from importlib import import_module
+from logging import Logger
+from pathlib import Path
 
 import peewee as pw
 from playhouse.db_url import connect
@@ -37,9 +39,9 @@ class Migration:
         pass
 
 
-def add_to_sys_path(directory) -> None:
+def add_to_sys_path(directory: str | Path) -> None:
     if directory not in sys.path:
-        sys.path.insert(0, directory)
+        sys.path.insert(0, str(directory))
 
 
 class Router(object):
@@ -49,23 +51,24 @@ class Router(object):
 
     def __init__(
         self,
-        database,
-        migrate_table="migratehistory",
-        migrate_dir="migrations",
-        ignore=None,
-        schema=None,
-        logger=LOGGER,
-        working_dir=None,
+        database: str | pw.Database | pw.Proxy | None,
+        migrate_table: str = "migratehistory",
+        migrate_dir: str | Path = "migrations",
+        ignore: list[str] | None = None,
+        schema: str | None = None,
+        logger: Logger = LOGGER,
+        working_dir: str | Path | None = None,
     ) -> None:
         if isinstance(database, str):
             database = connect(database)
         if not isinstance(database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
         self.database = database
-        self.working_dir = working_dir or os.getcwd()
+        working_dir = working_dir or os.getcwd()
+        self.working_dir = Path(working_dir)
         # Need to append the working_dir to the path for import to work.
         add_to_sys_path(self.working_dir)
-        self.migrate_dir = os.path.join(self.working_dir, migrate_dir)
+        self.migrate_dir = self.working_dir / migrate_dir
         self.migrate_table = migrate_table
         self.schema = schema
         self.ignore = ignore or []

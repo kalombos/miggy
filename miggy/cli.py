@@ -4,6 +4,7 @@ import datetime
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -18,17 +19,17 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
     from miggy import LOGGER
 
     logging_level = VERBOSE[verbose]
-    config = {}
+    config: dict[str, Any] = {}
     migrate_table = "migratehistory"
     working_directory = os.getcwd()
     migrate_dir = directory
     ignore = None
-    if conf_path and conf_path.is_file():
+    if conf_path and conf_path.exists():
         working_directory = conf_path.parent.as_posix()
     else:
         # depreacted conf.py
-        conf_path = os.path.join(directory, "conf.py")
-    if os.path.exists(conf_path):
+        conf_path = Path(directory) / "conf.py"
+    if conf_path.exists():
         # for imports in config
         add_to_sys_path(working_directory)
         with open(conf_path) as cfg:
