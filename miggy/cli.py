@@ -27,7 +27,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
     if conf_path and conf_path.exists():
         working_directory = conf_path.parent.as_posix()
     else:
-        # depreacted conf.py
+        # deprecated conf.py
         conf_path = Path(directory) / "conf.py"
     if conf_path.exists():
         # for imports in config
