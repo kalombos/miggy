@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 from miggy.compat import deprecated_options
-from miggy.router import Router
+from miggy.router import Router, add_to_sys_path
 from miggy.utils import exec_in
 
 VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
@@ -20,11 +20,17 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path  | N
     logging_level = VERBOSE[verbose]
     config = {}
     migrate_table = "migratehistory"
+    working_directory = os.getcwd()
     migrate_dir = directory
     ignore = None
-    if conf_path is None or not conf_path.is_file():
+    if conf_path and conf_path.is_file():
+        working_directory = conf_path.parent.as_posix()
+    else:
+        # depreacted conf.py
         conf_path = os.path.join(directory, "conf.py")
     if os.path.exists(conf_path):
+        # for imports in config
+        add_to_sys_path(working_directory)
         with open(conf_path) as cfg:
             exec_in(cfg.read(), config, config)
             database = config.get("DATABASE", database)
@@ -37,7 +43,14 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path  | N
     LOGGER.setLevel(logging_level)
 
     try:
-        return Router(database, migrate_table=migrate_table, migrate_dir=migrate_dir, ignore=ignore, schema=schema)
+        return Router(
+            database, 
+            migrate_table=migrate_table,
+            migrate_dir=migrate_dir, 
+            ignore=ignore, 
+            schema=schema,
+            working_dir=working_directory
+        )
     except RuntimeError as exc:
         LOGGER.error(exc)
         return sys.exit(1)
@@ -58,12 +71,6 @@ def _load_router(directory, database, schema=None, verbose=0) -> Router:
 @click.pass_context
 def cli(ctx, config: Path) -> None:
     ctx.meta["config_path"] = config
-
-    # allow correctly running from any directory
-    # emulate `python -m ...` behaviour
-    cwd = os.getcwd()
-    if cwd not in sys.path:
-        sys.path.insert(0, cwd)
 
 @cli.command()
 @click.option(

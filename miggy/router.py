@@ -18,8 +18,7 @@ from miggy.utils import exec_in
 from miggy.writer import OperationWriter
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
-CURDIR = os.getcwd()
-DEFAULT_MIGRATE_DIR = os.path.join(CURDIR, "migrations")
+DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
 VOID = lambda m, d: None  # noqa
 with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "template.txt")) as t:
@@ -38,6 +37,10 @@ class Migration:
         pass
 
 
+def add_to_sys_path(directory) -> None:
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
+
 class Router(object):
     """Abstract base class for router."""
 
@@ -46,23 +49,26 @@ class Router(object):
     def __init__(
         self,
         database,
-        migrate_table="migratehistory",
-        migrate_dir=DEFAULT_MIGRATE_DIR,
-        ignore=None,
-        schema=None,
-        logger=LOGGER,
+        migrate_table = "migratehistory",
+        migrate_dir = "migrations",
+        ignore = None,
+        schema = None,
+        logger = LOGGER,
+        working_dir = None
     ) -> None:
-        
-        self.migrate_table = migrate_table
-        self.schema = schema
-        self.ignore = ignore or []
-        self.logger = logger
         if isinstance(database, str):
             database = connect(database)
         if not isinstance(database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
         self.database = database
-        self.migrate_dir = migrate_dir
+        self.working_dir = working_dir or os.getcwd()
+        # Need to append the working_dir to the path for import to work.
+        add_to_sys_path(self.working_dir)
+        self.migrate_dir = os.path.join(self.working_dir, migrate_dir)
+        self.migrate_table = migrate_table
+        self.schema = schema
+        self.ignore = ignore or []
+        self.logger = logger
 
     @cached_property
     def model(self) -> typing.Type[MigrateHistory]:
@@ -105,12 +111,10 @@ class Router(object):
         """Create migrator and setup it with fake migrations."""
         return self.migrator.state
 
-    def load_project_state(self, auto) -> State:
-        # Need to append the CURDIR to the path for import to work.
-        sys.path.append(CURDIR)
+    def load_project_state(self, auto) -> State:        
         modules = [auto]
         if isinstance(auto, bool):
-            modules = [m for _, m, ispkg in pkgutil.iter_modules([CURDIR]) if ispkg]
+            modules = [m for _, m, ispkg in pkgutil.iter_modules([self.working_dir]) if ispkg]
 
         models = [m for module in modules for m in load_models(module)]
 
