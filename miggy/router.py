@@ -41,6 +41,7 @@ def add_to_sys_path(directory) -> None:
     if directory not in sys.path:
         sys.path.insert(0, directory)
 
+
 class Router(object):
     """Abstract base class for router."""
 
@@ -49,12 +50,12 @@ class Router(object):
     def __init__(
         self,
         database,
-        migrate_table = "migratehistory",
-        migrate_dir = "migrations",
-        ignore = None,
-        schema = None,
-        logger = LOGGER,
-        working_dir = None
+        migrate_table="migratehistory",
+        migrate_dir="migrations",
+        ignore=None,
+        schema=None,
+        logger=LOGGER,
+        working_dir=None,
     ) -> None:
         if isinstance(database, str):
             database = connect(database)
@@ -111,7 +112,7 @@ class Router(object):
         """Create migrator and setup it with fake migrations."""
         return self.migrator.state
 
-    def load_project_state(self, auto) -> State:        
+    def load_project_state(self, auto) -> State:
         modules = [auto]
         if isinstance(auto, bool):
             modules = [m for _, m, ispkg in pkgutil.iter_modules([self.working_dir]) if ispkg]

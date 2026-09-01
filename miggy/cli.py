@@ -14,9 +14,9 @@ from miggy.utils import exec_in
 VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
 
 
-def get_router(directory, database, schema=None, verbose=0, conf_path: Path  | None = None) -> Router:
+def get_router(directory, database, schema=None, verbose=0, conf_path: Path | None = None) -> Router:
     from miggy import LOGGER
-    
+
     logging_level = VERBOSE[verbose]
     config = {}
     migrate_table = "migratehistory"
@@ -44,12 +44,12 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path  | N
 
     try:
         return Router(
-            database, 
+            database,
             migrate_table=migrate_table,
-            migrate_dir=migrate_dir, 
-            ignore=ignore, 
+            migrate_dir=migrate_dir,
+            ignore=ignore,
             schema=schema,
-            working_dir=working_directory
+            working_dir=working_directory,
         )
     except RuntimeError as exc:
         LOGGER.error(exc)
@@ -59,18 +59,16 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path  | N
 def _load_router(directory, database, schema=None, verbose=0) -> Router:
     ctx = click.get_current_context()
     return get_router(directory, database, schema, verbose, ctx.meta["config_path"])
-    
+
 
 @click.group()
 @click.option(
-    "--config",
-    envvar="MIGGY_CONFIG",
-    type=click.Path(path_type=Path, resolve_path=True),
-    default=Path("miggyconf.py")
+    "--config", envvar="MIGGY_CONFIG", type=click.Path(path_type=Path, resolve_path=True), default=Path("miggyconf.py")
 )
 @click.pass_context
 def cli(ctx, config: Path) -> None:
     ctx.meta["config_path"] = config
+
 
 @cli.command()
 @click.option(
@@ -94,13 +92,7 @@ def cli(ctx, config: Path) -> None:
 )
 @deprecated_options
 def makemigrations(
-    name=None, 
-    database=None, 
-    auto=True, 
-    auto_source=False, 
-    directory=None, 
-    schema=None, 
-    verbose=None
+    name=None, database=None, auto=True, auto_source=False, directory=None, schema=None, verbose=None
 ) -> None:
     """Create a migration automatically
 
@@ -108,7 +100,6 @@ def makemigrations(
     """
     if name is None:
         name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
-
 
     router = _load_router(directory, database, schema, verbose)
 
