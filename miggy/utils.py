@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import re
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
+from warnings import warn as _warn
 
 import peewee as pw
 
@@ -21,6 +23,13 @@ if TYPE_CHECKING:
 TEMPLATES_DIR = Path(__file__).parent.resolve() / "templates"
 MIGRATION_TEMPLATE = TEMPLATES_DIR / "migration.txt"
 CONFIG_TEMPLATE = TEMPLATES_DIR / "config.txt"
+
+
+deprecated_warn = partial(
+    _warn,
+    category=DeprecationWarning,
+    stacklevel=2,
+)
 
 
 def exec_in(code, glob, loc=None):

@@ -13,7 +13,16 @@ from miggy.utils import CONFIG_TEMPLATE
 
 def _load_router(directory, database, schema=None, verbose=0) -> Router:
     ctx = click.get_current_context()
-    return get_router(directory, database, schema, verbose, ctx.meta["config_path"])
+    conf_path = ctx.meta["config_path"]
+    if not conf_path.exists():
+        click.echo(
+            f"{conf_path} is not found. The old config location (conf.py in the "
+            "migrations directory) and passing configuration parameters via the CLI "
+            "are deprecated. Please run `miggy init` to create a new config."
+        )
+        conf_path = None
+
+    return get_router(directory, database, schema, verbose, conf_path)
 
 
 @click.group()

@@ -17,7 +17,7 @@ from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
 from miggy.operations import MigrateOperation
 from miggy.state import State
-from miggy.utils import MIGRATION_TEMPLATE, exec_in
+from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
 from miggy.writer import OperationWriter
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
@@ -361,11 +361,16 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
     working_directory = os.getcwd()
     migrate_dir = directory
     ignore = None
-    if conf_path and conf_path.exists():
+
+    if conf_path:
         working_directory = conf_path.parent.as_posix()
     else:
-        # deprecated conf.py
+        deprecated_warn(
+            "Calling get_router() with conf_path=None is deprecated. "
+            "Please provide a conf_path."
+        )
         conf_path = Path(directory) / "conf.py"
+
     if conf_path.exists():
         # for imports in config
         add_to_sys_path(working_directory)
