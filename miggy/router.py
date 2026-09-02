@@ -365,10 +365,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
     if conf_path:
         working_directory = conf_path.parent.as_posix()
     else:
-        deprecated_warn(
-            "Calling get_router() with conf_path=None is deprecated. "
-            "Please provide a conf_path."
-        )
+        deprecated_warn("Calling get_router() with conf_path=None is deprecated. Please provide a conf_path.")
         conf_path = Path(directory) / "conf.py"
 
     if conf_path.exists():
