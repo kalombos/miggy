@@ -6,14 +6,14 @@ import peewee as pw
 import pytest
 
 from miggy.auto import MigrationAutodetector
-from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
+from miggy.router import Router
 from miggy.state import State
 from tests.helpers import diff_one, operation_to_one_line
 
 
 def test_on_real_migrations(migrations_dir: Path):
-    router = get_router(migrations_dir, "sqlite:///:memory:")
+    router = Router("sqlite:///:memory:", migrate_dir=migrations_dir)
     router.run()
     migrator = router.migrator
     Person_ = migrator.state["person"]

@@ -15,7 +15,7 @@ import peewee as pw
 __version__ = version("miggy")
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER: logging.Logger = logging.getLogger(__name__)
 LOGGER.addHandler(logging.StreamHandler())
 LOGGER.setLevel(logging.INFO)
 
@@ -24,6 +24,7 @@ class MigrateHistory(pw.Model):
     """Presents the migrations in database."""
 
     name = pw.CharField()
+    # TODO fix utcnow
     migrated_at = pw.DateTimeField(default=dt.datetime.utcnow)
 
     def __unicode__(self):

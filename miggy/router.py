@@ -5,24 +5,25 @@ import sys
 import typing
 from functools import cached_property
 from importlib import import_module
+from logging import Logger
+from pathlib import Path
+from typing import Any
 
 import peewee as pw
+from playhouse.db_url import connect
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
 from miggy.operations import MigrateOperation
 from miggy.state import State
-from miggy.utils import exec_in
+from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
 from miggy.writer import OperationWriter
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
-CURDIR = os.getcwd()
-DEFAULT_MIGRATE_DIR = os.path.join(CURDIR, "migrations")
+DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
 VOID = lambda m, d: None  # noqa
-with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "template.txt")) as t:
-    MIGRATE_TEMPLATE = t.read()
 
 
 class Migration:
@@ -37,6 +38,11 @@ class Migration:
         pass
 
 
+def add_to_sys_path(directory: str | Path) -> None:
+    if directory not in sys.path:
+        sys.path.insert(0, str(directory))
+
+
 class Router(object):
     """Abstract base class for router."""
 
@@ -44,21 +50,29 @@ class Router(object):
 
     def __init__(
         self,
-        database,
-        migrate_table="migratehistory",
-        migrate_dir=DEFAULT_MIGRATE_DIR,
-        ignore=None,
-        schema=None,
-        logger=LOGGER,
-    ):
+        database: str | pw.Database | pw.Proxy | None,
+        migrate_table: str = "migratehistory",
+        migrate_dir: str | Path = "migrations",
+        ignore: list[str] | None = None,
+        schema: str | None = None,
+        logger: Logger = LOGGER,
+        working_dir: str | Path | None = None,
+    ) -> None:
+        if isinstance(database, str):
+            database = connect(database)
+        if not isinstance(database, (pw.Database, pw.Proxy)):
+            raise RuntimeError("Invalid database: %s" % database)
         self.database = database
+        working_dir = working_dir or os.getcwd()
+        self.working_dir = Path(working_dir)
+        # Need to append the working_dir to the path for import to work.
+        add_to_sys_path(self.working_dir)
+        self.migrate_dir = self.working_dir / migrate_dir
         self.migrate_table = migrate_table
         self.schema = schema
         self.ignore = ignore or []
         self.logger = logger
-        if not isinstance(self.database, (pw.Database, pw.Proxy)):
-            raise RuntimeError("Invalid database: %s" % database)
-        self.migrate_dir = migrate_dir
+        self.migration_template = MIGRATION_TEMPLATE.read_text()
 
     @cached_property
     def model(self) -> typing.Type[MigrateHistory]:
@@ -102,11 +116,9 @@ class Router(object):
         return self.migrator.state
 
     def load_project_state(self, auto) -> State:
-        # Need to append the CURDIR to the path for import to work.
-        sys.path.append(CURDIR)
         modules = [auto]
         if isinstance(auto, bool):
-            modules = [m for _, m, ispkg in pkgutil.iter_modules([CURDIR]) if ispkg]
+            modules = [m for _, m, ispkg in pkgutil.iter_modules([self.working_dir]) if ispkg]
 
         models = [m for module in modules for m in load_models(module)]
 
@@ -182,7 +194,7 @@ class Router(object):
         rollback, rollback_imports = self._serialize_changes(rollback_changes)
         imports.update(rollback_imports)
 
-        return MIGRATE_TEMPLATE.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
+        return self.migration_template.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
 
     def compile(
         self, name, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation], num=None
@@ -339,3 +351,46 @@ def detect_changes(
     to_state: State,
 ) -> list[MigrateOperation]:
     return MigrationAutodetector(from_state, to_state).changes()
+
+
+def get_router(directory, database, schema=None, verbose=0, conf_path: Path | None = None) -> Router:
+    VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
+    logging_level = VERBOSE[verbose]
+    config: dict[str, Any] = {}
+    migrate_table = "migratehistory"
+    working_directory = os.getcwd()
+    migrate_dir = directory
+    ignore = None
+
+    if conf_path:
+        working_directory = conf_path.parent.as_posix()
+    else:
+        deprecated_warn("Calling get_router() with conf_path=None is deprecated. Please provide a conf_path.")
+        conf_path = Path(directory) / "conf.py"
+
+    if conf_path.exists():
+        # for imports in config
+        add_to_sys_path(working_directory)
+        with open(conf_path) as cfg:
+            exec_in(cfg.read(), config, config)
+            database = config.get("DATABASE", database)
+            ignore = config.get("IGNORE", ignore)
+            schema = config.get("SCHEMA", schema)
+            migrate_table = config.get("MIGRATE_TABLE", migrate_table)
+            migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
+            logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
+
+    LOGGER.setLevel(logging_level)
+
+    try:
+        return Router(
+            database,
+            migrate_table=migrate_table,
+            migrate_dir=migrate_dir,
+            ignore=ignore,
+            schema=schema,
+            working_dir=working_directory,
+        )
+    except RuntimeError as exc:
+        LOGGER.error(exc)
+        return sys.exit(1)

@@ -5,7 +5,6 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from miggy.cli import get_router
 from miggy.router import Router
 
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
@@ -53,4 +52,4 @@ def patched_pg_db(request: pytest.FixtureRequest) -> Generator[PatchedPgDatabase
 
 @pytest.fixture()
 def router(migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> Router:
-    return get_router(migrations_dir, patched_pg_db)
+    return Router(patched_pg_db, migrate_dir=migrations_dir)

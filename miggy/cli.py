@@ -1,55 +1,49 @@
 """CLI integration."""
 
 import datetime
-import os
-import re
-import sys
+import shutil
+from pathlib import Path
 
 import click
-from playhouse.db_url import connect
 
-VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
-CLEAN_RE = re.compile(r"\s+$", re.M)
+from miggy.compat import deprecated_options
+from miggy.router import Router, get_router
+from miggy.utils import CONFIG_TEMPLATE
 
 
-def get_router(directory, database, schema=None, verbose=0):
-    from miggy import LOGGER
-    from miggy.router import Router
-    from miggy.utils import exec_in
+def _load_router(directory, database, schema=None, verbose=0) -> Router:
+    ctx = click.get_current_context()
+    conf_path = ctx.meta["config_path"]
+    if not conf_path.exists():
+        click.echo(
+            f"{conf_path} is not found. The old config location (conf.py in the "
+            "migrations directory) and passing configuration parameters via the CLI "
+            "are deprecated. Please run `miggy init` to create a new config."
+        )
+        conf_path = None
 
-    logging_level = VERBOSE[verbose]
-    config = {}
-    migrate_table = "migratehistory"
-    ignore = None
-    conf_path = os.path.join(directory, "conf.py")
-    if os.path.exists(conf_path):
-        with open(conf_path) as cfg:
-            exec_in(cfg.read(), config, config)
-            database = config.get("DATABASE", database)
-            ignore = config.get("IGNORE", ignore)
-            schema = config.get("SCHEMA", schema)
-            migrate_table = config.get("MIGRATE_TABLE", migrate_table)
-            logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
-
-    if isinstance(database, str):
-        database = connect(database)
-
-    LOGGER.setLevel(logging_level)
-
-    try:
-        return Router(database, migrate_table=migrate_table, migrate_dir=directory, ignore=ignore, schema=schema)
-    except RuntimeError as exc:
-        LOGGER.error(exc)
-        return sys.exit(1)
+    return get_router(directory, database, schema, verbose, conf_path)
 
 
 @click.group()
-def cli():
-    # allow correctly running from any directory
-    # emulate `python -m ...` behaviour
-    cwd = os.getcwd()
-    if cwd not in sys.path:
-        sys.path.insert(0, cwd)
+@click.option(
+    "--config", envvar="MIGGY_CONFIG", type=click.Path(path_type=Path, resolve_path=True), default=Path("miggyconf.py")
+)
+@click.pass_context
+def cli(ctx, config: Path) -> None:
+    ctx.meta["config_path"] = config
+
+
+@cli.command()
+def init() -> None:
+    ctx = click.get_current_context()
+    conf_path = ctx.meta["config_path"].resolve()
+    if conf_path.exists():
+        raise click.ClickException(f"{conf_path} already exists")
+
+    conf_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(CONFIG_TEMPLATE, conf_path)
+    click.echo(f"Created {conf_path}")
 
 
 @cli.command()
@@ -72,11 +66,10 @@ def cli():
         "Current directory will be recursively scanned by default."
     ),
 )
-@click.option("--database", default=None, help="Database connection")
-@click.option("--directory", default="migrations", help="Directory where migrations are stored")
-@click.option("--schema", default=None, help="Database schema")
-@click.option("-v", "--verbose", count=True)
-def makemigrations(name=None, database=None, auto=True, auto_source=False, directory=None, schema=None, verbose=None):
+@deprecated_options
+def makemigrations(
+    name=None, database=None, auto=True, auto_source=False, directory=None, schema=None, verbose=None
+) -> None:
     """Create a migration automatically
 
     Similar to `create` command, but `auto` is True by default, and `name` not required
@@ -84,7 +77,8 @@ def makemigrations(name=None, database=None, auto=True, auto_source=False, direc
     if name is None:
         name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
 
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
+
     if auto and auto_source:
         auto = auto_source
     name = router.create(name, auto=auto)
@@ -94,14 +88,11 @@ def makemigrations(name=None, database=None, auto=True, auto_source=False, direc
 
 @cli.command()
 @click.option("--name", default=None, help="Select migration")
-@click.option("--database", default=None, help="Database connection")
-@click.option("--directory", default="migrations", help="Directory where migrations are stored")
 @click.option("--fake", is_flag=True, default=False, help="Run migration as fake.")
-@click.option("--schema", default=None, help="Database schema")
-@click.option("-v", "--verbose", count=True)
+@deprecated_options
 def migrate(name=None, database=None, directory=None, schema=None, verbose=None, fake=False):
     """Migrate database."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     migrations = router.run(name, fake=fake)
     if migrations:
         click.echo("Migrations completed: %s" % ", ".join(migrations))
@@ -123,13 +114,10 @@ def migrate(name=None, database=None, directory=None, schema=None, verbose=None,
         "Current directory will be recursively scanned by default."
     ),
 )
-@click.option("--database", default=None, help="Database connection")
-@click.option("--directory", default="migrations", help="Directory where migrations are stored")
-@click.option("--schema", default=None, help="Database schema")
-@click.option("-v", "--verbose", count=True)
+@deprecated_options
 def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
     """Create a migration."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     if auto and auto_source:
         auto = auto_source
     router.create(name, auto=auto)
@@ -144,21 +132,18 @@ def create(name, database=None, auto=False, auto_source=False, directory=None, s
     type=int,
     help="Number of last migrations to be rolled back.Ignored in case of non-empty name",
 )
-@click.option("--database", default=None, help="Database connection")
-@click.option("--directory", default="migrations", help="Directory where migrations are stored")
-@click.option("--schema", default=None, help="Database schema")
-@click.option("-v", "--verbose", count=True)
+@deprecated_options
 def rollback(name, count, database=None, directory=None, schema=None, verbose=None):
     """
     Rollback a migration with given name or number of last migrations
     with given --count option as integer number
     """
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     if not name:
         if len(router.done) < count:
             raise RuntimeError("Unable to rollback %s migrations from %s: %s" % (count, len(router.done), router.done))
         for _ in range(count):
-            router = get_router(directory, database, schema, verbose)
+            router = _load_router(directory, database, schema, verbose)
             name = router.done[-1]
             router.rollback(name)
     else:
@@ -166,13 +151,10 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
 
 
 @cli.command()
-@click.option("--database", default=None, help="Database connection")
-@click.option("--directory", default="migrations", help="Directory where migrations are stored")
-@click.option("--schema", default=None, help="Database schema")
-@click.option("-v", "--verbose", count=True)
+@deprecated_options
 def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A001
     """List migrations."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     click.echo("Migrations are done:")
     click.echo("\n".join(router.done))
     click.echo("")
@@ -181,11 +163,8 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
 
 
 @cli.command()
-@click.option("--database", default=None, help="Database connection")
-@click.option("--directory", default="migrations", help="Directory where migrations are stored")
-@click.option("--schema", default=None, help="Database schema")
-@click.option("-v", "--verbose", count=True)
+@deprecated_options
 def merge(database=None, directory=None, schema=None, verbose=None):
     """Merge migrations into one."""
-    router = get_router(directory, database, schema, verbose)
+    router = _load_router(directory, database, schema, verbose)
     router.merge()

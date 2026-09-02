@@ -1,0 +1,5 @@
+DATABASE = ""
+IGNORE = []
+SCHEMA = None
+MIGRATE_TABLE = "migratehistory"
+MIGRATE_DIR = "migrations"
