@@ -8,7 +8,7 @@ import playhouse
 import pytest
 from playhouse.postgres_ext import Psycopg3Database
 
-from miggy.router import Router, detect_changes, get_router
+from miggy.router import Router, detect_changes
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN
 from tests.helpers import get_active_status
@@ -75,7 +75,7 @@ def test_router_schema(tmpdir):
     migrations = tmpdir.mkdir("migrations")
 
     with mock.patch("miggy.router.Router.done"):
-        router = get_router(str(migrations), "postgres:///fake", schema=schema_name)
+        router = Router(database="postgres:///fake", migrate_dir=str(migrations), schema=schema_name)
 
         assert router.schema == schema_name
         assert router.migrator.schema == schema_name
@@ -91,7 +91,10 @@ def test_router_schema(tmpdir):
 def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration_name: str) -> None:
     db = playhouse.db_url.connect("sqlite:///:memory:")
     with mock.patch.object(db, "transaction") as mocked:
-        router = get_router(resources_dir / "transaction_test", db)
+        router = Router(
+            db,
+            migrate_dir=resources_dir / "transaction_test",
+        )
         router.run_one(migration_name, router.migrator, change_schema=True, change_history=True)
         transaction_called = mocked.call_count == 1
         assert transaction_called is expected
@@ -121,7 +124,7 @@ def test_compile(tmp_path: pathlib.Path) -> None:
 
     d = tmp_path / "migrations"
     d.mkdir()
-    router = get_router(d, Psycopg3Database(POSTGRES_DSN))
+    router = Router(Psycopg3Database(POSTGRES_DSN), migrate_dir=d)
     router.compile("test_router_compile", changes, [])
 
     with open(d / "001_test_router_compile.py") as f:

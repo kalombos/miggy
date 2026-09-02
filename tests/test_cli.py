@@ -4,7 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from miggy.cli import cli
-from miggy.router import get_router
+from miggy.router import Router
 from miggy.utils import CONFIG_TEMPLATE
 
 runner = CliRunner()
@@ -29,7 +29,7 @@ def db_option(db_url):
 
 @pytest.fixture
 def router(tmpdir, db_url):
-    return lambda: get_router(str(tmpdir), db_url)
+    return lambda: Router(database=db_url, migrate_dir=str(tmpdir))
 
 
 @pytest.fixture
