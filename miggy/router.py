@@ -7,6 +7,7 @@ from functools import cached_property
 from importlib import import_module
 from logging import Logger
 from pathlib import Path
+from typing import Any
 
 import peewee as pw
 from playhouse.db_url import connect
@@ -350,3 +351,44 @@ def detect_changes(
     to_state: State,
 ) -> list[MigrateOperation]:
     return MigrationAutodetector(from_state, to_state).changes()
+
+
+def get_router(directory, database, schema=None, verbose=0, conf_path: Path | None = None) -> Router:
+    VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
+    logging_level = VERBOSE[verbose]
+    config: dict[str, Any] = {}
+    migrate_table = "migratehistory"
+    working_directory = os.getcwd()
+    migrate_dir = directory
+    ignore = None
+    if conf_path and conf_path.exists():
+        working_directory = conf_path.parent.as_posix()
+    else:
+        # deprecated conf.py
+        conf_path = Path(directory) / "conf.py"
+    if conf_path.exists():
+        # for imports in config
+        add_to_sys_path(working_directory)
+        with open(conf_path) as cfg:
+            exec_in(cfg.read(), config, config)
+            database = config.get("DATABASE", database)
+            ignore = config.get("IGNORE", ignore)
+            schema = config.get("SCHEMA", schema)
+            migrate_table = config.get("MIGRATE_TABLE", migrate_table)
+            migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
+            logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
+
+    LOGGER.setLevel(logging_level)
+
+    try:
+        return Router(
+            database,
+            migrate_table=migrate_table,
+            migrate_dir=migrate_dir,
+            ignore=ignore,
+            schema=schema,
+            working_dir=working_directory,
+        )
+    except RuntimeError as exc:
+        LOGGER.error(exc)
+        return sys.exit(1)

@@ -6,8 +6,8 @@ import peewee as pw
 import pytest
 
 from miggy.auto import MigrationAutodetector
-from miggy.cli import get_router
 from miggy.operations import AddField, CreateModel
+from miggy.router import get_router
 from miggy.state import State
 from tests.helpers import diff_one, operation_to_one_line
 

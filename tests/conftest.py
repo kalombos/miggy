@@ -5,8 +5,7 @@ from typing import Any
 import peewee as pw
 import pytest
 
-from miggy.cli import get_router
-from miggy.router import Router
+from miggy.router import Router, get_router
 
 POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 

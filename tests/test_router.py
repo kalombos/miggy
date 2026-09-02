@@ -8,8 +8,7 @@ import playhouse
 import pytest
 from playhouse.postgres_ext import Psycopg3Database
 
-from miggy.cli import get_router
-from miggy.router import Router, detect_changes
+from miggy.router import Router, detect_changes, get_router
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN
 from tests.helpers import get_active_status

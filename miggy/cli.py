@@ -1,61 +1,14 @@
 """CLI integration."""
 
 import datetime
-import os
 import shutil
-import sys
 from pathlib import Path
-from typing import Any
 
 import click
 
 from miggy.compat import deprecated_options
-from miggy.router import Router, add_to_sys_path
-from miggy.utils import CONFIG_TEMPLATE, exec_in
-
-VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
-
-
-def get_router(directory, database, schema=None, verbose=0, conf_path: Path | None = None) -> Router:
-    from miggy import LOGGER
-
-    logging_level = VERBOSE[verbose]
-    config: dict[str, Any] = {}
-    migrate_table = "migratehistory"
-    working_directory = os.getcwd()
-    migrate_dir = directory
-    ignore = None
-    if conf_path and conf_path.exists():
-        working_directory = conf_path.parent.as_posix()
-    else:
-        # deprecated conf.py
-        conf_path = Path(directory) / "conf.py"
-    if conf_path.exists():
-        # for imports in config
-        add_to_sys_path(working_directory)
-        with open(conf_path) as cfg:
-            exec_in(cfg.read(), config, config)
-            database = config.get("DATABASE", database)
-            ignore = config.get("IGNORE", ignore)
-            schema = config.get("SCHEMA", schema)
-            migrate_table = config.get("MIGRATE_TABLE", migrate_table)
-            migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
-            logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
-
-    LOGGER.setLevel(logging_level)
-
-    try:
-        return Router(
-            database,
-            migrate_table=migrate_table,
-            migrate_dir=migrate_dir,
-            ignore=ignore,
-            schema=schema,
-            working_dir=working_directory,
-        )
-    except RuntimeError as exc:
-        LOGGER.error(exc)
-        return sys.exit(1)
+from miggy.router import Router, get_router
+from miggy.utils import CONFIG_TEMPLATE
 
 
 def _load_router(directory, database, schema=None, verbose=0) -> Router:

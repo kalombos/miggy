@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from miggy.cli import cli, get_router
+from miggy.cli import cli
+from miggy.router import get_router
 from miggy.utils import CONFIG_TEMPLATE
 
 runner = CliRunner()
