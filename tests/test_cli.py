@@ -1,9 +1,12 @@
+import os
+import pathlib
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
-from miggy.cli import cli
+from miggy.cli import _load_router, cli
 from miggy.router import Router
 from miggy.utils import CONFIG_TEMPLATE
 
@@ -113,6 +116,33 @@ def test_fake(dir_option, db_option, migrations_str, router):
 
     # TODO: Find a way of testing fake. This is unclear why the following fails.
     # assert not router().done
+
+
+def _click_context(conf_path: Path) -> click.Context:
+    ctx = click.Context(cli)
+    ctx.meta["config_path"] = conf_path
+    return ctx
+
+
+def test_load_router(tmp_path: Path) -> None:
+    conf = tmp_path / "miggyconf.py"
+    conf.write_text("DATABASE = 'sqlite:///:memory:'\nMIGRATE_DIR = 'custom_migrations'")
+
+    with _click_context(conf):
+        router = _load_router("migrations", "sqlite:///:memory:")
+
+    assert router.working_dir == tmp_path
+    assert router.migrate_dir == tmp_path / "custom_migrations"
+
+
+def test_load_router_missing_config(capsys: pytest.CaptureFixture[str]) -> None:
+    conf = pathlib.Path("miggyconf.py")
+
+    with _click_context(conf):
+        router = _load_router("migrations", "sqlite:///:memory:")
+
+    assert f"{conf} is not found" in capsys.readouterr().out
+    assert router.migrate_dir == pathlib.Path(os.getcwd()) / "migrations"
 
 
 def test_init_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

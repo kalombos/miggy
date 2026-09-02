@@ -8,7 +8,7 @@ import playhouse
 import pytest
 from playhouse.postgres_ext import Psycopg3Database
 
-from miggy.router import Router, detect_changes
+from miggy.router import Router, detect_changes, get_router
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN
 from tests.helpers import get_active_status
@@ -154,3 +154,59 @@ def test_compile(tmp_path: pathlib.Path) -> None:
             )
             in content
         )
+
+
+def test_get_router_reads_config(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "db.sqlite3"
+    db_path.touch()
+    conf = tmp_path / "miggyconf.py"
+    conf.write_text(
+        "DATABASE = 'sqlite:///%s'\n"
+        "IGNORE = ['ignored_model']\n"
+        "SCHEMA = 'config_schema'\n"
+        "MIGRATE_TABLE = 'custom_history'\n"
+        "MIGRATE_DIR = 'custom_migrations'"
+    )
+
+    router = get_router("cli_dir", "sqlite:///:memory:", "cli_schema", 0, conf_path=conf)
+
+    assert router.ignore == ["ignored_model"]
+    assert router.schema == "config_schema"
+    assert router.migrate_table == "custom_history"
+    assert router.migrate_dir == tmp_path / "custom_migrations"
+    assert router.working_dir == tmp_path
+
+
+def test_get_router_defaults_without_conf_path() -> None:
+    directory = "migrations"
+
+    with pytest.warns(DeprecationWarning, match="conf_path=None"):
+        router = get_router(directory, "sqlite:///:memory:")
+
+    assert isinstance(router, Router)
+    assert router.ignore == []
+    assert router.schema is None
+    assert router.migrate_table == "migratehistory"
+    assert router.migrate_dir == pathlib.Path(os.getcwd()) / directory
+    assert router.working_dir == pathlib.Path(os.getcwd())
+
+
+def test_get_router_falls_back_to_legacy_conf_py(tmp_path: pathlib.Path) -> None:
+    directory = tmp_path / "some_dir"
+    directory.mkdir()
+    (directory / "conf.py").write_text("MIGRATE_TABLE = 'legacy_history'\n")
+
+    with pytest.warns(DeprecationWarning, match="conf_path=None"):
+        router = get_router(directory, "sqlite:///:memory:")
+
+    assert router.migrate_table == "legacy_history"
+    assert router.migrate_dir == pathlib.Path(os.getcwd()) / directory
+    assert router.working_dir == pathlib.Path(os.getcwd())
+
+
+def test_get_router_sys_exit() -> None:
+    with pytest.warns(DeprecationWarning, match="conf_path=None"):
+        with pytest.raises(SystemExit) as exc_info:
+            get_router(str("migrations"), "unknown://foo")
+
+    assert exc_info.value.code == 1
