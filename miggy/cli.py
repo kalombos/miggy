@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ import click
 
 from miggy.compat import deprecated_options
 from miggy.router import Router, add_to_sys_path
-from miggy.utils import exec_in
+from miggy.utils import CONFIG_TEMPLATE, exec_in
 
 VERBOSE = ["WARNING", "INFO", "DEBUG", "NOTSET"]
 
@@ -69,6 +70,18 @@ def _load_router(directory, database, schema=None, verbose=0) -> Router:
 @click.pass_context
 def cli(ctx, config: Path) -> None:
     ctx.meta["config_path"] = config
+
+
+@cli.command()
+def init() -> None:
+    ctx = click.get_current_context()
+    conf_path = ctx.meta["config_path"].resolve()
+    if conf_path.exists():
+        raise click.ClickException(f"{conf_path} already exists")
+
+    conf_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(CONFIG_TEMPLATE, conf_path)
+    click.echo(f"Created {conf_path}")
 
 
 @cli.command()

@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
 
 from miggy.cli import cli, get_router
+from miggy.utils import CONFIG_TEMPLATE
 
 runner = CliRunner()
 
@@ -109,3 +112,45 @@ def test_fake(dir_option, db_option, migrations_str, router):
 
     # TODO: Find a way of testing fake. This is unclear why the following fails.
     # assert not router().done
+
+
+def test_init_default_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["init"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "miggyconf.py").exists()
+
+
+def test_init_creates_config(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    config_path = tmp_path / "config" / "config.py"
+
+    result = runner.invoke(
+        cli,
+        ["--config", str(config_path), "init"],
+    )
+
+    assert result.exit_code == 0
+    assert config_path.exists()
+    assert config_path.read_text() == CONFIG_TEMPLATE.read_text()
+    assert f"Created {config_path}" in result.output
+
+
+def test_init_does_not_overwrite_existing_config(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    config_path = tmp_path / "config.py"
+    config_path.write_text("# my config")
+
+    result = runner.invoke(
+        cli,
+        ["--config", str(config_path), "init"],
+    )
+
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+    assert config_path.read_text() == "# my config"

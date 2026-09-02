@@ -16,15 +16,13 @@ from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
 from miggy.operations import MigrateOperation
 from miggy.state import State
-from miggy.utils import exec_in
+from miggy.utils import MIGRATION_TEMPLATE, exec_in
 from miggy.writer import OperationWriter
 
 CLEAN_RE = re.compile(r"\s+$", re.M)
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
 VOID = lambda m, d: None  # noqa
-with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), "template.txt")) as t:
-    MIGRATE_TEMPLATE = t.read()
 
 
 class Migration:
@@ -73,6 +71,7 @@ class Router(object):
         self.schema = schema
         self.ignore = ignore or []
         self.logger = logger
+        self.migration_template = MIGRATION_TEMPLATE.read_text()
 
     @cached_property
     def model(self) -> typing.Type[MigrateHistory]:
@@ -194,7 +193,7 @@ class Router(object):
         rollback, rollback_imports = self._serialize_changes(rollback_changes)
         imports.update(rollback_imports)
 
-        return MIGRATE_TEMPLATE.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
+        return self.migration_template.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
 
     def compile(
         self, name, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation], num=None

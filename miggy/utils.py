@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import peewee as pw
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
     from playhouse.postgres_ext import ArrayField
 
     from miggy.types import ModelCls
+
+
+TEMPLATES_DIR = Path(__file__).parent.resolve() / "templates"
+MIGRATION_TEMPLATE = TEMPLATES_DIR / "migration.txt"
+CONFIG_TEMPLATE = TEMPLATES_DIR / "config.txt"
 
 
 def exec_in(code, glob, loc=None):
