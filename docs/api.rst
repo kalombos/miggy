@@ -26,9 +26,11 @@ Migrate operations
 .. autoclass:: miggy.operations::RenameField
 .. autoclass:: miggy.operations::AddPrimaryKeyConstraint
 .. autoclass:: miggy.operations::RemovePrimaryKeyConstraint
+.. autoclass:: miggy.operations::AddCheckConstraint
+.. autoclass:: miggy.operations::RemoveCheckConstraint
 
 Migrator
 ++++++++++++++++++
 .. autoclass:: miggy.migrator::Migrator
-    :members: add_operation,python,sql,create_model,remove_model,add_field,alter_field,remove_field,rename_field,rename_table,add_index,drop_index,add_primary_key_constraint,remove_primary_key_constraint
+    :members: add_operation,python,sql,create_model,remove_model,add_field,alter_field,remove_field,rename_field,rename_table,add_index,drop_index,add_primary_key_constraint,remove_primary_key_constraint,add_check_constraint,remove_check_constraint
     :member-order: bysource

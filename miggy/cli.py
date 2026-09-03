@@ -27,7 +27,12 @@ def _load_router(directory, database, schema=None, verbose=0) -> Router:
 
 @click.group()
 @click.option(
-    "--config", envvar="MIGGY_CONFIG", type=click.Path(path_type=Path, resolve_path=True), default=Path("miggyconf.py")
+    "--config",
+    envvar="MIGGY_CONFIG",
+    show_envvar=True,
+    type=click.Path(path_type=Path, resolve_path=True),
+    default=Path("miggyconf.py"),
+    help="Path to the config file. Defaults to miggyconf.py in the current directory.",
 )
 @click.pass_context
 def cli(ctx, config: Path) -> None:
@@ -36,6 +41,7 @@ def cli(ctx, config: Path) -> None:
 
 @cli.command()
 def init() -> None:
+    """Create a default configuration file."""
     ctx = click.get_current_context()
     conf_path = ctx.meta["config_path"].resolve()
     if conf_path.exists():
@@ -99,31 +105,6 @@ def migrate(name=None, database=None, directory=None, schema=None, verbose=None,
 
 
 @cli.command()
-@click.argument("name")
-@click.option(
-    "--auto",
-    default=False,
-    is_flag=True,
-    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
-)
-@click.option(
-    "--auto-source",
-    default=False,
-    help=(
-        "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "Current directory will be recursively scanned by default."
-    ),
-)
-@deprecated_options
-def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
-    """Create a migration."""
-    router = _load_router(directory, database, schema, verbose)
-    if auto and auto_source:
-        auto = auto_source
-    router.create(name, auto=auto)
-
-
-@cli.command()
 @click.argument("name", required=False)
 @click.option(
     "--count",
@@ -162,9 +143,37 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
     click.echo("\n".join(router.diff))
 
 
+# Candidates for deprecation
+
+
 @cli.command()
 @deprecated_options
 def merge(database=None, directory=None, schema=None, verbose=None):
     """Merge migrations into one."""
     router = _load_router(directory, database, schema, verbose)
     router.merge()
+
+
+@cli.command()
+@click.argument("name")
+@click.option(
+    "--auto",
+    default=False,
+    is_flag=True,
+    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
+)
+@click.option(
+    "--auto-source",
+    default=False,
+    help=(
+        "Set to python module path for changes autoscan (e.g. 'package.models'). "
+        "Current directory will be recursively scanned by default."
+    ),
+)
+@deprecated_options
+def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
+    """Create a migration."""
+    router = _load_router(directory, database, schema, verbose)
+    if auto and auto_source:
+        auto = auto_source
+    router.create(name, auto=auto)
