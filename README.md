@@ -1,35 +1,33 @@
 Miggy
 ============
-
-
-A simple migration engine for **[peewee](https://github.com/coleifer/peewee)**.
-
-
 [![CI workflow](https://github.com/kalombos/miggy/actions/workflows/tests.yml/badge.svg)](https://github.com/kalombos/miggy/actions/workflows/tests.yml) [![PyPi Version](http://img.shields.io/pypi/v/miggy.svg?style=flat-square)](https://pypi.python.org/pypi/miggy)
 
+A database migration engine for [Peewee](https://github.com/coleifer/peewee), inspired by the architecture of Django migrations.
 
-Why Fork?
----------
+Miggy builds a state from your migrations and automatically generates a diff against the current model state to create a migration.
 
-This project is a fork of the original <https://github.com/klen/peewee_migrate> by `klen` — many thanks to them for the initial work!
-
-Since the original project has not been actively maintained for some time, this fork was created to fix critical issues and continue development.
-
-Requirements
-------------
-
--   python >= 3.10
--   peewee>=3.17.9
+Miggy supports detecting changes to most Peewee classes used to define a table, including **fields, indexes, primary keys, DEFAULT and CHECK constraints**.
 
 
-Installation
-------------
+### New to Miggy?
+
+* [Quickstart](https://miggy.readthedocs.io/en/latest/quickstart.html)
+* [Example app](https://github.com/kalombos/miggy/tree/master/examples/quickstart)
+* [How to start with an existing database schema](https://miggy.readthedocs.io/en/latest/howto.html#how-to-start-with-an-existing-database-schema)
+* [Read the documentation](https://miggy.readthedocs.io)
+
+
+
+
+### Installation
     pip install miggy
 
 
-Documentation
--------------
-https://miggy.readthedocs.io
+### Why Fork?
+
+Since the original project has not been actively maintained for some time, this project started as a fork of the original [peewee_migrate](https://github.com/klen/peewee_migrate) by `klen` — many thanks to them for the initial work!
+
+Since the fork, the project has been significantly reworked. The architecture has been almost completely redesigned, numerous bugs have been fixed, and support for many Peewee schema features has been added.
 
 Usage
 -----
@@ -43,70 +41,21 @@ Getting help:
     Usage: miggy [OPTIONS] COMMAND [ARGS]...
 
     Options:
-        --help  Show this message and exit.
+        --config PATH  Path to the config file. Defaults to miggyconf.py in the
+                        current directory.  [env var: MIGGY_CONFIG]
+        --help         Show this message and exit.
 
     Commands:
-        create   Create migration.
-        migrate  Run migrations.
-        rollback Rollback migration.
+        create          Create a migration.
+        init            Create a default configuration file.
+        list            List migrations.
+        makemigrations  Create a migration automatically
+        merge           Merge migrations into one.
+        migrate         Migrate database.
+        rollback        Rollback a migration with given name or number of last...
 
-Create migration:
 
-    $ miggy create --help
 
-    Usage: miggy create [OPTIONS] NAME
-
-        Create migration.
-
-    Options:
-        --auto                  FLAG  Scan sources and create db migrations automatically. Supports autodiscovery.
-        --auto-source           TEXT  Set to python module path for changes autoscan (e.g. 'package.models'). Current directory will be recursively scanned by default.
-        --database              TEXT  Database connection
-        --directory             TEXT  Directory where migrations are stored
-        --schema                TEXT  Database schema
-        -v, --verbose
-        --help                        Show this message and exit.
-
-Run migrations:
-
-    $ miggy migrate --help
-
-    Usage: miggy migrate [OPTIONS]
-
-        Run migrations.
-
-    Options:
-        --name                  TEXT  Select migration
-        --database              TEXT  Database connection
-        --directory             TEXT  Directory where migrations are stored
-        --schema                TEXT  Database schema
-        -v, --verbose
-        --help                        Show this message and exit.
-
-Auto create migration:
-
-    $ miggy makemigrations --help
-
-    Usage: miggy makemigrations [OPTIONS]
-
-      Create a migration automatically
-
-      Similar to `create` command, but `auto` is True by default, and `name` not
-      required
-
-    Options:
-        --name TEXT         Migration file name. By default will be
-                          'auto_YYYYmmdd_HHMM'
-        --auto              Scan sources and create db migrations automatically.
-                          Supports autodiscovery.
-        --auto-source TEXT  Set to python module path for changes autoscan (e.g.
-                          'package.models'). Current directory will be recursively
-                          scanned by default.
-        --database TEXT     Database connection
-        --directory TEXT    Directory where migrations are stored
-        --schema                TEXT  Database schema
-        -v, --verbose
-        --help              Show this message and exit.
 
 ### From python
 
@@ -126,7 +75,7 @@ Auto create migration:
 
 ### Migration files
 
-By default, migration files are looked up in `os.getcwd()/migrations`
+By default, migration files are looked up in `config_path/migrations`
 directory, but custom directory can be given.
 
 Migration files are sorted and applied in ascending order per their
@@ -141,12 +90,7 @@ Each migration file must specify `migrate()` function and may specify
     def rollback(migrator, database, fake=False, **kwargs):
         pass
 
-Bug tracker
------------
 
-If you have any suggestions, bug reports or annoyances please report
-them to the issue tracker at
-<https://github.com/kalombos/miggy/issues>
 
 Developing
 ----------
@@ -168,11 +112,6 @@ Run checks and tests:
 ```bash
 poe check
 ```
-
-Contributors
-------------
-
-See [AUTHORS.md](https://github.com/kalombos/miggy/blob/develop/AUTHORS.md)
 
 License
 -------

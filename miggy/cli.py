@@ -27,7 +27,12 @@ def _load_router(directory, database, schema=None, verbose=0) -> Router:
 
 @click.group()
 @click.option(
-    "--config", envvar="MIGGY_CONFIG", type=click.Path(path_type=Path, resolve_path=True), default=Path("miggyconf.py")
+    "--config",
+    envvar="MIGGY_CONFIG",
+    show_envvar=True,
+    type=click.Path(path_type=Path, resolve_path=True),
+    default=Path("miggyconf.py"),
+    help="Path to the config file. Defaults to miggyconf.py in the current directory.",
 )
 @click.pass_context
 def cli(ctx, config: Path) -> None:
@@ -36,6 +41,7 @@ def cli(ctx, config: Path) -> None:
 
 @cli.command()
 def init() -> None:
+    """Create a default configuration file."""
     ctx = click.get_current_context()
     conf_path = ctx.meta["config_path"].resolve()
     if conf_path.exists():
