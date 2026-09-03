@@ -1,13 +1,13 @@
 Quickstart
-====================
+==========
 
+Assume that ``quickstart`` is the root directory of our project.
 
-
-Assume that **quickstart** is the root directory of our project. 
-Inside it, create a directory named **app**, and within that directory add our models in a file called **models.py**. 
-Don't forget to also include an **__init__.py** file::
+Inside it, create a directory named ``app``. Add a ``models.py`` file
+containing our models, and don't forget to include an ``__init__.py`` file::
 
     import peewee as pw
+
     from playhouse.postgres_ext import DateTimeTZField, PostgresqlExtDatabase
 
     POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
@@ -16,6 +16,7 @@ Don't forget to also include an **__init__.py** file::
 
 
     class BaseModel(pw.Model):
+
         created_at = DateTimeTZField(constraints=[pw.SQL("DEFAULT now()")])
 
         class Meta:
@@ -23,102 +24,56 @@ Don't forget to also include an **__init__.py** file::
 
 
     class User(BaseModel):
+
         first_name = pw.CharField()
-        last_name = pw.CharField()        
+
+        last_name = pw.CharField()
 
         class Meta:
             database = database
 
-Now we need to configure **Miggy**. To do this, we create a directory named **quickstart/migrations**, and inside it add a file called **conf.py**::
 
-    from app.models import BaseModel, database
+Now let's configure Miggy. Run ``miggy init`` to create the configuration
+file, then edit ``miggyconf.py``:
 
-    DATABASE = database
-
-    # database.allow_sync() # if you use peewee-async
-
-    IGNORE = [BaseModel._meta.name] # we don't want migrations for abstract model
-
-Thats'it! Now you can run **miggy makemigrations** command and get the first migration::
+.. literalinclude:: ../examples/quickstart/miggyconf.py
+   :language: python
 
 
-    import peewee as pw
+That's it! Now you can run ``miggy makemigrations`` to generate your first
+migration:
 
-    import playhouse.postgres_ext as pw_pext
-
-    # Run the migration inside a single transaction
-    __ATOMIC = True
-
-
-    def migrate(migrator, database, fake=False):
-        """Write your migrations here."""
-
-        @migrator.create_model
-        class User(pw.Model):
-            id = pw.AutoField()
-            created_at = pw_pext.DateTimeTZField(constraints=[pw.SQL("DEFAULT now()")])
-            first_name = pw.CharField(max_length=255)
-            last_name = pw.CharField(max_length=255)
-
-            class Meta:
-                table_name = "user"
-
-    def rollback(migrator, database, fake=False):
-        """Write your rollback migrations here."""
-
-        migrator.remove_model('user')
+.. literalinclude:: ../examples/quickstart/migrations/001_auto_20260903_1414.py
+   :language: python
 
 
+Now run ``miggy migrate`` to apply the migration to the database. If needed,
+you can use ``miggy rollback`` to revert the changes.
 
-Now can we run **miggy migrate** and get the changes applied to the database. We can use **miggy rollback** to revert changes if needed. 
-
-Ok let's change our model a bit::
+Let's change our model a bit::
 
     class User(BaseModel):
+
         first_name = pw.CharField()
+
         last_name = pw.CharField(index=True)
+
         age = pw.IntegerField(null=True)
 
         class Meta:
             database = database
 
 
-Run **miggy makemigrations** again to generate the new migration::
+Run ``miggy makemigrations`` again to generate a new migration:
 
-    import datetime as dt
-
-    import peewee as pw
-
-    import playhouse.postgres_ext as pw_pext
-
-    SQL = pw.SQL
+.. literalinclude:: ../examples/quickstart/migrations/002_auto_20260903_1414.py
+   :language: python
 
 
-    # Run the migration inside a single transaction
-    __ATOMIC = True
+And that's it! Miggy has detected the changes and generated the migration
+for you.
 
-
-    def migrate(migrator, database, fake=False):
-        """Write your migrations here."""
-
-        migrator.add_fields(
-            'user',
-
-            age=pw.IntegerField(null=True))
-
-        migrator.change_fields('user', last_name=pw.CharField(index=True, max_length=255))
-
-
-    def rollback(migrator, database, fake=False):
-        """Write your rollback migrations here."""
-
-        migrator.remove_fields('user', 'age')
-
-        migrator.change_fields('user', last_name=pw.CharField(max_length=255))
-
-
-It has worked again!
-
-If you need the source code of the example you can find it on `GitHub`_.
+If you need the complete source code for this example, you can find it on
+`GitHub`_.
 
 .. _GitHub: https://github.com/kalombos/miggy/tree/master/examples/quickstart

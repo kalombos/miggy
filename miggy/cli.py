@@ -99,31 +99,6 @@ def migrate(name=None, database=None, directory=None, schema=None, verbose=None,
 
 
 @cli.command()
-@click.argument("name")
-@click.option(
-    "--auto",
-    default=False,
-    is_flag=True,
-    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
-)
-@click.option(
-    "--auto-source",
-    default=False,
-    help=(
-        "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "Current directory will be recursively scanned by default."
-    ),
-)
-@deprecated_options
-def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
-    """Create a migration."""
-    router = _load_router(directory, database, schema, verbose)
-    if auto and auto_source:
-        auto = auto_source
-    router.create(name, auto=auto)
-
-
-@cli.command()
 @click.argument("name", required=False)
 @click.option(
     "--count",
@@ -162,9 +137,37 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
     click.echo("\n".join(router.diff))
 
 
+# Candidates for deprecation
+
+
 @cli.command()
 @deprecated_options
 def merge(database=None, directory=None, schema=None, verbose=None):
     """Merge migrations into one."""
     router = _load_router(directory, database, schema, verbose)
     router.merge()
+
+
+@cli.command()
+@click.argument("name")
+@click.option(
+    "--auto",
+    default=False,
+    is_flag=True,
+    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
+)
+@click.option(
+    "--auto-source",
+    default=False,
+    help=(
+        "Set to python module path for changes autoscan (e.g. 'package.models'). "
+        "Current directory will be recursively scanned by default."
+    ),
+)
+@deprecated_options
+def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
+    """Create a migration."""
+    router = _load_router(directory, database, schema, verbose)
+    if auto and auto_source:
+        auto = auto_source
+    router.create(name, auto=auto)

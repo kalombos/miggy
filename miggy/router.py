@@ -118,7 +118,7 @@ class Router(object):
     def load_project_state(self, auto) -> State:
         modules = [auto]
         if isinstance(auto, bool):
-            modules = [m for _, m, ispkg in pkgutil.iter_modules([self.working_dir]) if ispkg]
+            modules = [m for _, m, ispkg in pkgutil.iter_modules([str(self.working_dir)]) if ispkg]
 
         models = [m for module in modules for m in load_models(module)]
 

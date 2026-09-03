@@ -492,6 +492,8 @@ class ChangeNullable(MigrateOperation):
 
 
 class AddCheckConstraint(MigrateOperation):
+    """Add a check constraint."""
+
     def __init__(self, model_name: str, name: str, constraint: str) -> None:
         self.model_name = model_name
         self.name = name
@@ -508,6 +510,8 @@ class AddCheckConstraint(MigrateOperation):
 
 
 class RemoveCheckConstraint(MigrateOperation):
+    """Remove a check constraint."""
+
     def __init__(self, model_name: str, name: str) -> None:
         self.model_name = model_name
         self.name = name
@@ -523,6 +527,8 @@ class RemoveCheckConstraint(MigrateOperation):
 
 
 class AddPrimaryKeyConstraint(MigrateOperation):
+    """Add a primary key constraint."""
+
     def __init__(self, model_name: str, *fields: str) -> None:
         self.model_name = model_name
         self.fields = fields
@@ -539,6 +545,8 @@ class AddPrimaryKeyConstraint(MigrateOperation):
 
 
 class RemovePrimaryKeyConstraint(MigrateOperation):
+    """Remove a primary key constraint."""
+
     def __init__(self, model_name: str) -> None:
         self.model_name = model_name
 
