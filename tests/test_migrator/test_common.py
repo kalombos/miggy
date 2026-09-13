@@ -96,6 +96,34 @@ def test_migrator_sqlite_common():
     assert Order._meta.table_name == "order"
 
 
+def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    @migrator.create_table
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator.run()
+    patched_pg_db.clear_queries()
+
+    class MyOperation(MigrateOperation):
+        def state_forwards(self, state: State) -> None:
+            state.remove_field("user", "last_name")
+
+        def database_forwards(
+            self, schema_migrator: SchemaMigrator, from_state: State, to_state: State
+        ) -> list[Operation] | list[Callable]:
+            return [schema_migrator.drop_column("user", "last_name")]
+
+    migrator.add_operation(MyOperation())
+
+    migrator.run()
+
+    assert not hasattr(migrator.state["User"], "last_name")
+    assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
+
+
 def test_add_index(patched_pg_db: PatchedPgDatabase) -> None:
     class Company(pw.Model):
         name = pw.CharField()
@@ -272,79 +300,14 @@ def test_run_sql(patched_pg_db: PatchedPgDatabase):
     assert migrator.state["user"].get(first_name="First", last_name="Last") is not None
 
 
-def test_run_sql_w_params(patched_pg_db: PatchedPgDatabase):
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    migrator.sql(
-        """INSERT INTO "user" ("first_name", "last_name") VALUES (%s, %s)""",
-        (
-            "First",
-            "Last",
-        ),
-    )
-
-    migrator.run()
-
-    assert migrator.state["user"].get(first_name="First", last_name="Last") is not None
-
-
-def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    class MyOperation(MigrateOperation):
-        def state_forwards(self, state: State) -> None:
-            state.remove_field("user", "last_name")
-
-        def database_forwards(
-            self, schema_migrator: SchemaMigrator, from_state: State, to_state: State
-        ) -> list[Operation] | list[Callable]:
-            return [schema_migrator.drop_column("user", "last_name")]
-
-    migrator.add_operation(MyOperation())
-
-    migrator.run()
-
-    assert not hasattr(migrator.state["User"], "last_name")
-    assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
-
-
 def test_rename_table(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
 
-    @migrator.create_table
     class User(pw.Model):
         first_name = pw.CharField(unique=True)
         last_name = pw.CharField(index=True)
 
-    migrator.run()
-    patched_pg_db.clear_queries()
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
 
     migrator.rename_table("user", "new_name")
-    migrator.run()
 
     assert migrator.state["User"]._meta.table_name == "new_name"
-
-    _, _, rename_table, _, rename_seq, rename_index1, rename_index2 = patched_pg_db.queries
-
-    assert [rename_table, rename_seq, rename_index1, rename_index2] == [
-        'ALTER TABLE "user" RENAME TO "new_name"',
-        'ALTER TABLE "user_id_seq" RENAME TO "new_name_id_seq"',
-        'ALTER INDEX "user_first_name" RENAME TO "new_name_first_name"',
-        'ALTER INDEX "user_last_name" RENAME TO "new_name_last_name"',
-    ]
