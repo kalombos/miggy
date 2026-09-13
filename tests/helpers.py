@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from enum import IntEnum
 from textwrap import dedent
 
@@ -46,6 +47,9 @@ def diff_one(prev: ModelCls, current: ModelCls) -> list[MigrateOperation]:
     return MigrationAutodetector(State({"test": prev}), State({"test": current})).diff_one("test")
 
 
-def run_operations(operations: list[Operation]) -> None:
+def run_operations(operations: list[Operation | Callable]) -> None:
     for o in operations:
-        o.run()
+        if isinstance(o, Operation):
+            o.run()
+        else:
+            o()
