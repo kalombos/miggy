@@ -124,13 +124,10 @@ def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
     assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
 
 
-
 def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 
-    migrator.create_model(
-        name="Company", fields={"name": pw.CharField()}, meta={"table_name": "some_name"}
-    )
+    migrator.create_model(name="Company", fields={"name": pw.CharField()}, meta={"table_name": "some_name"})
 
     assert migrator.state["company"]._meta.table_name == "some_name"
     assert isinstance(migrator.state["company"].name, pw.CharField)
@@ -167,6 +164,35 @@ def test_drop_index(patched_pg_db: PatchedPgDatabase) -> None:
     )
 
     assert indexes_state(migrator.state["company"]).get("some_name") is None
+
+
+def test_add_field(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.add_field("user", "email", pw.CharField(max_length=255, null=True))
+
+    email = migrator.state["user"].email
+    assert isinstance(email, pw.CharField)
+    assert email.max_length == 255
+    assert email.null is True
+
+
+def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.add_fields("user", last_name=pw.CharField(null=True), age=pw.IntegerField(null=True))
+
+    user = migrator.state["user"]
+    assert isinstance(user.last_name, pw.CharField)
+    assert user.last_name.null is True
+    assert isinstance(user.age, pw.IntegerField)
+    assert user.age.null is True
 
 
 def test_remove_field(patched_pg_db: PatchedPgDatabase) -> None:

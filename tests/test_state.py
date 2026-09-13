@@ -61,6 +61,20 @@ def test_add_field() -> None:
     assert isinstance(model.email, pw.CharField)
 
 
+def test_add_field__pk() -> None:
+    class User(pw.Model):
+        class Meta:
+            primary_key = False
+
+    state = State({"user": User})
+
+    state.add_field("User", name="custom_id", field=pw.IntegerField(primary_key=True))
+    model = state["user"]
+
+    assert model._meta.primary_key is model.custom_id
+    assert model.custom_id.primary_key
+
+
 def test_add_field__fk() -> None:
     class RelatedModel(pw.Model):
         f = pw.CharField()
