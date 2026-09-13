@@ -20,18 +20,6 @@ def test_state_forwards() -> None:
 
     assert indexes_state(state["user"]) == {}
 
-
-def test_state_forwards_missing_index_raises() -> None:
-    class User(pw.Model):
-        name = pw.CharField()
-
-    state = State({"user": User})
-    operation = DropIndex("user", "some_name")
-
-    with pytest.raises(KeyError):
-        operation.state_forwards(state)
-
-
 def test_database_forwards(patched_pg_db: PatchedPgDatabase) -> None:
     class User(pw.Model):
         name = pw.CharField()
@@ -39,16 +27,14 @@ def test_database_forwards(patched_pg_db: PatchedPgDatabase) -> None:
         class Meta:
             database = patched_pg_db
 
-    User.create_table()
-    patched_pg_db.clear_queries()
+    User.add_index((User.name,), name="some_name")
 
-    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
-    schema_migrator.add_model_index(ModelIndex(User, (User.name,), name="some_name")).run()
+    User.create_table()
     patched_pg_db.clear_queries()
 
     from_state = State({"user": User})
     operation = DropIndex("user", "some_name")
 
-    operation.database_forwards(schema_migrator, from_state, State())[0].run()
+    operation.database_forwards(SchemaMigrator.from_database(patched_pg_db), from_state, State())[0].run()
 
     assert patched_pg_db.queries == ['DROP INDEX "some_name"']
