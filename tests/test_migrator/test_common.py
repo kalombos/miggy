@@ -129,6 +129,48 @@ def test_drop_index(patched_pg_db: PatchedPgDatabase) -> None:
     assert indexes_state(migrator.state["company"]).get("some_name") is None
 
 
+def test_remove_field(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+        created_at = pw.DateField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.remove_field("user", "name")
+
+    user = migrator.state["user"]
+    assert not hasattr(user, "name")
+
+
+def test_remove_fields(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+        created_at = pw.DateField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.remove_fields("user", "name", "created_at")
+
+    user = migrator.state["user"]
+    assert not hasattr(user, "name")
+    assert not hasattr(user, "created_at")
+
+
+def test_remove_model(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField(index=True)
+        created_at = pw.DateField()
+
+        class Meta:
+            table_name = "what"
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.remove_model("user")
+
+    assert "user" not in migrator.state
+
+
 def test_migrator_schema(patched_pg_db: PatchedPgDatabase):
     schema_name = "test_schema"
     patched_pg_db.execute_sql("DROP SCHEMA IF EXISTS test_schema CASCADE;")
