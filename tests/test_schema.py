@@ -3,7 +3,7 @@ import pytest
 from playhouse.postgres_ext import ArrayField
 
 from miggy.schema import SchemaMigrator
-from miggy.utils import copy_model
+from miggy.utils import ModelIndex, copy_model
 from tests.conftest import PatchedPgDatabase
 
 
@@ -337,3 +337,25 @@ def test___resolve_alter_check_constraints(
     schema_migrator._resolve_alter_check_constraints(old_field, new_field).run()
 
     assert patched_pg_db.queries == expected
+
+
+def test__add_model_index(patched_pg_db: PatchedPgDatabase) -> None:
+    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    class Model(pw.Model):
+        name = pw.CharField()
+        created_at = pw.DateField()
+
+        class Meta:
+            database = patched_pg_db
+
+    Model.create_table()
+    patched_pg_db.clear_queries()
+
+    model_index = ModelIndex(Model, [Model.name, Model.created_at], name="name_created_at_index", safe=True)
+
+    schema_migrator.add_model_index(model_index).run()
+
+    assert patched_pg_db.queries == [
+        'CREATE INDEX IF NOT EXISTS "name_created_at_index" ON "model" ("name", "created_at")'
+    ]
