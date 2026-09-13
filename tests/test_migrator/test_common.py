@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
 import peewee as pw
-import pytest
 from playhouse.db_url import connect
 from playhouse.migrate import Operation
 
@@ -9,6 +8,7 @@ from miggy import Migrator, types
 from miggy.operations import MigrateOperation
 from miggy.schema import SchemaMigrator
 from miggy.state import State
+from miggy.utils import ModelIndex, indexes_state
 from tests.conftest import PatchedPgDatabase
 
 
@@ -96,53 +96,37 @@ def test_migrator_sqlite_common():
     assert Order._meta.table_name == "order"
 
 
-@pytest.mark.parametrize(
-    ("fields", "name", "unique", "where", "expected"),
-    [
-        (
-            ("name",),
-            "user_name",
-            False,
-            None,
-            'CREATE INDEX "user_name" ON "user" ("name")',
-        ),
-        (
-            ("name", "created_at"),
-            "user_name_created_at",
-            True,
-            None,
-            'CREATE UNIQUE INDEX "user_name_created_at" ON "user" ("name", "created_at")',
-        ),
-        (
-            ("name",),
-            "some_name",
-            False,
-            pw.SQL("name = 'John'"),
-            """CREATE INDEX "some_name" ON "user" ("name") WHERE name = 'John'""",
-        ),
-    ],
-)
-def test_migrator_add_index(
-    patched_pg_db: PatchedPgDatabase,
-    fields: tuple[str, ...],
-    name: str,
-    unique: bool,
-    where: pw.SQL | None,
-    expected: str,
-) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
+def test_add_index(patched_pg_db: PatchedPgDatabase) -> None:
+    class Company(pw.Model):
         name = pw.CharField()
-        created_at = pw.DateField()
 
-    migrator.run()
-    patched_pg_db.clear_queries()
+    migrator = Migrator(patched_pg_db, state=State({"company": Company}))
 
-    migrator.add_index("user", *fields, name=name, unique=unique, where=where)
-    migrator.run()
-    assert patched_pg_db.queries == [expected]
+    migrator.add_index(
+        "company",
+        "name",
+        name="some_name",
+    )
+
+    index = indexes_state(migrator.state["company"])["some_name"]
+    assert index._name == "some_name"
+    assert [e.name for e in index._expressions] == ["name"]
+
+
+def test_drop_index(patched_pg_db: PatchedPgDatabase) -> None:
+    class Company(pw.Model):
+        name = pw.CharField()
+
+    indexes_state(Company)["some_name"] = ModelIndex(Company, ("name"), name="some_name")
+
+    migrator = Migrator(patched_pg_db, state=State({"company": Company}))
+
+    migrator.drop_index(
+        "company",
+        name="some_name",
+    )
+
+    assert indexes_state(migrator.state["company"]).get("some_name") is None
 
 
 def test_migrator_schema(patched_pg_db: PatchedPgDatabase):
