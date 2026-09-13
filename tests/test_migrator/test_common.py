@@ -171,6 +171,34 @@ def test_remove_model(patched_pg_db: PatchedPgDatabase) -> None:
     assert "user" not in migrator.state
 
 
+def test_add_not_null(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField(null=True)
+        created_at = pw.DateField(null=True)
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.add_not_null("user", "name", "created_at")
+
+    user = migrator.state["user"]
+    assert user.name.null is False
+    assert user.created_at.null is False
+
+
+def test_drop_not_null(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+        created_at = pw.DateField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.drop_not_null("user", "name", "created_at")
+
+    user = migrator.state["user"]
+    assert user.name.null is True
+    assert user.created_at.null is True
+
+
 def test_migrator_schema(patched_pg_db: PatchedPgDatabase):
     schema_name = "test_schema"
     patched_pg_db.execute_sql("DROP SCHEMA IF EXISTS test_schema CASCADE;")
