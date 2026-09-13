@@ -124,6 +124,18 @@ def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
     assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
 
 
+
+def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
+    migrator = Migrator(patched_pg_db)
+
+    migrator.create_model(
+        name="Company", fields={"name": pw.CharField()}, meta={"table_name": "some_name"}
+    )
+
+    assert migrator.state["company"]._meta.table_name == "some_name"
+    assert isinstance(migrator.state["company"].name, pw.CharField)
+
+
 def test_add_index(patched_pg_db: PatchedPgDatabase) -> None:
     class Company(pw.Model):
         name = pw.CharField()
