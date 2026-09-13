@@ -359,3 +359,50 @@ def test__add_model_index(patched_pg_db: PatchedPgDatabase) -> None:
     assert patched_pg_db.queries == [
         'CREATE INDEX IF NOT EXISTS "name_created_at_index" ON "model" ("name", "created_at")'
     ]
+
+
+@pytest.mark.parametrize(
+    ("old_field", "new_field", "expected"),
+    [
+        pytest.param(
+            pw.CharField(column_name="field"),
+            pw.CharField(column_name="field"),
+            [],
+            id="same_column_name",
+        ),
+        pytest.param(
+            pw.CharField(column_name="field"),
+            pw.CharField(column_name="new_field"),
+            ['ALTER TABLE "model" RENAME COLUMN "field" TO "new_field"'],
+            id="rename_column",
+        ),
+        pytest.param(
+            pw.CharField(column_name="field", index=True),
+            pw.CharField(column_name="new_field", index=True),
+            [
+                'ALTER TABLE "model" RENAME COLUMN "field" TO "new_field"',
+                'ALTER INDEX "model_field" RENAME TO "model_new_field"',
+            ],
+            id="rename_indexed_column",
+        ),
+    ],
+)
+def test__resolve_rename_field(
+    old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
+) -> None:
+    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    class Model(pw.Model):
+        field = old_field
+
+        class Meta:
+            database = patched_pg_db
+
+    Model.create_table()
+    NewModel = copy_model(Model)
+    NewModel._meta.add_field("field", new_field)
+    patched_pg_db.clear_queries()
+
+    schema_migrator.resolve_rename_field("model", Model.field, NewModel.field).run()
+
+    assert patched_pg_db.queries == expected
