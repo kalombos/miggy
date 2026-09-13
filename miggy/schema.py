@@ -184,10 +184,12 @@ class SchemaMigrator(ScM):
         return operations
 
     @operation
-    def rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):
-        operations = [self.rename_column(table, old_field.column_name, new_field.column_name)]
-        operations.append(self.resolve_single_index_name(old_field, new_field))
-        return operations
+    def resolve_rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):
+        if old_field.column_name != new_field.column_name:
+            operations = [self.rename_column(table, old_field.column_name, new_field.column_name)]
+            operations.append(self.resolve_single_index_name(old_field, new_field))
+            return operations
+        return []
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
         """

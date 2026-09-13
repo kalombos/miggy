@@ -380,13 +380,11 @@ class AlterField(MigrateOperation):
         name = self.name
         old_model = from_state[self.model_name]
         old_field = getattr(old_model, name)
-        old_column_name = old_field.column_name
         table_name = old_model._meta.table_name
         model = to_state[self.model_name]
         field = model._meta.fields[self.name]
 
-        if old_column_name != field.column_name:
-            _ops.append(schema_migrator.rename_field(table_name, old_field, field))
+        _ops.append(schema_migrator.resolve_rename_field(table_name, old_field, field))
         _ops.append(schema_migrator._resolve_alter_column_type(old_field, field))
         _ops.append(schema_migrator._resolve_alter_primary_key(old_field, field))
         _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
@@ -462,9 +460,7 @@ class RenameField(MigrateOperation):
         new_model = to_state[self.model_name]
         old_field = old_model._meta.fields[self.old_field_name]
         new_field = new_model._meta.fields[self.new_field_name]
-        if old_field.column_name != new_field.column_name:
-            return [schema_migrator.rename_field(new_model._meta.table_name, old_field, new_field)]
-        return []
+        return [schema_migrator.resolve_rename_field(new_model._meta.table_name, old_field, new_field)]
 
 
 class ChangeNullable(MigrateOperation):
