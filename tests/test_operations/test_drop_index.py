@@ -1,5 +1,4 @@
 import peewee as pw
-import pytest
 
 from miggy.operations import DropIndex
 from miggy.schema import SchemaMigrator
@@ -19,6 +18,7 @@ def test_state_forwards() -> None:
     operation.state_forwards(state)
 
     assert indexes_state(state["user"]) == {}
+
 
 def test_database_forwards(patched_pg_db: PatchedPgDatabase) -> None:
     class User(pw.Model):
