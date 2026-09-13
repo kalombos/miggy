@@ -4,7 +4,7 @@ from typing import Any
 import peewee as pw
 
 from miggy.types import ModelCls
-from miggy.utils import copy_model, costraints, extract_check_meta
+from miggy.utils import copy_model, costraints, extract_check_meta, fk_postfix
 
 ModelDict = dict[str, ModelCls]
 
@@ -119,6 +119,24 @@ class State:
         if isinstance(field, pw.ForeignKeyField):
             delattr(model, field.object_id_name)
             delattr(field.rel_model, field.backref)
+
+    def rename_field(self, model_name: str, old_name: str, new_name: str) -> None:
+        model = self[model_name]
+
+        old_field = model._meta.fields[old_name]
+        new_field = old_field.clone()
+        new_field.column_name = self.resolve_new_name(old_field, new_name)
+
+        self.remove_field(model_name, old_name)
+        self.add_field(model_name, new_name, new_field)
+
+    def resolve_new_name(self, old_field: pw.Field, new_name: str) -> str:
+        if isinstance(old_field, pw.ForeignKeyField):
+            if old_field.column_name == fk_postfix(old_field.name):
+                return fk_postfix(new_name)
+        if old_field.column_name == old_field.name:
+            return new_name
+        return old_field.column_name
 
     def clone(self) -> "State":
         return State({n: copy_model(m) for n, m in self.items()})
