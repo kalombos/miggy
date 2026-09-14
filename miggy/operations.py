@@ -12,9 +12,6 @@ from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
-    get_single_index,
-    get_single_index_name,
-    has_single_index,
     indexes_state,
     resolve_field,
 )
@@ -321,23 +318,6 @@ class AlterField(MigrateOperation):
     def state_forwards(self, state: State) -> None:
         state.add_field(self.model_name, self.name, self.field)
 
-    def handle_indexes(
-        self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
-    ) -> list[Operation]:
-        _ops = []
-        _field = new_field
-        if _field.unique and old_field.unique:
-            return []
-        if not _field.unique and not old_field.unique and _field.index == old_field.index:
-            return []
-        table_name = old_field.model._meta.table_name
-        if has_single_index(old_field):
-            # We have already renamed the column so create name from the new field
-            _ops.append(schema_migrator.drop_index(table_name, get_single_index_name(_field)))
-        if model_index := get_single_index(_field):
-            _ops.append(schema_migrator.add_model_index(model_index))
-        return _ops
-
     def handle_fk_constraint(
         self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
     ) -> list[Operation]:
@@ -392,7 +372,7 @@ class AlterField(MigrateOperation):
         if old_field.null != field.null:
             _operation = schema_migrator.drop_not_null if field.null else schema_migrator.add_not_null
             _ops.append(_operation(table_name, field.column_name))
-        _ops.extend(self.handle_indexes(old_field, field, schema_migrator))
+        _ops.append(schema_migrator._resolve_alter_indexes(old_field, field))
         return _ops
 
 

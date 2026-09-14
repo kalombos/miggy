@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 import peewee as pw
-from playhouse.migrate import MySQLDatabase, PostgresqlDatabase, SqliteDatabase, operation
+from playhouse.migrate import MySQLDatabase, Operation, PostgresqlDatabase, SqliteDatabase, operation
 from playhouse.migrate import MySQLMigrator as MqM
 from playhouse.migrate import PostgresqlMigrator as PgM
 from playhouse.migrate import SchemaMigrator as ScM
@@ -16,6 +16,8 @@ from miggy.utils import (
     extract_check_meta,
     get_default_constraint_value,
     get_single_index,
+    get_single_index_name,
+    has_single_index,
     make_single_index,
 )
 
@@ -101,6 +103,21 @@ class SchemaMigrator(ScM):
         elif old_field.primary_key and not new_field.primary_key:
             return self.drop_primary_key_constraint(table_name)
         return []
+
+    @operation
+    def _resolve_alter_indexes(self, old_field: pw.Field, new_field: pw.Field):
+        if new_field.unique and old_field.unique:
+            return []
+        if not new_field.unique and not old_field.unique and new_field.index == old_field.index:
+            return []
+        table_name = old_field.model._meta.table_name
+        _ops: list[Operation] = []
+        if has_single_index(old_field):
+            # We have already renamed the column so create name from the new field
+            _ops.append(self.drop_index(table_name, get_single_index_name(new_field)))
+        if model_index := get_single_index(new_field):
+            _ops.append(self.add_model_index(model_index))
+        return _ops
 
     @operation
     def select_schema(self, schema):

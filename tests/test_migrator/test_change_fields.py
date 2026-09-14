@@ -4,7 +4,6 @@ import peewee as pw
 import pytest
 
 from miggy import Migrator
-from miggy.utils import has_single_index
 from tests.conftest import PatchedPgDatabase
 
 
@@ -74,84 +73,6 @@ def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
         'ALTER TABLE "user" RENAME COLUMN "name" TO "new_name"',
         'ALTER TABLE "user" ALTER COLUMN "new_name" TYPE TEXT',
     ]
-
-
-@pytest.mark.parametrize(
-    ("params_before", "params_after", "expected"),
-    [
-        (
-            {},
-            {"unique": True},
-            ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE UNIQUE INDEX "user_name" ON "user" ("name")'],
-        ),
-        ({"unique": True}, {}, ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'DROP INDEX "user_name"']),
-        (
-            {},
-            {"index": True},
-            ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'CREATE INDEX "user_name" ON "user" ("name")'],
-        ),
-        ({"index": True}, {}, ['ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT', 'DROP INDEX "user_name"']),
-        (
-            {"index": True},
-            {"unique": True},
-            [
-                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
-                'DROP INDEX "user_name"',
-                'CREATE UNIQUE INDEX "user_name" ON "user" ("name")',
-            ],
-        ),
-        (
-            {"unique": True},
-            {"index": True},
-            [
-                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
-                'DROP INDEX "user_name"',
-                'CREATE INDEX "user_name" ON "user" ("name")',
-            ],
-        ),
-        (
-            {"unique": True, "column_name": "bom"},
-            {"index": True},
-            [
-                'ALTER TABLE "user" RENAME COLUMN "bom" TO "name"',
-                'ALTER INDEX "user_bom" RENAME TO "user_name"',
-                'ALTER TABLE "user" ALTER COLUMN "name" TYPE TEXT',
-                'DROP INDEX "user_name"',
-                'CREATE INDEX "user_name" ON "user" ("name")',
-            ],
-        ),
-        (
-            {"unique": True},
-            {"index": True, "column_name": "bom"},
-            [
-                'ALTER TABLE "user" RENAME COLUMN "name" TO "bom"',
-                'ALTER INDEX "user_name" RENAME TO "user_bom"',
-                'ALTER TABLE "user" ALTER COLUMN "bom" TYPE TEXT',
-                'DROP INDEX "user_bom"',
-                'CREATE INDEX "user_bom" ON "user" ("bom")',
-            ],
-        ),
-    ],
-)
-def test_change_indexes(
-    params_before: dict[str, Any], params_after: dict[str, Any], expected: list[str], patched_pg_db: PatchedPgDatabase
-) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField(**params_before)
-        created_at = pw.DateField()
-
-    migrator.run()
-    patched_pg_db.queries.clear()
-
-    migrator.change_fields("user", name=pw.TextField(**params_after))
-    migrator.run()
-    assert patched_pg_db.queries == expected
-
-    has_index = params_after.get("unique", False) or params_after.get("index", False)
-    assert has_single_index(migrator.state["user"].name) == has_index
 
 
 @pytest.mark.parametrize(

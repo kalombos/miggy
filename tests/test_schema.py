@@ -429,3 +429,89 @@ def test__resolve_rename_field(
     schema_migrator.resolve_rename_field("model", Model.field, NewModel.field).run()
 
     assert patched_pg_db.queries == expected
+
+
+@pytest.mark.parametrize(
+    ("old_field", "new_field", "expected"),
+    [
+        pytest.param(
+            pw.CharField(),
+            pw.CharField(),
+            [],
+            id="no_indexes",
+        ),
+        pytest.param(
+            pw.CharField(unique=True),
+            pw.CharField(unique=True),
+            [],
+            id="same_unique_index",
+        ),
+        pytest.param(
+            pw.CharField(index=True),
+            pw.CharField(index=True),
+            [],
+            id="same_index",
+        ),
+        pytest.param(
+            pw.CharField(),
+            pw.CharField(unique=True),
+            ['CREATE UNIQUE INDEX "model_field" ON "model" ("field")'],
+            id="add_unique_index",
+        ),
+        pytest.param(
+            pw.CharField(unique=True),
+            pw.CharField(),
+            ['DROP INDEX "model_field"'],
+            id="drop_unique_index",
+        ),
+        pytest.param(
+            pw.CharField(),
+            pw.CharField(index=True),
+            ['CREATE INDEX "model_field" ON "model" ("field")'],
+            id="add_index",
+        ),
+        pytest.param(
+            pw.CharField(index=True),
+            pw.CharField(),
+            ['DROP INDEX "model_field"'],
+            id="drop_index",
+        ),
+        pytest.param(
+            pw.CharField(index=True),
+            pw.CharField(unique=True),
+            [
+                'DROP INDEX "model_field"',
+                'CREATE UNIQUE INDEX "model_field" ON "model" ("field")',
+            ],
+            id="index_to_unique",
+        ),
+        pytest.param(
+            pw.CharField(unique=True),
+            pw.CharField(index=True),
+            [
+                'DROP INDEX "model_field"',
+                'CREATE INDEX "model_field" ON "model" ("field")',
+            ],
+            id="unique_to_index",
+        ),
+    ],
+)
+def test__resolve_alter_indexes(
+    old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
+) -> None:
+    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    class Model(pw.Model):
+        field = old_field
+
+        class Meta:
+            database = patched_pg_db
+
+    Model.create_table()
+    NewModel = copy_model(Model)
+    NewModel._meta.add_field("field", new_field)
+    patched_pg_db.clear_queries()
+
+    schema_migrator._resolve_alter_indexes(Model.field, NewModel.field).run()
+
+    assert patched_pg_db.queries == expected
