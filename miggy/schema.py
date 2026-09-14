@@ -9,6 +9,7 @@ from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 from playhouse.postgres_ext import ArrayField
 
+from miggy.deconstructor import ForeignKeyFieldDeconstructor
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
@@ -118,6 +119,46 @@ class SchemaMigrator(ScM):
         if model_index := get_single_index(new_field):
             _ops.append(self.add_model_index(model_index))
         return _ops
+
+    @operation
+    def _resolve_alter_fk_constraint(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops: list[Operation] = []
+        is_old_field_fk = isinstance(old_field, pw.ForeignKeyField)
+        is_new_field_fk = isinstance(new_field, pw.ForeignKeyField)
+        if (
+            is_old_field_fk
+            and is_new_field_fk
+            and (
+                ForeignKeyFieldDeconstructor(old_field).deconstruct_fk_params()
+                == ForeignKeyFieldDeconstructor(new_field).deconstruct_fk_params()
+            )
+        ):
+            # Nothing's changed for fk
+            return _ops
+        table_name = old_field.model._meta.table_name
+        if is_old_field_fk:
+            # we use new_field.column_name because we may have rename column before
+            _ops.append(self.drop_foreign_key_constraint(table_name, new_field.column_name))
+        if is_new_field_fk:
+            _ops.append(
+                self.add_foreign_key_constraint(
+                    table_name,
+                    new_field.column_name,
+                    new_field.rel_model._meta.table_name,  # type: ignore[attr-defined]
+                    new_field.rel_field.column_name,  # type: ignore[attr-defined]
+                    new_field.on_delete,  # type: ignore[attr-defined]
+                    new_field.on_update,  # type: ignore[attr-defined]
+                    constraint_name=new_field.constraint_name,  # type: ignore[attr-defined]
+                )
+            )
+        return _ops
+
+    @operation
+    def _resolve_alter_nullable(self, old_field: pw.Field, new_field: pw.Field):
+        if old_field.null != new_field.null:
+            _operation = self.drop_not_null if new_field.null else self.add_not_null
+            return [_operation(old_field.model._meta.table_name, new_field.column_name)]
+        return []
 
     @operation
     def select_schema(self, schema):

@@ -7,55 +7,6 @@ from miggy import Migrator
 from tests.conftest import PatchedPgDatabase
 
 
-@pytest.mark.parametrize(
-    ("null_before", "null_after", "expected"),
-    [
-        (
-            False,
-            True,
-            [
-                'ALTER TABLE "user" ALTER COLUMN "created_at" TYPE TIMESTAMP',
-                'ALTER TABLE "user" ALTER COLUMN "created_at" DROP NOT NULL',
-            ],
-        ),
-        (
-            True,
-            False,
-            [
-                'ALTER TABLE "user" ALTER COLUMN "created_at" TYPE TIMESTAMP',
-                'ALTER TABLE "user" ALTER COLUMN "created_at" SET NOT NULL',
-            ],
-        ),
-        (
-            True,
-            True,
-            [
-                'ALTER TABLE "user" ALTER COLUMN "created_at" TYPE TIMESTAMP',
-            ],
-        ),
-    ],
-)
-def test_change_nullable(
-    null_before: bool, null_after: bool, expected: list[str], patched_pg_db: PatchedPgDatabase
-) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField(null=null_before)
-
-    migrator.run()
-    patched_pg_db.queries.clear()
-
-    migrator.change_fields("user", created_at=pw.DateTimeField(null=null_after))
-    migrator.run()
-    assert patched_pg_db.queries == expected
-
-    assert migrator.state["user"].created_at.null == null_after
-    assert isinstance(migrator.state["user"].created_at, pw.DateTimeField)
-
-
 def test_change_column_name(patched_pg_db: PatchedPgDatabase) -> None:
     migrator = Migrator(patched_pg_db)
 

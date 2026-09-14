@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 from playhouse.migrate import Operation
 
-from miggy.deconstructor import ForeignKeyFieldDeconstructor
 from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
@@ -318,40 +317,6 @@ class AlterField(MigrateOperation):
     def state_forwards(self, state: State) -> None:
         state.add_field(self.model_name, self.name, self.field)
 
-    def handle_fk_constraint(
-        self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
-    ) -> list[Operation]:
-        _ops: list[Operation] = []
-        is_old_field_fk = isinstance(old_field, pw.ForeignKeyField)
-        is_new_field_fk = isinstance(new_field, pw.ForeignKeyField)
-        if (
-            is_old_field_fk
-            and is_new_field_fk
-            and (
-                ForeignKeyFieldDeconstructor(old_field).deconstruct_fk_params()
-                == ForeignKeyFieldDeconstructor(new_field).deconstruct_fk_params()
-            )
-        ):
-            # Nothing's changed for fk
-            return _ops
-        table_name = old_field.model._meta.table_name
-        if is_old_field_fk:
-            # we use new_field.column_name because we may have rename column before
-            _ops.append(schema_migrator.drop_foreign_key_constraint(table_name, new_field.column_name))
-        if is_new_field_fk:
-            _ops.append(
-                schema_migrator.add_foreign_key_constraint(
-                    table_name,
-                    new_field.column_name,
-                    new_field.rel_model._meta.table_name,  # type: ignore[attr-defined]
-                    new_field.rel_field.column_name,  # type: ignore[attr-defined]
-                    new_field.on_delete,  # type: ignore[attr-defined]
-                    new_field.on_update,  # type: ignore[attr-defined]
-                    constraint_name=new_field.constraint_name,  # type: ignore[attr-defined]
-                )
-            )
-        return _ops
-
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
@@ -366,12 +331,10 @@ class AlterField(MigrateOperation):
         _ops.append(schema_migrator.resolve_rename_field(table_name, old_field, field))
         _ops.append(schema_migrator._resolve_alter_column_type(old_field, field))
         _ops.append(schema_migrator._resolve_alter_primary_key(old_field, field))
-        _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
+        _ops.append(schema_migrator._resolve_alter_fk_constraint(old_field, field))
         _ops.append(schema_migrator._resolve_alter_default_constraint(old_field, field))
         _ops.append(schema_migrator._resolve_alter_check_constraints(old_field, field))
-        if old_field.null != field.null:
-            _operation = schema_migrator.drop_not_null if field.null else schema_migrator.add_not_null
-            _ops.append(_operation(table_name, field.column_name))
+        _ops.append(schema_migrator._resolve_alter_nullable(old_field, field))
         _ops.append(schema_migrator._resolve_alter_indexes(old_field, field))
         return _ops
 
