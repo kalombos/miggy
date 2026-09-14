@@ -338,6 +338,21 @@ def test_run_sql(patched_pg_db: PatchedPgDatabase):
     assert migrator.state["user"].get(first_name="First", last_name="Last") is not None
 
 
+def test_rename_field(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.rename_field("user", "first_name", "new_name")
+
+    user = migrator.state["user"]
+    assert not hasattr(user, "first_name")
+    assert isinstance(user.new_name, pw.CharField)
+    assert user.new_name.column_name == "new_name"
+
+
 def test_rename_table(patched_pg_db: PatchedPgDatabase) -> None:
 
     class User(pw.Model):

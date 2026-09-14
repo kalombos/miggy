@@ -361,6 +361,11 @@ def test__add_model_index(patched_pg_db: PatchedPgDatabase) -> None:
     ]
 
 
+class _TestResolveRenameFieldNamespace:
+    class User(pw.Model):
+        name = pw.CharField()
+
+
 @pytest.mark.parametrize(
     ("old_field", "new_field", "expected"),
     [
@@ -385,12 +390,30 @@ def test__add_model_index(patched_pg_db: PatchedPgDatabase) -> None:
             ],
             id="rename_indexed_column",
         ),
+        pytest.param(
+            pw.ForeignKeyField(_TestResolveRenameFieldNamespace.User, column_name="author_id"),
+            pw.ForeignKeyField(_TestResolveRenameFieldNamespace.User, column_name="new_author_id"),
+            [
+                'ALTER TABLE "model" RENAME COLUMN "author_id" TO "new_author_id"',
+                'ALTER INDEX "model_author_id" RENAME TO "model_new_author_id"',
+            ],
+            id="rename_fk_column",
+        ),
+        pytest.param(
+            pw.ForeignKeyField(_TestResolveRenameFieldNamespace.User, column_name="some_other_name"),
+            pw.ForeignKeyField(_TestResolveRenameFieldNamespace.User, column_name="some_other_name"),
+            [],
+            id="fk_same_column_name",
+        ),
     ],
 )
 def test__resolve_rename_field(
     old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
 ) -> None:
     schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    _TestResolveRenameFieldNamespace.User._meta.database = patched_pg_db
+    _TestResolveRenameFieldNamespace.User.create_table()
 
     class Model(pw.Model):
         field = old_field
