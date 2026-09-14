@@ -235,18 +235,18 @@ def test_rename_fk_field() -> None:
     assert hasattr(model, "author_id")
 
 
-def test_rename_fk_field__custom_object_id_name() -> None:
+def test_rename_fk_field__custom_column_name() -> None:
     class User(pw.Model):
         name = pw.CharField()
 
     class Book(pw.Model):
-        author = pw.ForeignKeyField(User, object_id_name="some_other_name")
+        author = pw.ForeignKeyField(User, column_name="custom")
 
     state = State({"user": User, "book": Book})
 
     state.rename_field("book", "author", "new_author")
     model = state["book"]
 
-    assert model.new_author.column_name == "new_author_id"
-    assert model.new_author.object_id_name == "some_other_name"
-    assert hasattr(model, "some_other_name")
+    assert model.new_author.column_name == "custom"
+    assert hasattr(model, "custom")
+    assert not hasattr(model, "author")
