@@ -12,7 +12,6 @@ from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
-    fk_postfix,
     get_single_index,
     get_single_index_name,
     has_single_index,
@@ -436,22 +435,7 @@ class RenameField(MigrateOperation):
         self.new_field_name = new_name
 
     def state_forwards(self, state: State) -> None:
-        model = state[self.model_name]
-
-        old_field = model._meta.fields[self.old_field_name]
-        new_field = old_field.clone()
-        new_field.column_name = self.resolve_new_name(old_field, self.new_field_name)
-
-        state.remove_field(self.model_name, self.old_field_name)
-        state.add_field(self.model_name, self.new_field_name, new_field)
-
-    def resolve_new_name(self, old_field: pw.Field, new_name: str) -> str:
-        if isinstance(old_field, pw.ForeignKeyField):
-            if old_field.column_name == fk_postfix(old_field.name):
-                return fk_postfix(new_name)
-        if old_field.column_name == old_field.name:
-            return new_name
-        return old_field.column_name
+        state.rename_field(self.model_name, self.old_field_name, self.new_field_name)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
