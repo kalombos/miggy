@@ -678,3 +678,89 @@ def test__resolve_alter_fk_constraint_column_is_renamed(patched_pg_db: PatchedPg
         '"fk_testmodel_is_used_refs_refmodel" FOREIGN KEY ("is_used") REFERENCES '
         '"refmodel" ("id") ON DELETE RESTRICT',
     ]
+
+
+@pytest.mark.parametrize(
+    ("old_field", "new_field", "expected"),
+    [
+        pytest.param(
+            pw.CharField(column_name="field"),
+            pw.CharField(column_name="new_field"),
+            ['ALTER TABLE "model" RENAME COLUMN "field" TO "new_field"'],
+            id="rename_column",
+        ),
+        pytest.param(
+            pw.CharField(),
+            pw.TextField(),
+            ['ALTER TABLE "model" ALTER COLUMN "field" TYPE TEXT'],
+            id="column_type",
+        ),
+        pytest.param(
+            pw.IntegerField(primary_key=False),
+            pw.IntegerField(primary_key=True),
+            ['ALTER TABLE "model" ADD PRIMARY KEY ("field")'],
+            id="primary_key",
+        ),
+        pytest.param(
+            pw.ForeignKeyField(_TestResolveAlterFkConstraintNamespace.RefModel),
+            pw.ForeignKeyField(_TestResolveAlterFkConstraintNamespace.RefModel, on_delete="RESTRICT"),
+            [
+                'ALTER TABLE "model" DROP CONSTRAINT "model_field_id_fkey"',
+                'ALTER TABLE "model" ADD CONSTRAINT '
+                '"fk_model_field_id_refs_refmodel" FOREIGN KEY ("field_id") '
+                'REFERENCES "refmodel" ("id") ON DELETE RESTRICT',
+            ],
+            id="fk_constraint",
+        ),
+        pytest.param(
+            pw.IntegerField(),
+            pw.IntegerField(constraints=[pw.Default(5)]),
+            ['ALTER TABLE "model" ALTER COLUMN "field" SET DEFAULT 5'],
+            id="default_constraint",
+        ),
+        pytest.param(
+            pw.IntegerField(),
+            pw.IntegerField(constraints=[pw.Check("field > 5", name="check")]),
+            ['ALTER TABLE "model" ADD CONSTRAINT "check" CHECK (field > 5)'],
+            id="check_constraint",
+        ),
+        pytest.param(
+            pw.CharField(),
+            pw.CharField(null=True),
+            ['ALTER TABLE "model" ALTER COLUMN "field" DROP NOT NULL'],
+            id="nullable",
+        ),
+        pytest.param(
+            pw.CharField(),
+            pw.CharField(unique=True),
+            ['CREATE UNIQUE INDEX "model_field" ON "model" ("field")'],
+            id="indexes",
+        ),
+    ],
+)
+def test_alter_field(
+    old_field: pw.Field, new_field: pw.Field, patched_pg_db: PatchedPgDatabase, expected: list[str]
+) -> None:
+    schema_migrator = SchemaMigrator.from_database(patched_pg_db)
+
+    ref_model = _TestResolveAlterFkConstraintNamespace.RefModel
+    ref_model._meta.database = patched_pg_db
+    ref_model.create_table()
+
+    class Model(pw.Model):
+        field = old_field
+
+        class Meta:
+            primary_key = False
+            database = patched_pg_db
+
+    Model.create_table()
+    NewModel = copy_model(Model)
+    NewModel._meta.add_field("field", new_field)
+    patched_pg_db.clear_queries()
+
+    schema_migrator.alter_field(Model.field, NewModel.field).run()
+
+    # remove query for constraints
+    queries = [q for q in patched_pg_db.queries if "FROM information_schema.table_constraints" not in q]
+    assert queries == expected

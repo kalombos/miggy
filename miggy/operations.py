@@ -320,23 +320,10 @@ class AlterField(MigrateOperation):
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
-        _ops = []
         name = self.name
-        old_model = from_state[self.model_name]
-        old_field = getattr(old_model, name)
-        table_name = old_model._meta.table_name
-        model = to_state[self.model_name]
-        field = model._meta.fields[self.name]
-
-        _ops.append(schema_migrator.resolve_rename_field(table_name, old_field, field))
-        _ops.append(schema_migrator._resolve_alter_column_type(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_primary_key(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_fk_constraint(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_default_constraint(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_check_constraints(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_nullable(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_indexes(old_field, field))
-        return _ops
+        old_field = from_state[self.model_name]._meta.fields[name]
+        field = to_state[self.model_name]._meta.fields[name]
+        return [schema_migrator.alter_field(old_field, field)]
 
 
 class RemoveField(MigrateOperation):

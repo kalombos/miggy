@@ -161,6 +161,19 @@ class SchemaMigrator(ScM):
         return []
 
     @operation
+    def alter_field(self, old_field: pw.Field, new_field: pw.Field):
+        return [
+            self.resolve_rename_field(new_field.model._meta.table_name, old_field, new_field),
+            self._resolve_alter_column_type(old_field, new_field),
+            self._resolve_alter_primary_key(old_field, new_field),
+            self._resolve_alter_fk_constraint(old_field, new_field),
+            self._resolve_alter_default_constraint(old_field, new_field),
+            self._resolve_alter_check_constraints(old_field, new_field),
+            self._resolve_alter_nullable(old_field, new_field),
+            self._resolve_alter_indexes(old_field, new_field),
+        ]
+
+    @operation
     def select_schema(self, schema):
         """Select database schema"""
         raise NotImplementedError
