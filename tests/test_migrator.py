@@ -364,3 +364,31 @@ def test_rename_table(patched_pg_db: PatchedPgDatabase) -> None:
     migrator.rename_table("user", "new_name")
 
     assert migrator.state["User"]._meta.table_name == "new_name"
+
+
+def test_alter_field(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        first_name = pw.CharField()
+        last_name = pw.CharField()
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.alter_field("user", "first_name", pw.CharField(max_length=100))
+
+    user = migrator.state["user"]
+    assert isinstance(user.first_name, pw.CharField)
+    assert user.first_name.max_length == 100
+
+
+def test_change_fields(patched_pg_db: PatchedPgDatabase) -> None:
+    class User(pw.Model):
+        first_name = pw.CharField()
+        age = pw.IntegerField(null=True)
+
+    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+
+    migrator.change_fields("user", first_name=pw.CharField(max_length=100), age=pw.IntegerField())
+
+    user = migrator.state["user"]
+    assert user.first_name.max_length == 100
+    assert user.age.null is False
