@@ -3,6 +3,7 @@ import pkgutil
 import re
 import sys
 import typing
+from contextlib import nullcontext
 from functools import cached_property
 from importlib import import_module
 from logging import Logger
@@ -11,11 +12,15 @@ from typing import Any
 
 import peewee as pw
 from playhouse.db_url import connect
+from playhouse.migrate import (
+    Operation,
+)
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
 from miggy.migrator import Migrator
 from miggy.operations import MigrateOperation
+from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
 from miggy.writer import OperationWriter
@@ -26,21 +31,17 @@ UNDEFINED = object()
 VOID = lambda m, d: None  # noqa
 
 
-class Migration:
-    atomic = True
-
-    @staticmethod
-    def migrate(migrator, database, fake=False) -> None:
-        pass
-
-    @staticmethod
-    def rollback(migrator, database, fake=False) -> None:
-        pass
-
-
 def add_to_sys_path(directory: str | Path) -> None:
     if directory not in sys.path:
         sys.path.insert(0, str(directory))
+
+
+class Migration:
+    name: str
+    atomic = True
+
+    migrate: list[MigrateOperation]
+    rollback: list[MigrateOperation]
 
 
 class Router(object):
@@ -62,7 +63,10 @@ class Router(object):
             database = connect(database)
         if not isinstance(database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
+        if isinstance(database, pw.Proxy):
+            database = database.obj
         self.database = database
+        self.schema_migrator = SchemaMigrator.from_database(self.database)
         working_dir = working_dir or os.getcwd()
         self.working_dir = Path(working_dir)
         # Need to append the working_dir to the path for import to work.
@@ -179,7 +183,7 @@ class Router(object):
 
         return name
 
-    def read(self, name):
+    def read(self, name, fake: bool):
         """Read migration from file."""
         call_params = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
@@ -196,12 +200,19 @@ class Router(object):
                 scope.get("rollback", VOID),
             )
 
+            def extract_operations(f):
+                m = Migrator()
+                f(m, self.database, fake=fake)
+                _operations = m.operations[:]
+                m.operations = []
+                return _operations
+
             class _Migration(Migration):
                 pass
 
             _Migration.atomic = atomic
-            _Migration.migrate = migrate
-            _Migration.rollback = rollback
+            _Migration.migrate = extract_operations(migrate)
+            _Migration.rollback = extract_operations(rollback)
             return _Migration
 
     def run_one(
@@ -212,37 +223,60 @@ class Router(object):
         downgrade: bool = False,
     ) -> None:
         """Run/emulate a migration with given name."""
-        fake = not change_schema
-        migrator = Migrator(self.database, self.state, self.schema)
         try:
-            migration = self.read(name)
+            migration = self.read(name, not change_schema)
+            atomic = self.database.atomic() if migration.atomic and change_schema else nullcontext()
 
-            def run_migrator():
-                if not downgrade:
-                    self.logger.info('Migrate "%s"', name)
-                    migration.migrate(migrator, self.database, fake=fake)
-                    migrator.run(change_schema)
-                    if change_history:
-                        self.model.create(name=name)
-                else:
-                    self.logger.info("Rolling back %s", name)
-                    migration.rollback(migrator, self.database, fake=fake)
-                    migrator.run(change_schema)
-                    if change_history:
-                        self.model.delete().where(self.model.name == name).execute()
-
-                self.logger.info("Done %s", name)
-
-            if migration.atomic and change_schema:
-                with self.database.transaction():
-                    run_migrator()
-            else:
-                run_migrator()
+            with atomic:
+                self.logger.info('%s "%s"', "Rolling back" if downgrade else "Migrate", migration.name)
+                operations = self.add_operations(migration, downgrade)
+                if change_history:
+                    self.change_history(name, downgrade)
+                if change_schema:
+                    self.run_operations(operations)
 
         except Exception:
             operation = "Migration" if not downgrade else "Rollback"
             self.logger.exception("%s failed: %s", operation, name)
             raise
+
+    def change_history(self, name: str, downgrade: bool) -> None:
+        if downgrade:
+            self.model.delete().where(self.model.name == name).execute()
+        else:
+            self.model.create(name=name)
+
+    def add_operation(self, op: MigrateOperation) -> None:
+        operations = []
+        self.state.create_snapshot()
+        op.state_forwards(self.state)
+        from_state = self.state.pop_snapshot()
+        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
+        return operations
+    
+    def add_operations(
+            self, 
+            migration: Migration,
+            downgrade: bool
+        ) -> None:
+        operations = []
+        ops = migration.rollback if downgrade else migration.migrate
+        for op in ops:
+            operations.extend(self.add_operation(op))
+        return operations
+
+    def run_operations(self, operations) -> None:
+        if self.schema:
+            _ops = [self.schema_migrator.select_schema(self.schema), *operations]
+        else:
+            _ops = [*operations]
+
+        for op in _ops:
+            if isinstance(op, Operation):
+                self.logger.info("%s %s", op.method, op.args)
+                op.run()
+            else:
+                op()
 
     def run(self, name=None, fake=False):
         """Run migrations."""
