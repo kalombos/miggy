@@ -1,11 +1,7 @@
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import peewee as pw
-from playhouse.migrate import (
-    Operation,
-)
 
-from miggy import LOGGER
 from miggy.deconstructor import ModelDeconstructor
 from miggy.operations import (
     AddCheckConstraint,
@@ -27,12 +23,7 @@ from miggy.operations import (
     RunPythonF,
     RunSql,
 )
-from miggy.schema import SchemaMigrator
-from miggy.state import State
 from miggy.types import ModelCls
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 
 class Migrator(object):
@@ -40,44 +31,15 @@ class Migrator(object):
     A class that provides shortcuts for adding migration operations.
     """
 
-    def __init__(self, database, state: State | None = None, schema=None) -> None:
+    def __init__(self) -> None:
         """Initialize the migrator."""
-        if isinstance(database, pw.Proxy):
-            database = database.obj
-
-        self.database = database
-        self.state = state or State()
-        self.schema_migrator = SchemaMigrator.from_database(self.database)
-        self.schema = schema
-        self._operations: list[Operation | Callable] = []
+        self.operations: list[MigrateOperation] = []
 
     def add_operation(self, op: MigrateOperation) -> None:
         """
         Adds a migrate operation
         """
-        self.state.create_snapshot()
-        op.state_forwards(self.state)
-        from_state = self.state.pop_snapshot()
-        self._operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
-
-    def _apply_operations(self) -> None:
-
-        if self.schema:
-            _ops = [self.schema_migrator.select_schema(self.schema), *self._operations]
-        else:
-            _ops = [*self._operations]
-
-        for op in _ops:
-            if isinstance(op, Operation):
-                LOGGER.info("%s %s", op.method, op.args)
-                op.run()
-            else:
-                op()
-
-    def run(self, change_schema: bool = True):
-        if change_schema:
-            self._apply_operations()
-        self._operations = []
+        self.operations.append(op)
 
     def python(self, func: RunPythonF):
         """A shortcut for adding a :class:`RunPython` operation."""
