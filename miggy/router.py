@@ -38,7 +38,6 @@ def add_to_sys_path(directory: str | Path) -> None:
 
 
 class Migration:
-    name: str
     atomic = True
 
     migrate: list[MigrateOperation]
