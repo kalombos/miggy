@@ -3,7 +3,7 @@ API Documentation
 
 
 .. autoclass:: miggy.state::State
-.. autoclass:: miggy.migrator::SchemaMigrator
+.. autoclass:: miggy.schema::SchemaMigrator
     :members: sql, rename_index, create_table, drop_table
     :member-order: bysource
 
@@ -31,6 +31,6 @@ Migrate operations
 
 Migrator
 ++++++++++++++++++
-.. autoclass:: miggy.migrator::Migrator
+.. autoclass:: miggy.compat.migrator::Migrator
     :members: add_operation,python,sql,create_model,remove_model,add_field,alter_field,remove_field,rename_field,rename_table,add_index,drop_index,add_primary_key_constraint,remove_primary_key_constraint,add_check_constraint,remove_check_constraint
     :member-order: bysource

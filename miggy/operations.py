@@ -7,15 +7,10 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 from playhouse.migrate import Operation
 
-from miggy.deconstructor import ForeignKeyFieldDeconstructor
 from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
-    fk_postfix,
-    get_single_index,
-    get_single_index_name,
-    has_single_index,
     indexes_state,
     resolve_field,
 )
@@ -323,81 +318,13 @@ class AlterField(MigrateOperation):
     def state_forwards(self, state: State) -> None:
         state.add_field(self.model_name, self.name, self.field)
 
-    def handle_indexes(
-        self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
-    ) -> list[Operation]:
-        _ops = []
-        _field = new_field
-        if _field.unique and old_field.unique:
-            return []
-        if not _field.unique and not old_field.unique and _field.index == old_field.index:
-            return []
-        table_name = old_field.model._meta.table_name
-        if has_single_index(old_field):
-            # We have already renamed the column so create name from the new field
-            _ops.append(schema_migrator.drop_index(table_name, get_single_index_name(_field)))
-        if model_index := get_single_index(_field):
-            _ops.append(schema_migrator.add_model_index(model_index))
-        return _ops
-
-    def handle_fk_constraint(
-        self, old_field: pw.Field, new_field: pw.Field, schema_migrator: "SchemaMigrator"
-    ) -> list[Operation]:
-        _ops: list[Operation] = []
-        is_old_field_fk = isinstance(old_field, pw.ForeignKeyField)
-        is_new_field_fk = isinstance(new_field, pw.ForeignKeyField)
-        if (
-            is_old_field_fk
-            and is_new_field_fk
-            and (
-                ForeignKeyFieldDeconstructor(old_field).deconstruct_fk_params()
-                == ForeignKeyFieldDeconstructor(new_field).deconstruct_fk_params()
-            )
-        ):
-            # Nothing's changed for fk
-            return _ops
-        table_name = old_field.model._meta.table_name
-        if is_old_field_fk:
-            # we use new_field.column_name because we may have rename column before
-            _ops.append(schema_migrator.drop_foreign_key_constraint(table_name, new_field.column_name))
-        if is_new_field_fk:
-            _ops.append(
-                schema_migrator.add_foreign_key_constraint(
-                    table_name,
-                    new_field.column_name,
-                    new_field.rel_model._meta.table_name,  # type: ignore[attr-defined]
-                    new_field.rel_field.column_name,  # type: ignore[attr-defined]
-                    new_field.on_delete,  # type: ignore[attr-defined]
-                    new_field.on_update,  # type: ignore[attr-defined]
-                    constraint_name=new_field.constraint_name,  # type: ignore[attr-defined]
-                )
-            )
-        return _ops
-
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
     ) -> list[Operation]:
-        _ops = []
         name = self.name
-        old_model = from_state[self.model_name]
-        old_field = getattr(old_model, name)
-        old_column_name = old_field.column_name
-        table_name = old_model._meta.table_name
-        model = to_state[self.model_name]
-        field = model._meta.fields[self.name]
-
-        if old_column_name != field.column_name:
-            _ops.append(schema_migrator.rename_field(table_name, old_field, field))
-        _ops.append(schema_migrator._resolve_alter_column_type(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_primary_key(old_field, field))
-        _ops.extend(self.handle_fk_constraint(old_field, field, schema_migrator))
-        _ops.append(schema_migrator._resolve_alter_default_constraint(old_field, field))
-        _ops.append(schema_migrator._resolve_alter_check_constraints(old_field, field))
-        if old_field.null != field.null:
-            _operation = schema_migrator.drop_not_null if field.null else schema_migrator.add_not_null
-            _ops.append(_operation(table_name, field.column_name))
-        _ops.extend(self.handle_indexes(old_field, field, schema_migrator))
-        return _ops
+        old_field = from_state[self.model_name]._meta.fields[name]
+        field = to_state[self.model_name]._meta.fields[name]
+        return [schema_migrator.alter_field(old_field, field)]
 
 
 class RemoveField(MigrateOperation):
@@ -439,22 +366,7 @@ class RenameField(MigrateOperation):
         self.new_field_name = new_name
 
     def state_forwards(self, state: State) -> None:
-        model = state[self.model_name]
-
-        old_field = model._meta.fields[self.old_field_name]
-        new_field = old_field.clone()
-        new_field.column_name = self.resolve_new_name(old_field, self.new_field_name)
-
-        state.remove_field(self.model_name, self.old_field_name)
-        state.add_field(self.model_name, self.new_field_name, new_field)
-
-    def resolve_new_name(self, old_field: pw.Field, new_name: str) -> str:
-        if isinstance(old_field, pw.ForeignKeyField):
-            if old_field.column_name == fk_postfix(old_field.name):
-                return fk_postfix(new_name)
-        if old_field.column_name == old_field.name:
-            return new_name
-        return old_field.column_name
+        state.rename_field(self.model_name, self.old_field_name, self.new_field_name)
 
     def database_forwards(
         self, schema_migrator: "SchemaMigrator", from_state: State, to_state: State
@@ -463,9 +375,7 @@ class RenameField(MigrateOperation):
         new_model = to_state[self.model_name]
         old_field = old_model._meta.fields[self.old_field_name]
         new_field = new_model._meta.fields[self.new_field_name]
-        if old_field.column_name != new_field.column_name:
-            return [schema_migrator.rename_field(new_model._meta.table_name, old_field, new_field)]
-        return []
+        return [schema_migrator.resolve_rename_field(new_model._meta.table_name, old_field, new_field)]
 
 
 class ChangeNullable(MigrateOperation):

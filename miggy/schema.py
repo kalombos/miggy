@@ -2,13 +2,14 @@ from collections.abc import Callable
 from typing import Any
 
 import peewee as pw
-from playhouse.migrate import MySQLDatabase, PostgresqlDatabase, SqliteDatabase, operation
+from playhouse.migrate import MySQLDatabase, Operation, PostgresqlDatabase, SqliteDatabase, operation
 from playhouse.migrate import MySQLMigrator as MqM
 from playhouse.migrate import PostgresqlMigrator as PgM
 from playhouse.migrate import SchemaMigrator as ScM
 from playhouse.migrate import SqliteMigrator as SqM
 from playhouse.postgres_ext import ArrayField
 
+from miggy.deconstructor import ForeignKeyFieldDeconstructor
 from miggy.types import ModelCls
 from miggy.utils import (
     ModelIndex,
@@ -16,6 +17,8 @@ from miggy.utils import (
     extract_check_meta,
     get_default_constraint_value,
     get_single_index,
+    get_single_index_name,
+    has_single_index,
     make_single_index,
 )
 
@@ -103,6 +106,74 @@ class SchemaMigrator(ScM):
         return []
 
     @operation
+    def _resolve_alter_indexes(self, old_field: pw.Field, new_field: pw.Field):
+        if new_field.unique and old_field.unique:
+            return []
+        if not new_field.unique and not old_field.unique and new_field.index == old_field.index:
+            return []
+        table_name = old_field.model._meta.table_name
+        _ops: list[Operation] = []
+        if has_single_index(old_field):
+            # We have already renamed the column so create name from the new field
+            _ops.append(self.drop_index(table_name, get_single_index_name(new_field)))
+        if model_index := get_single_index(new_field):
+            _ops.append(self.add_model_index(model_index))
+        return _ops
+
+    @operation
+    def _resolve_alter_fk_constraint(self, old_field: pw.Field, new_field: pw.Field) -> list[Operation]:
+        _ops: list[Operation] = []
+        is_old_field_fk = isinstance(old_field, pw.ForeignKeyField)
+        is_new_field_fk = isinstance(new_field, pw.ForeignKeyField)
+        if (
+            is_old_field_fk
+            and is_new_field_fk
+            and (
+                ForeignKeyFieldDeconstructor(old_field).deconstruct_fk_params()
+                == ForeignKeyFieldDeconstructor(new_field).deconstruct_fk_params()
+            )
+        ):
+            # Nothing's changed for fk
+            return _ops
+        table_name = old_field.model._meta.table_name
+        if is_old_field_fk:
+            # we use new_field.column_name because we may have rename column before
+            _ops.append(self.drop_foreign_key_constraint(table_name, new_field.column_name))
+        if is_new_field_fk:
+            _ops.append(
+                self.add_foreign_key_constraint(
+                    table_name,
+                    new_field.column_name,
+                    new_field.rel_model._meta.table_name,  # type: ignore[attr-defined]
+                    new_field.rel_field.column_name,  # type: ignore[attr-defined]
+                    new_field.on_delete,  # type: ignore[attr-defined]
+                    new_field.on_update,  # type: ignore[attr-defined]
+                    constraint_name=new_field.constraint_name,  # type: ignore[attr-defined]
+                )
+            )
+        return _ops
+
+    @operation
+    def _resolve_alter_nullable(self, old_field: pw.Field, new_field: pw.Field):
+        if old_field.null != new_field.null:
+            _operation = self.drop_not_null if new_field.null else self.add_not_null
+            return [_operation(old_field.model._meta.table_name, new_field.column_name)]
+        return []
+
+    @operation
+    def alter_field(self, old_field: pw.Field, new_field: pw.Field):
+        return [
+            self.resolve_rename_field(new_field.model._meta.table_name, old_field, new_field),
+            self._resolve_alter_column_type(old_field, new_field),
+            self._resolve_alter_primary_key(old_field, new_field),
+            self._resolve_alter_fk_constraint(old_field, new_field),
+            self._resolve_alter_default_constraint(old_field, new_field),
+            self._resolve_alter_check_constraints(old_field, new_field),
+            self._resolve_alter_nullable(old_field, new_field),
+            self._resolve_alter_indexes(old_field, new_field),
+        ]
+
+    @operation
     def select_schema(self, schema):
         """Select database schema"""
         raise NotImplementedError
@@ -184,10 +255,12 @@ class SchemaMigrator(ScM):
         return operations
 
     @operation
-    def rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):
-        operations = [self.rename_column(table, old_field.column_name, new_field.column_name)]
-        operations.append(self.resolve_single_index_name(old_field, new_field))
-        return operations
+    def resolve_rename_field(self, table: str, old_field: pw.Field, new_field: pw.Field):
+        if old_field.column_name != new_field.column_name:
+            operations = [self.rename_column(table, old_field.column_name, new_field.column_name)]
+            operations.append(self.resolve_single_index_name(old_field, new_field))
+            return operations
+        return []
 
     def create_table(self, model: ModelCls, safe: bool = False) -> Callable:
         """

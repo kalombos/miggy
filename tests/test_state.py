@@ -61,6 +61,20 @@ def test_add_field() -> None:
     assert isinstance(model.email, pw.CharField)
 
 
+def test_add_field__pk() -> None:
+    class User(pw.Model):
+        class Meta:
+            primary_key = False
+
+    state = State({"user": User})
+
+    state.add_field("User", name="custom_id", field=pw.IntegerField(primary_key=True))
+    model = state["user"]
+
+    assert model._meta.primary_key is model.custom_id
+    assert model.custom_id.primary_key
+
+
 def test_add_field__fk() -> None:
     class RelatedModel(pw.Model):
         f = pw.CharField()
@@ -176,3 +190,63 @@ def test_remove_pk_field() -> None:
 
     state.remove_field("somemodel", "id")
     assert state["somemodel"]._meta.primary_key is False
+
+
+def test_rename_field() -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+
+    state = State({"user": User})
+
+    state.rename_field("user", "name", "new_name")
+    model = state["user"]
+
+    assert model.new_name.column_name == "new_name"
+    assert isinstance(model.new_name, pw.CharField)
+    assert not hasattr(model, "name")
+
+
+def test_rename_field__custom_column_name() -> None:
+    class User(pw.Model):
+        name = pw.CharField(column_name="custom")
+
+    state = State({"user": User})
+
+    state.rename_field("user", "name", "new_name")
+
+    assert state["user"].new_name.column_name == "custom"
+
+
+def test_rename_fk_field() -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+
+    class Book(pw.Model):
+        author = pw.ForeignKeyField(User)
+
+    state = State({"user": User, "book": Book})
+
+    state.rename_field("book", "author", "new_author")
+    model = state["book"]
+
+    assert isinstance(model.new_author, pw.ForeignKeyField)
+    assert model.new_author.column_name == "new_author_id"
+    assert not hasattr(model, "author")
+    assert hasattr(model, "author_id")
+
+
+def test_rename_fk_field__custom_column_name() -> None:
+    class User(pw.Model):
+        name = pw.CharField()
+
+    class Book(pw.Model):
+        author = pw.ForeignKeyField(User, column_name="custom")
+
+    state = State({"user": User, "book": Book})
+
+    state.rename_field("book", "author", "new_author")
+    model = state["book"]
+
+    assert model.new_author.column_name == "custom"
+    assert hasattr(model, "custom")
+    assert not hasattr(model, "author")

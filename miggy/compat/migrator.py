@@ -1,11 +1,7 @@
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import peewee as pw
-from playhouse.migrate import (
-    Operation,
-)
 
-from miggy import LOGGER
 from miggy.deconstructor import ModelDeconstructor
 from miggy.operations import (
     AddCheckConstraint,
@@ -27,45 +23,7 @@ from miggy.operations import (
     RunPythonF,
     RunSql,
 )
-from miggy.schema import SchemaMigrator
-from miggy.state import State
 from miggy.types import ModelCls
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-
-class Migration:
-    def __init__(self, state: State, schema_migrator: "SchemaMigrator", schema: str | None = None) -> None:
-        self.state = state
-        self.schema_migrator = schema_migrator
-        self.schema = schema
-        self.operations: list[Operation | Callable] = []
-
-    def append(self, op: MigrateOperation) -> None:
-        self.state.create_snapshot()
-        op.state_forwards(self.state)
-        from_state = self.state.pop_snapshot()
-        self.operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
-
-    def apply(self, change_schema: bool) -> None:
-        if not change_schema:
-            return
-
-        if self.schema:
-            _ops = [self.schema_migrator.select_schema(self.schema), *self.operations]
-        else:
-            _ops = [*self.operations]
-
-        for op in _ops:
-            if isinstance(op, Operation):
-                LOGGER.info("%s %s", op.method, op.args)
-                op.run()
-            else:
-                op()
-
-    def clean(self) -> None:
-        self.operations = []
 
 
 class Migrator(object):
@@ -73,27 +31,15 @@ class Migrator(object):
     A class that provides shortcuts for adding migration operations.
     """
 
-    def __init__(self, database, schema=None):
+    def __init__(self) -> None:
         """Initialize the migrator."""
-        if isinstance(database, pw.Proxy):
-            database = database.obj
-
-        self.database = database
-        self.state = State()
-        self.schema_migrator = SchemaMigrator.from_database(self.database)
-        self.schema = schema
-
-        self.migration = Migration(self.state, self.schema_migrator, schema=schema)
+        self.operations: list[MigrateOperation] = []
 
     def add_operation(self, op: MigrateOperation) -> None:
         """
         Adds a migrate operation
         """
-        self.migration.append(op)
-
-    def run(self, change_schema: bool = True):
-        self.migration.apply(change_schema)
-        self.clean()
+        self.operations.append(op)
 
     def python(self, func: RunPythonF):
         """A shortcut for adding a :class:`RunPython` operation."""
@@ -102,10 +48,6 @@ class Migrator(object):
     def sql(self, sql: str, params: tuple[Any, ...] | None = None) -> None:
         """A shortcut for adding a :class:`RunSql` operation."""
         self.add_operation(RunSql(sql, params))
-
-    def clean(self):
-        """Clean the operations."""
-        self.migration.clean()
 
     def create_model(
         self,
