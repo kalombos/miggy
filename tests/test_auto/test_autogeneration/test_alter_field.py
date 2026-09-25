@@ -19,94 +19,94 @@ class _M1(pw.Model):
             pw.IntegerField(),
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
             (
-                "migrator.alter_field("
+                "operations.AlterField("
                 "model_name='test',"
                 "name='age',"
-                "field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),)"
+                "field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),),"
             ),
             id="add_constraint",
         ),
         pytest.param(
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
             pw.IntegerField(),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(),),""",
             id="remove_constraint",
         ),
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(constraints=[pw.Check("age > 5", "check_age_5")]),
             (
-                "migrator.alter_field("
+                "operations.AlterField("
                 "model_name='test',"
                 "name='age',"
-                "field=pw.IntegerField(constraints=[pw.Check('age > 5', name='check_age_5')]),)"
+                "field=pw.IntegerField(constraints=[pw.Check('age > 5', name='check_age_5')]),),"
             ),
             id="add_check_constraint",
         ),
         pytest.param(
             pw.IntegerField(constraints=[pw.Check("age > 5", "check_age_5")]),
             pw.IntegerField(),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(),),""",
             id="remove_check_constraint",
         ),
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(default=5),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(default=5),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(default=5),),""",
             id="add_default",
         ),
         pytest.param(
             pw.IntegerField(),
             pw.CharField(default=get_active_status, constraints=[pw.SQL("DEFAULT 'active'")]),
             (
-                "migrator.alter_field("
+                "operations.AlterField("
                 "model_name='test',"
                 "name='age',"
                 "field="
-                """pw.CharField(constraints=[pw.SQL("DEFAULT 'active'")], default=tests.helpers.get_active_status),)"""
+                """pw.CharField(constraints=[pw.SQL("DEFAULT 'active'")], default=tests.helpers.get_active_status),),"""
             ),
             id="default_callable",
         ),
         pytest.param(
             pw.IntegerField(default=5),
             pw.IntegerField(),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(),),""",
             id="remove_default",
         ),
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(null=True),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(null=True),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(null=True),),""",
             id="add_not_null",
         ),
         pytest.param(
             pw.IntegerField(null=True),
             pw.IntegerField(),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(),),""",
             id="remove_not_null",
         ),
         pytest.param(
             pw.IntegerField(),
             pw.IntegerField(column_name="new_name"),
-            """migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(column_name='new_name'),)""",
+            """operations.AlterField(model_name='test',name='age',field=pw.IntegerField(column_name='new_name'),),""",
             id="column_name",
         ),
         pytest.param(
             pw.IntegerField(),
             pw.ForeignKeyField(_M1, column_name="new_name", on_update="RESTRICT", field="name"),
             (
-                "migrator.alter_field(model_name='test',name='age',field=pw.ForeignKeyField("
+                "operations.AlterField(model_name='test',name='age',field=pw.ForeignKeyField("
                 "column_name='new_name', "
                 "field='name', "
                 "model='_m1', "
-                "on_update='RESTRICT'),)"
+                "on_update='RESTRICT'),),"
             ),
             id="add_fk",
         ),
         pytest.param(
             pw.ForeignKeyField(_M1, column_name="new_name"),
             pw.IntegerField(),
-            "migrator.alter_field(model_name='test',name='age',field=pw.IntegerField(),)",
+            "operations.AlterField(model_name='test',name='age',field=pw.IntegerField(),),",
             id="remove_fk",
         ),
     ],
@@ -159,21 +159,21 @@ def test_alter_few_fields() -> None:
     compare_dedent(
         serialized[0],
         """
-        migrator.alter_field(
+        operations.AlterField(
             model_name='test',
             name='email',
             field=pw.CharField(),
-        )
+        ),
         """,
     )
     compare_dedent(
         serialized[1],
         """
-        migrator.alter_field(
+        operations.AlterField(
             model_name='test',
             name='last_name',
             field=pw.CharField(),
-        )
+        ),
         """,
     )
 

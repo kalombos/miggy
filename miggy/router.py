@@ -18,7 +18,7 @@ from playhouse.migrate import (
 )
 
 from miggy import LOGGER, MigrateHistory
-from miggy.auto import NEWLINE, MigrationAutodetector
+from miggy.auto import MigrationAutodetector
 from miggy.compat.migrator import Migrator
 from miggy.operations import MigrateOperation
 from miggy.schema import SchemaMigrator
@@ -26,7 +26,6 @@ from miggy.state import State
 from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
 from miggy.writer import OperationWriter
 
-CLEAN_RE = re.compile(r"\s+$", re.M)
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
 VOID = lambda migrator, database, fake: None  # noqa
@@ -155,7 +154,7 @@ class Router(object):
             serialized_changes.append(writer.serialize())
             imports.update(writer.imports)
 
-        return  "\n".join(serialized_changes), imports
+        return "\n".join(serialized_changes), imports
 
     def _compile_template(
         self, name: str, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation]
@@ -183,7 +182,7 @@ class Router(object):
 
         return name
 
-    def read(self, name, fake: bool):
+    def read(self, name, fake: bool) -> type[Migration]:
         """Read migration from file."""
         call_params: dict[str, str] = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
@@ -191,29 +190,36 @@ class Router(object):
             call_params["encoding"] = "utf-8"
         with open(os.path.join(self.migrate_dir, name + ".py"), **call_params) as f:  # type: ignore[call-overload]
             code = f.read()
-            scope: dict[str, Any] = {}
-            exec_in(code, scope)
 
-            atomic, migrate, rollback = (
-                scope.get("__ATOMIC", True),
-                scope.get("migrate", VOID),
-                scope.get("rollback", VOID),
-            )
+        scope: dict[str, Any] = {}
+        exec_in(code, scope)
 
-            def extract_operations(f) -> list[MigrateOperation]:
-                m = Migrator()
-                f(m, self.database, fake=fake)
-                _operations = m.operations[:]
-                m.operations = []
-                return _operations
+        if migration_cls := scope.get("Migration"):
+            return migration_cls
 
-            class _Migration(Migration):
-                pass
+        return self.create_migration_from_legacy_format(scope, fake)
 
-            _Migration.atomic = atomic
-            _Migration.migrate = extract_operations(migrate)
-            _Migration.rollback = extract_operations(rollback)
-            return _Migration
+    def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
+        atomic, migrate, rollback = (
+            scope.get("__ATOMIC", True),
+            scope.get("migrate", VOID),
+            scope.get("rollback", VOID),
+        )
+
+        def extract_operations(f) -> list[MigrateOperation]:
+            m = Migrator()
+            f(m, self.database, fake=fake)
+            _operations = m.operations[:]
+            m.operations = []
+            return _operations
+        
+        class _Migration(Migration):
+            pass
+
+        _Migration.atomic = atomic
+        _Migration.migrate = extract_operations(migrate)
+        _Migration.rollback = extract_operations(rollback)
+        return _Migration
 
     def run_one(
         self,

@@ -10,10 +10,10 @@ from tests.helpers import operation_to_one_line
 @pytest.mark.parametrize(
     ("name_before", "name_after", "expected"),
     [
-        (None, "new_name", ["migrator.rename_table('test','new_name',)"]),
+        (None, "new_name", ["operations.RenameTable('test','new_name',),"]),
         (None, "test", []),
         (None, None, []),
-        ("new_name", None, ["migrator.rename_table('test','test',)"]),
+        ("new_name", None, ["operations.RenameTable('test','test',),"]),
     ],
 )
 def test_rename_table(name_before: str | None, name_after: str | None, expected: list[str]) -> None:

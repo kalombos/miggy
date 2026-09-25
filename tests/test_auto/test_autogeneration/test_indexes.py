@@ -15,49 +15,49 @@ from tests.helpers import diff_one, operation_to_one_line
         (
             {},
             {"index": True, "unique": True},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(unique=True),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(unique=True),),"],
         ),
         (
             {},
             {"index": False, "unique": True},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(unique=True),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(unique=True),),"],
         ),
         (
             {},
             {"index": True, "unique": False},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(index=True),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(index=True),),"],
         ),
         # Changing index
         (
             {"index": True, "unique": False},
             {"index": True, "unique": True},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(unique=True),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(unique=True),),"],
         ),
         (
             {"index": True, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(index=True),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(index=True),),"],
         ),
         (
             {"index": False, "unique": True},
             {"index": True, "unique": False},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(index=True),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(index=True),),"],
         ),
         # Dropping index
         (
             {"index": True, "unique": True},
             {},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(),),"],
         ),
         (
             {"index": False, "unique": True},
             {"index": False, "unique": False},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(),),"],
         ),
         (
             {"index": True, "unique": False},
             {},
-            ["migrator.alter_field(model_name='test',name='first_name',field=pw.CharField(),)"],
+            ["operations.AlterField(model_name='test',name='first_name',field=pw.CharField(),),"],
         ),
         # do nothing
         ({"index": False, "unique": False}, {}, []),
@@ -89,28 +89,28 @@ def test_field_index(
             [
                 (("first_name",), False),
             ],
-            ["migrator.add_index('test','first_name',name='test_first_name',)"],
+            ["operations.AddIndex('test','first_name',name='test_first_name',),"],
         ),
         (
             [],
             [
                 (("first_name",), True),
             ],
-            ["migrator.add_index('test','first_name',name='test_first_name',unique=True,)"],
+            ["operations.AddIndex('test','first_name',name='test_first_name',unique=True,),"],
         ),
         (
             [],
             [
                 (("first_name", "last_name"), False),
             ],
-            ["migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)"],
+            ["operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',),"],
         ),
         (
             [],
             [
                 (("first_name", "last_name"), True),
             ],
-            ["migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',unique=True,)"],
+            ["operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',unique=True,),"],
         ),
         # Dropping indexes
         (
@@ -118,14 +118,14 @@ def test_field_index(
                 (("first_name", "last_name"), True),
             ],
             [],
-            ["migrator.drop_index('test','test_first_name_last_name',)"],
+            ["operations.DropIndex('test','test_first_name_last_name',),"],
         ),
         (
             [
                 (("first_name", "last_name"), False),
             ],
             [],
-            ["migrator.drop_index('test','test_first_name_last_name',)"],
+            ["operations.DropIndex('test','test_first_name_last_name',),"],
         ),
         # Changing indexes
         (
@@ -136,8 +136,8 @@ def test_field_index(
                 (("first_name", "last_name"), True),
             ],
             [
-                "migrator.drop_index('test','test_first_name_last_name',)",
-                "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',unique=True,)",
+                "operations.DropIndex('test','test_first_name_last_name',),",
+                "operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',unique=True,),",
             ],
         ),
         # Nothing to do
@@ -175,32 +175,32 @@ def test_tuple_indexes__from_meta(indexes_before: list[Any], indexes_after: list
             {"unique": False},
             {"unique": False, "name": "new_name"},
             [
-                "migrator.drop_index('test','test_first_name_last_name',)",
-                "migrator.add_index('test','first_name','last_name',name='new_name',)",
+                "operations.DropIndex('test','test_first_name_last_name',),",
+                "operations.AddIndex('test','first_name','last_name',name='new_name',),",
             ],
         ),
         (
             {"unique": False},
             {"unique": True},
             [
-                "migrator.drop_index('test','test_first_name_last_name',)",
-                "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',unique=True,)",
+                "operations.DropIndex('test','test_first_name_last_name',),",
+                "operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',unique=True,),",
             ],
         ),
         (
             {"where": pw.SQL("first_name = 'bom'")},
             {"unique": False},
             [
-                "migrator.drop_index('test','test_first_name_last_name',)",
-                "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)",
+                "operations.DropIndex('test','test_first_name_last_name',),",
+                "operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',),",
             ],
         ),
         (
             {"unique": False},
             {"where": pw.SQL("first_name = 'bom'")},
             [
-                "migrator.drop_index('test','test_first_name_last_name',)",
-                """migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',where=pw.SQL("first_name = 'bom'"),)""",  # noqa: E501
+                "operations.DropIndex('test','test_first_name_last_name',),",
+                """operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',where=pw.SQL("first_name = 'bom'"),),""",  # noqa: E501
             ],
         ),
     ],
@@ -244,5 +244,5 @@ def test_indexes_rebuilding() -> None:
 
     changes = diff_one(prev_model(), current_model())
     assert [operation_to_one_line(c) for c in changes] == [  # type: ignore
-        "migrator.add_index('test','first_name','last_name',name='test_first_name_last_name',)"
+        "operations.AddIndex('test','first_name','last_name',name='test_first_name_last_name',),"
     ]

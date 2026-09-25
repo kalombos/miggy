@@ -1,4 +1,3 @@
-import re
 from collections import namedtuple
 from collections.abc import Callable
 from enum import Enum, auto
@@ -46,10 +45,7 @@ class MigrateOperation:
         return self._deps
 
     def get_operation_call(self) -> str:
-        name = self.__class__.__name__
-        return f"operations.{name}"
-        shortcut = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-        return f"migrator.{shortcut}"
+        return f"operations.{self.__class__.__name__}"
 
     def deconstruct(self):
         """
