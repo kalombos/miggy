@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from miggy.compat import deprecated_options
+from miggy.compat.cli import deprecated_options
 from miggy.router import Router, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
