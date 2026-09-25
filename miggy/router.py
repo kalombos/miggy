@@ -3,12 +3,13 @@ import pkgutil
 import re
 import sys
 import typing
+from collections.abc import Callable
 from contextlib import nullcontext
 from functools import cached_property
 from importlib import import_module
 from logging import Logger
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import peewee as pw
 from playhouse.db_url import connect
@@ -28,7 +29,7 @@ from miggy.writer import OperationWriter
 CLEAN_RE = re.compile(r"\s+$", re.M)
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
-VOID = lambda m, d: None  # noqa
+VOID = lambda migrator, database, fake: None  # noqa
 
 
 def add_to_sys_path(directory: str | Path) -> None:
@@ -64,8 +65,9 @@ class Router(object):
         if not isinstance(database, (pw.Database, pw.Proxy)):
             raise RuntimeError("Invalid database: %s" % database)
         if isinstance(database, pw.Proxy):
+            # Legacy
             database = database.obj
-        self.database = database
+        self.database = cast("pw.Database", database)
         self.schema_migrator = SchemaMigrator.from_database(self.database)
         working_dir = working_dir or os.getcwd()
         self.working_dir = Path(working_dir)
@@ -185,13 +187,13 @@ class Router(object):
 
     def read(self, name, fake: bool):
         """Read migration from file."""
-        call_params = {}
+        call_params: dict[str, str] = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
             # if system is windows - force utf-8 encoding
             call_params["encoding"] = "utf-8"
-        with open(os.path.join(self.migrate_dir, name + ".py"), **call_params) as f:
+        with open(os.path.join(self.migrate_dir, name + ".py"), **call_params) as f:  # type: ignore[call-overload]
             code = f.read()
-            scope = {}
+            scope: dict[str, Any] = {}
             exec_in(code, scope)
 
             atomic, migrate, rollback = (
@@ -200,7 +202,7 @@ class Router(object):
                 scope.get("rollback", VOID),
             )
 
-            def extract_operations(f):
+            def extract_operations(f) -> list[MigrateOperation]:
                 m = Migrator()
                 f(m, self.database, fake=fake)
                 _operations = m.operations[:]
@@ -228,7 +230,7 @@ class Router(object):
             atomic = self.database.atomic() if migration.atomic and change_schema else nullcontext()
 
             with atomic:
-                self.logger.info('%s "%s"', "Rolling back" if downgrade else "Migrate", migration.name)
+                self.logger.info('%s "%s"', "Rolling back" if downgrade else "Migrate", name)
                 operations = self.add_operations(migration, downgrade)
                 if change_history:
                     self.change_history(name, downgrade)
@@ -246,26 +248,22 @@ class Router(object):
         else:
             self.model.create(name=name)
 
-    def add_operation(self, op: MigrateOperation) -> None:
-        operations = []
+    def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
+        operations: list[Operation | Callable] = []
         self.state.create_snapshot()
         op.state_forwards(self.state)
         from_state = self.state.pop_snapshot()
         operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
         return operations
-    
-    def add_operations(
-            self, 
-            migration: Migration,
-            downgrade: bool
-        ) -> None:
+
+    def add_operations(self, migration: Migration, downgrade: bool) -> list[Operation | Callable]:
         operations = []
         ops = migration.rollback if downgrade else migration.migrate
         for op in ops:
             operations.extend(self.add_operation(op))
         return operations
 
-    def run_operations(self, operations) -> None:
+    def run_operations(self, operations: list[Operation | Callable]) -> None:
         if self.schema:
             _ops = [self.schema_migrator.select_schema(self.schema), *operations]
         else:

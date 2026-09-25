@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from typing import Any
 
 import peewee as pw
@@ -34,7 +33,7 @@ class Migrator(object):
 
     def __init__(self) -> None:
         """Initialize the migrator."""
-        self.operations  = []
+        self.operations: list[MigrateOperation] = []
 
     def add_operation(self, op: MigrateOperation) -> None:
         """

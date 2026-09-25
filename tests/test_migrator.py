@@ -1,394 +1,342 @@
-from collections.abc import Callable
-
 import peewee as pw
-from playhouse.db_url import connect
-from playhouse.migrate import Operation
 
-from miggy import Migrator, types
-from miggy.operations import MigrateOperation
-from miggy.schema import SchemaMigrator
-from miggy.state import State
-from miggy.utils import ModelIndex, indexes_state
-from tests.conftest import PatchedPgDatabase
-
-
-def test_migrator_sqlite_common():
-    database = connect("sqlite:///:memory:")
-    migrator = Migrator(database)
-
-    @migrator.create_table
-    class Customer(pw.Model):
-        name = pw.CharField()
-
-    @migrator.create_table
-    class Order(pw.Model):
-        number = pw.CharField()
-        uid = pw.CharField(unique=True)
-
-        customer_id = pw.ForeignKeyField(Customer, column_name="customer_id")
-
-    migrator.run()
-
-    Customer = migrator.state["customer"]
-    Order = migrator.state["order"]  # noqa: F811
-
-    migrator.add_fields("order", finished=pw.BooleanField(default=False))
-    migrator.run()
-    assert "finished" in Order._meta.fields
-
-    migrator.drop_columns("order", "finished", "customer_id", "uid")
-    migrator.run()
-    assert "finished" not in Order._meta.fields
-    assert not hasattr(Order, "customer_id")
-    assert not hasattr(Order, "customer_id_id")
-
-    migrator.add_fields("order", customer=pw.ForeignKeyField(Customer, null=True))
-    migrator.run()
-
-    assert "customer" in Order._meta.fields
-    assert Order.customer.name == "customer"
-    assert Order.customer.name == "customer"
-
-    migrator.rename_field("Order", "number", "identifier")
-    migrator.run()
-
-    assert "identifier" in Order._meta.fields
-
-    migrator.drop_not_null("Order", "identifier")
-    migrator.run()
-    assert Order._meta.fields["identifier"].null
-    assert Order._meta.columns["identifier"].null
-
-    migrator.change_columns("Order", identifier=pw.IntegerField(default=0))
-    migrator.run()
-
-    assert Order.identifier.field_type == "INT"
-
-    Order.create(identifier=55)
-    migrator.sql('UPDATE "order" SET identifier = 77;')
-    migrator.run()
-
-    order = Order.get()
-    assert order.identifier == 77
-
-    migrator.add_index("Order", "identifier", "customer", name="some_name")
-    migrator.run()
-    assert Order._meta.indexes_state
-    assert not Order.identifier.index
-
-    migrator.drop_index("Order", "some_name")
-    migrator.run()
-    assert not Order._meta.indexes_state
-
-    migrator.remove_fields("order", "customer")
-    migrator.run()
-    assert not hasattr(Order, "customer")
-    migrator.add_index("Order", "identifier", unique=True, name="some_name")
-    migrator.run()
-
-    assert Order._meta.indexes_state
-
-    migrator.rename_table("order", "new_name")
-    migrator.run()
-    assert Order._meta.table_name == "new_name"
-    migrator.rename_table("order", "order")
-    migrator.run()
-    assert Order._meta.table_name == "order"
-
-
-def test_add_operation(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
-    class MyOperation(MigrateOperation):
-        def state_forwards(self, state: State) -> None:
-            state.remove_field("user", "last_name")
-
-        def database_forwards(
-            self, schema_migrator: SchemaMigrator, from_state: State, to_state: State
-        ) -> list[Operation] | list[Callable]:
-            return [schema_migrator.drop_column("user", "last_name")]
-
-    migrator.add_operation(MyOperation())
-
-    migrator.run()
-
-    assert not hasattr(migrator.state["User"], "last_name")
-    assert patched_pg_db.queries[-1] == 'ALTER TABLE "user" DROP COLUMN "last_name" CASCADE'
-
-
-def test_create_model(patched_pg_db: PatchedPgDatabase) -> None:
-    migrator = Migrator(patched_pg_db)
-
-    migrator.create_model(name="Company", fields={"name": pw.CharField()}, meta={"table_name": "some_name"})
-
-    assert migrator.state["company"]._meta.table_name == "some_name"
-    assert isinstance(migrator.state["company"].name, pw.CharField)
-
-
-def test_add_index(patched_pg_db: PatchedPgDatabase) -> None:
-    class Company(pw.Model):
-        name = pw.CharField()
-
-    migrator = Migrator(patched_pg_db, state=State({"company": Company}))
-
-    migrator.add_index(
-        "company",
-        "name",
-        name="some_name",
-    )
-
-    index = indexes_state(migrator.state["company"])["some_name"]
-    assert index._name == "some_name"
-    assert [e.name for e in index._expressions] == ["name"]
-
-
-def test_drop_index(patched_pg_db: PatchedPgDatabase) -> None:
-    class Company(pw.Model):
-        name = pw.CharField()
-
-    indexes_state(Company)["some_name"] = ModelIndex(Company, ("name"), name="some_name")
-
-    migrator = Migrator(patched_pg_db, state=State({"company": Company}))
-
-    migrator.drop_index(
-        "company",
-        name="some_name",
-    )
-
-    assert indexes_state(migrator.state["company"]).get("some_name") is None
-
-
-def test_add_field(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField()
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.add_field("user", "email", pw.CharField(max_length=255, null=True))
-
-    email = migrator.state["user"].email
-    assert isinstance(email, pw.CharField)
-    assert email.max_length == 255
-    assert email.null is True
-
-
-def test_add_fields(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField()
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.add_fields("user", last_name=pw.CharField(null=True), age=pw.IntegerField(null=True))
-
-    user = migrator.state["user"]
-    assert isinstance(user.last_name, pw.CharField)
-    assert user.last_name.null is True
-    assert isinstance(user.age, pw.IntegerField)
-    assert user.age.null is True
-
-
-def test_remove_field(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.remove_field("user", "name")
-
-    user = migrator.state["user"]
-    assert not hasattr(user, "name")
-
-
-def test_remove_fields(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.remove_fields("user", "name", "created_at")
-
-    user = migrator.state["user"]
-    assert not hasattr(user, "name")
-    assert not hasattr(user, "created_at")
-
-
-def test_remove_model(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField(index=True)
-        created_at = pw.DateField()
-
-        class Meta:
-            table_name = "what"
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.remove_model("user")
-
-    assert "user" not in migrator.state
-
-
-def test_add_not_null(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField(null=True)
-        created_at = pw.DateField(null=True)
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.add_not_null("user", "name", "created_at")
-
-    user = migrator.state["user"]
-    assert user.name.null is False
-    assert user.created_at.null is False
-
-
-def test_drop_not_null(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.drop_not_null("user", "name", "created_at")
-
-    user = migrator.state["user"]
-    assert user.name.null is True
-    assert user.created_at.null is True
-
-
-def test_migrator_schema(patched_pg_db: PatchedPgDatabase):
-    schema_name = "test_schema"
-    patched_pg_db.execute_sql("DROP SCHEMA IF EXISTS test_schema CASCADE;")
-    patched_pg_db.execute_sql("CREATE SCHEMA  test_schema;")
-
-    migrator = Migrator(patched_pg_db, schema=schema_name)
-
-    patched_pg_db.clear_queries()
-
-    @migrator.create_table
-    class User(types.Model):
-        name = pw.CharField()
-        created_at = pw.DateField()
-
-    migrator.run()
-
-    assert patched_pg_db.queries[0] == f'SET search_path TO "{schema_name}"'
-
-    patched_pg_db.clear_queries()
-    migrator.change_fields("user", created_at=pw.DateTimeField())
-    migrator.run()
-
-    assert patched_pg_db.queries[0] == f'SET search_path TO "{schema_name}"'
-    patched_pg_db.execute_sql("DROP SCHEMA test_schema CASCADE;")
-
-
-def test_run_python(patched_pg_db: PatchedPgDatabase):
-    migrator = Migrator(patched_pg_db)
-
-    @migrator.create_table
-    class User(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-    migrator.run()
-    patched_pg_db.clear_queries()
-
+from miggy import Migrator
+from miggy.operations import (
+    AddCheckConstraint,
+    AddField,
+    AddIndex,
+    AddPrimaryKeyConstraint,
+    AlterField,
+    ChangeNullable,
+    CreateModel,
+    DropIndex,
+    MigrateOperation,
+    RemoveCheckConstraint,
+    RemoveField,
+    RemoveModel,
+    RemovePrimaryKeyConstraint,
+    RenameField,
+    RenameTable,
+    RunPython,
+    RunSql,
+)
+
+
+def test_migrator_starts_empty() -> None:
+    assert Migrator().operations == []
+
+
+def test_add_operation_appends_to_operations() -> None:
+    migrator = Migrator()
+    op = RunSql("SELECT 1")
+    migrator.add_operation(op)
+
+    assert migrator.operations == [op]
+
+
+def test_python() -> None:
     def save_user(schema_migrator, state):
-        User = state["user"]
-        User(
-            first_name="First",
-            last_name="Last",
-        ).save()
+        pass
 
+    migrator = Migrator()
     migrator.python(save_user)
 
-    migrator.run()
-
-    assert patched_pg_db.queries == [
-        'INSERT INTO "user" ("first_name", "last_name") VALUES (First, Last) RETURNING "user"."id"',
-    ]
+    op = migrator.operations[0]
+    assert isinstance(op, RunPython)
+    assert op.func is save_user
 
 
-def test_run_sql(patched_pg_db: PatchedPgDatabase):
-    migrator = Migrator(patched_pg_db)
+def test_sql() -> None:
+    migrator = Migrator()
+    migrator.sql("SELECT 1", (1,))
 
-    @migrator.create_table
+    op = migrator.operations[0]
+    assert isinstance(op, RunSql)
+    assert op.sql == "SELECT 1"
+    assert op.params == (1,)
+
+
+def test_create_model_by_name() -> None:
+    migrator = Migrator()
+    result = migrator.create_model("company", fields={"name": pw.CharField()}, meta={"table_name": "some_name"})
+
+    assert result is None
+    op = migrator.operations[0]
+    assert isinstance(op, CreateModel)
+    assert op.name == "company"
+    assert isinstance(op.fields["name"], pw.CharField)
+    assert op.meta == {"table_name": "some_name"}
+
+
+def test_create_model_by_name_defaults_fields_and_meta() -> None:
+    migrator = Migrator()
+    migrator.create_model("company")
+
+    op = migrator.operations[0]
+    assert isinstance(op, CreateModel)
+    assert op.fields == {}
+    assert op.meta == {}
+
+
+def test_create_model_legacy_model_class() -> None:
     class User(pw.Model):
         first_name = pw.CharField()
         last_name = pw.CharField()
 
-    migrator.run()
-    patched_pg_db.clear_queries()
+    migrator = Migrator()
+    result = migrator.create_table(User)
 
-    migrator.sql(
-        """INSERT INTO "user" ("first_name", "last_name") VALUES ('First', 'Last')""",
-    )
-
-    migrator.run()
-
-    assert migrator.state["user"].get(first_name="First", last_name="Last") is not None
-
-
-def test_rename_field(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.rename_field("user", "first_name", "new_name")
-
-    user = migrator.state["user"]
-    assert not hasattr(user, "first_name")
-    assert isinstance(user.new_name, pw.CharField)
-    assert user.new_name.column_name == "new_name"
+    assert result is User
+    op = migrator.operations[0]
+    assert isinstance(op, CreateModel)
+    assert op.name == "User"
+    assert set(op.fields) == {"first_name", "last_name"}
+    assert isinstance(op.fields["first_name"], pw.CharField)
+    assert op.meta == {}
 
 
-def test_rename_table(patched_pg_db: PatchedPgDatabase) -> None:
+def test_remove_model() -> None:
+    migrator = Migrator()
+    migrator.remove_model("user")
 
-    class User(pw.Model):
-        first_name = pw.CharField(unique=True)
-        last_name = pw.CharField(index=True)
-
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.rename_table("user", "new_name")
-
-    assert migrator.state["User"]._meta.table_name == "new_name"
+    op = migrator.operations[0]
+    assert isinstance(op, RemoveModel)
+    assert op.model_name == "user"
 
 
-def test_alter_field(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField()
+def test_remove_model_alias_drop_table() -> None:
+    migrator = Migrator()
+    migrator.drop_table("user")
 
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
-
-    migrator.alter_field("user", "first_name", pw.CharField(max_length=100))
-
-    user = migrator.state["user"]
-    assert isinstance(user.first_name, pw.CharField)
-    assert user.first_name.max_length == 100
+    op = migrator.operations[0]
+    assert isinstance(op, RemoveModel)
+    assert op.model_name == "user"
 
 
-def test_change_fields(patched_pg_db: PatchedPgDatabase) -> None:
-    class User(pw.Model):
-        first_name = pw.CharField()
-        age = pw.IntegerField(null=True)
+def test_add_field() -> None:
+    migrator = Migrator()
+    field = pw.CharField(max_length=255, null=True)
+    migrator.add_field("user", "email", field)
 
-    migrator = Migrator(patched_pg_db, state=State({"user": User}))
+    op = migrator.operations[0]
+    assert isinstance(op, AddField)
+    assert op.model_name == "user"
+    assert op.name == "email"
+    assert op.field is field
 
+
+def test_add_fields() -> None:
+    migrator = Migrator()
+    migrator.add_fields("user", last_name=pw.CharField(null=True), age=pw.IntegerField(null=True))
+
+    assert [type(op) for op in migrator.operations] == [AddField, AddField]
+    assert [op.name for op in migrator.operations] == ["last_name", "age"]
+    assert isinstance(migrator.operations[0].field, pw.CharField)
+    assert isinstance(migrator.operations[1].field, pw.IntegerField)
+
+
+def test_add_fields_alias_add_columns() -> None:
+    migrator = Migrator()
+    migrator.add_columns("user", age=pw.IntegerField())
+
+    op = migrator.operations[0]
+    assert isinstance(op, AddField)
+    assert op.name == "age"
+
+
+def test_alter_field() -> None:
+    migrator = Migrator()
+    field = pw.CharField(max_length=100)
+    migrator.alter_field("user", "first_name", field)
+
+    op = migrator.operations[0]
+    assert isinstance(op, AlterField)
+    assert op.model_name == "user"
+    assert op.name == "first_name"
+    assert op.field is field
+
+
+def test_change_fields() -> None:
+    migrator = Migrator()
     migrator.change_fields("user", first_name=pw.CharField(max_length=100), age=pw.IntegerField())
 
-    user = migrator.state["user"]
-    assert user.first_name.max_length == 100
-    assert user.age.null is False
+    assert [type(op) for op in migrator.operations] == [AlterField, AlterField]
+    assert [op.name for op in migrator.operations] == ["first_name", "age"]
+
+
+def test_change_fields_alias_change_columns() -> None:
+    migrator = Migrator()
+    migrator.change_columns("user", age=pw.IntegerField())
+
+    op = migrator.operations[0]
+    assert isinstance(op, AlterField)
+    assert op.name == "age"
+
+
+def test_remove_field() -> None:
+    migrator = Migrator()
+    migrator.remove_field("user", "name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RemoveField)
+    assert op.model_name == "user"
+    assert op.name == "name"
+
+
+def test_remove_fields() -> None:
+    migrator = Migrator()
+    migrator.remove_fields("user", "name", "created_at")
+
+    assert [type(op) for op in migrator.operations] == [RemoveField, RemoveField]
+    assert [op.name for op in migrator.operations] == ["name", "created_at"]
+
+
+def test_remove_fields_alias_drop_columns() -> None:
+    migrator = Migrator()
+    migrator.drop_columns("user", "name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RemoveField)
+    assert op.name == "name"
+
+
+def test_rename_field() -> None:
+    migrator = Migrator()
+    migrator.rename_field("user", "first_name", "new_name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RenameField)
+    assert op.model_name == "user"
+    assert op.old_field_name == "first_name"
+    assert op.new_field_name == "new_name"
+
+
+def test_rename_field_alias_rename_column() -> None:
+    migrator = Migrator()
+    migrator.rename_column("user", "first_name", "new_name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RenameField)
+    assert op.old_field_name == "first_name"
+    assert op.new_field_name == "new_name"
+
+
+def test_rename_table() -> None:
+    migrator = Migrator()
+    migrator.rename_table("user", "new_name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RenameTable)
+    assert op.model_name == "user"
+    assert op.new_table_name == "new_name"
+
+
+def test_rename_table_alias_rename_model() -> None:
+    migrator = Migrator()
+    migrator.rename_model("user", "new_name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RenameTable)
+    assert op.new_table_name == "new_name"
+
+
+def test_add_index() -> None:
+    migrator = Migrator()
+    migrator.add_index("user", "first_name", "last_name", name="some_name", unique=True, safe=True)
+
+    (op,) = migrator.operations
+    assert isinstance(op, AddIndex)
+    assert op.model_name == "user"
+    assert op.fields == ("first_name", "last_name")
+    assert op.name == "some_name"
+    assert op.unique is True
+    assert op.safe is True
+
+
+def test_drop_index() -> None:
+    migrator = Migrator()
+    migrator.drop_index("user", "some_name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, DropIndex)
+    assert op.model_name == "user"
+    assert op.name == "some_name"
+
+
+def test_add_not_null() -> None:
+    migrator = Migrator()
+    migrator.add_not_null("user", "name", "created_at")
+
+    (op,) = migrator.operations
+    assert isinstance(op, ChangeNullable)
+    assert op.model_name == "user"
+    assert op.names == ("name", "created_at")
+    assert op.is_null is False
+
+
+def test_drop_not_null() -> None:
+    migrator = Migrator()
+    migrator.drop_not_null("user", "name", "created_at")
+
+    (op,) = migrator.operations
+    assert isinstance(op, ChangeNullable)
+    assert op.model_name == "user"
+    assert op.names == ("name", "created_at")
+    assert op.is_null is True
+
+
+def test_add_primary_key_constraint() -> None:
+    migrator = Migrator()
+    migrator.add_primary_key_constraint("user", "first_name", "last_name")
+
+    (op,) = migrator.operations
+    assert isinstance(op, AddPrimaryKeyConstraint)
+    assert op.model_name == "user"
+    assert op.fields == ("first_name", "last_name")
+
+
+def test_remove_primary_key_constraint() -> None:
+    migrator = Migrator()
+    migrator.remove_primary_key_constraint("user")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RemovePrimaryKeyConstraint)
+    assert op.model_name == "user"
+
+
+def test_add_check_constraint() -> None:
+    migrator = Migrator()
+    migrator.add_check_constraint("user", "age_check", "age > 0")
+
+    (op,) = migrator.operations
+    assert isinstance(op, AddCheckConstraint)
+    assert op.model_name == "user"
+    assert op.name == "age_check"
+    assert op.constraint == "age > 0"
+
+
+def test_remove_check_constraint() -> None:
+    migrator = Migrator()
+    migrator.remove_check_constraint("user", "age_check")
+
+    (op,) = migrator.operations
+    assert isinstance(op, RemoveCheckConstraint)
+    assert op.model_name == "user"
+    assert op.name == "age_check"
+
+
+def test_shortcuts_keep_operation_order() -> None:
+    migrator = Migrator()
+    migrator.create_model("user", fields={"name": pw.CharField()})
+    migrator.add_field("user", "age", pw.IntegerField(null=True))
+    migrator.sql("SELECT 1")
+
+    assert [type(op) for op in migrator.operations] == [CreateModel, AddField, RunSql]
+
+
+def test_operations_are_migrate_operations() -> None:
+    migrator = Migrator()
+    migrator.create_model("user", fields={"name": pw.CharField()})
+    migrator.remove_model("user")
+
+    assert all(isinstance(op, MigrateOperation) for op in migrator.operations)
