@@ -19,7 +19,7 @@ from playhouse.migrate import (
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import NEWLINE, MigrationAutodetector
-from miggy.migrator import Migrator
+from miggy.compat.migrator import Migrator
 from miggy.operations import MigrateOperation
 from miggy.schema import SchemaMigrator
 from miggy.state import State
