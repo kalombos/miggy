@@ -41,7 +41,7 @@ class Car(pw.Model):
                 },
             ),
             """
-            migrator.create_model(
+            operations.CreateModel(
                 'user',
                 {
                     'name': pw.CharField(max_length=100),
@@ -53,16 +53,16 @@ class Car(pw.Model):
                     'primary_key': pw.CompositeKey('name', 'email'),
                     'constraints': [pw.Check("name != 'bob'", name='some_name')],
                 },
-            )
+            ),
             """,
             id="CreateModel",
         ),
         pytest.param(
             RemoveModel("user"),
             """
-            migrator.remove_model(
+            operations.RemoveModel(
                 'user',
-            )
+            ),
             """,
             id="RemoveModel",
         ),
@@ -77,7 +77,7 @@ class Car(pw.Model):
                 concurrently=True,
             ),
             """
-            migrator.add_index(
+            operations.AddIndex(
                 'user',
                 'field1',
                 'field2',
@@ -85,27 +85,27 @@ class Car(pw.Model):
                 where=pw.SQL("field1 = 'bob'"),
                 safe=True,
                 concurrently=True,
-            )
+            ),
             """,
             id="AddIndex",
         ),
         pytest.param(
             DropIndex("user", name="user_index"),
             """
-            migrator.drop_index(
+            operations.DropIndex(
                 'user',
                 name='user_index',
-            )
+            ),
             """,
             id="DropIndex",
         ),
         pytest.param(
             RenameTable("user", "usertable"),
             """
-            migrator.rename_table(
+            operations.RenameTable(
                 'user',
                 'usertable',
-            )
+            ),
             """,
             id="RenameTable",
         ),
@@ -116,11 +116,11 @@ class Car(pw.Model):
                 field=pw.CharField(max_length=100, constraints=[pw.SQL("DEFAULT 'Max'")]),
             ),
             """
-            migrator.add_field(
+            operations.AddField(
                 'user',
                 name='name',
                 field=pw.CharField(constraints=[pw.SQL("DEFAULT 'Max'")], max_length=100),
-            )
+            ),
             """,
             id="AddField",
         ),
@@ -131,41 +131,41 @@ class Car(pw.Model):
                 field=pw.CharField(max_length=255, null=True),
             ),
             """
-            migrator.alter_field(
+            operations.AlterField(
                 'user',
                 name='email',
                 field=pw.CharField(null=True),
-            )
+            ),
             """,
             id="AlterField",
         ),
         pytest.param(
             RemoveField("user", "field1"),
             """
-            migrator.remove_field(
+            operations.RemoveField(
                 'user',
                 'field1',
-            )
+            ),
             """,
             id="RemoveField",
         ),
         pytest.param(
             AddPrimaryKeyConstraint("user", "name", "email"),
             """
-            migrator.add_primary_key_constraint(
+            operations.AddPrimaryKeyConstraint(
                 'user',
                 'name',
                 'email',
-            )
+            ),
             """,
             id="AddPrimaryKeyConstraint",
         ),
         pytest.param(
             RemovePrimaryKeyConstraint("user"),
             """
-            migrator.remove_primary_key_constraint(
+            operations.RemovePrimaryKeyConstraint(
                 'user',
-            )
+            ),
             """,
             id="RemovePrimaryKeyConstraint",
         ),

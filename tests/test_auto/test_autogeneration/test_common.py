@@ -66,7 +66,7 @@ def test_drop_field_w_constraint() -> None:
             table_name = "test"
 
     operation = diff_one(OldTest, Test)[0]
-    assert operation_to_one_line(operation) == "migrator.remove_field(model_name='test',name='age',)"  # type: ignore
+    assert operation_to_one_line(operation) == "operations.RemoveField(model_name='test',name='age',),"  # type: ignore
 
 
 def test_proper_order_for_fk() -> None:
@@ -116,8 +116,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {},
             },
             [
-                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(primary_key=True),)",
+                "operations.AlterField(model_name='test',name='uid',field=pw.IntegerField(),),",
+                "operations.AlterField(model_name='test',name='guid',field=pw.IntegerField(primary_key=True),),",
             ],
             id="single_pk_to_single",
         ),
@@ -141,8 +141,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {},
             },
             [
-                "migrator.alter_field(model_name='test',name='guid',field=pw.IntegerField(),)",
-                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
+                "operations.AlterField(model_name='test',name='guid',field=pw.IntegerField(),),",
+                "operations.AlterField(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),),",
             ],
             id="single_pk_to_single_reverse",
         ),
@@ -156,8 +156,8 @@ def test_proper_order_for_fk() -> None:
             },
             {"fields": {"uid": pw.IntegerField(primary_key=True)}, "meta": {}},
             [
-                "migrator.remove_field(model_name='test',name='id',)",
-                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),)",
+                "operations.RemoveField(model_name='test',name='id',),",
+                "operations.AlterField(model_name='test',name='uid',field=pw.IntegerField(primary_key=True),),",
             ],
             id="auto_to_single_pk",
         ),
@@ -176,8 +176,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {},
             },
             [
-                "migrator.alter_field(model_name='test',name='uid',field=pw.IntegerField(),)",
-                "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
+                "operations.AlterField(model_name='test',name='uid',field=pw.IntegerField(),),",
+                "operations.AddField(model_name='test',name='id',field=pw.AutoField(),),",
             ],
             id="single_pk_to_auto",
         ),
@@ -191,8 +191,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {"primary_key": pw.CompositeKey("a", "b")},
             },
             [
-                "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
-                "migrator.add_primary_key_constraint('test','a','b',)",
+                "operations.AddField(model_name='test',name='b',field=pw.CharField(),),",
+                "operations.AddPrimaryKeyConstraint('test','a','b',),",
             ],
             id="no_pk_to_composite",
         ),
@@ -206,8 +206,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {"primary_key": False},
             },
             [
-                "migrator.remove_primary_key_constraint('test',)",
-                "migrator.remove_field(model_name='test',name='a',)",
+                "operations.RemovePrimaryKeyConstraint('test',),",
+                "operations.RemoveField(model_name='test',name='a',),",
             ],
             id="composite_pk_to_none",
         ),
@@ -221,10 +221,10 @@ def test_proper_order_for_fk() -> None:
                 "meta": {"primary_key": pw.CompositeKey("a", "c")},
             },
             [
-                "migrator.remove_primary_key_constraint('test',)",
-                "migrator.add_field(model_name='test',name='c',field=pw.CharField(),)",
-                "migrator.remove_field(model_name='test',name='b',)",
-                "migrator.add_primary_key_constraint('test','a','c',)",
+                "operations.RemovePrimaryKeyConstraint('test',),",
+                "operations.AddField(model_name='test',name='c',field=pw.CharField(),),",
+                "operations.RemoveField(model_name='test',name='b',),",
+                "operations.AddPrimaryKeyConstraint('test','a','c',),",
             ],
             id="composite_changed",
         ),
@@ -238,8 +238,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {},
             },
             [
-                "migrator.remove_primary_key_constraint('test',)",
-                "migrator.add_field(model_name='test',name='id',field=pw.AutoField(),)",
+                "operations.RemovePrimaryKeyConstraint('test',),",
+                "operations.AddField(model_name='test',name='id',field=pw.AutoField(),),",
             ],
             id="composite_to_auto",
         ),
@@ -253,8 +253,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {"primary_key": pw.CompositeKey("email", "name")},
             },
             [
-                "migrator.remove_field(model_name='test',name='id',)",
-                "migrator.add_primary_key_constraint('test','email','name',)",
+                "operations.RemoveField(model_name='test',name='id',),",
+                "operations.AddPrimaryKeyConstraint('test','email','name',),",
             ],
             id="auto_to_composite",
         ),
@@ -268,10 +268,10 @@ def test_proper_order_for_fk() -> None:
                 "meta": {"primary_key": pw.CompositeKey("a", "b")},
             },
             [
-                "migrator.remove_field(model_name='test',name='pk',)",
-                "migrator.add_field(model_name='test',name='a',field=pw.CharField(),)",
-                "migrator.add_field(model_name='test',name='b',field=pw.CharField(),)",
-                "migrator.add_primary_key_constraint('test','a','b',)",
+                "operations.RemoveField(model_name='test',name='pk',),",
+                "operations.AddField(model_name='test',name='a',field=pw.CharField(),),",
+                "operations.AddField(model_name='test',name='b',field=pw.CharField(),),",
+                "operations.AddPrimaryKeyConstraint('test','a','b',),",
             ],
             id="single_pk_to_composite",
         ),
@@ -285,8 +285,8 @@ def test_proper_order_for_fk() -> None:
                 "meta": {},
             },
             [
-                "migrator.remove_primary_key_constraint('test',)",
-                "migrator.alter_field(model_name='test',name='a',field=pw.CharField(primary_key=True),)",
+                "operations.RemovePrimaryKeyConstraint('test',),",
+                "operations.AlterField(model_name='test',name='a',field=pw.CharField(primary_key=True),),",
             ],
             id="composite_to_single_pk",
         ),
@@ -318,7 +318,7 @@ def test_primary_key_order(prev: dict[str, Any], current: dict[str, Any], expect
                     "check_lastname",
                 ),
             ],
-            ["migrator.add_check_constraint('test','check_lastname',\"last_name != 'dylan'\",)"],
+            ["operations.AddCheckConstraint('test','check_lastname',\"last_name != 'dylan'\",),"],
         ),
         # Remove constraints
         (
@@ -332,7 +332,7 @@ def test_primary_key_order(prev: dict[str, Any], current: dict[str, Any], expect
             [
                 pw.Check("first_name != 'bob'", "check_name"),
             ],
-            ["migrator.remove_check_constraint('test','check_lastname',)"],
+            ["operations.RemoveCheckConstraint('test','check_lastname',),"],
         ),
         # Nothing to do
         (
