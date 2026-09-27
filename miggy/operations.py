@@ -465,3 +465,10 @@ class RemovePrimaryKeyConstraint(MigrateOperation):
     ) -> list[Operation]:
         model = from_state[self.model_name]
         return [schema_migrator.drop_primary_key_constraint(model._meta.table_name)]
+
+
+class Migration:
+    atomic = True
+
+    forward: list[MigrateOperation] = []
+    backward: list[MigrateOperation] = []

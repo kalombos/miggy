@@ -9,8 +9,8 @@ import pytest
 from playhouse.migrate import Operation
 from playhouse.postgres_ext import Psycopg3Database
 
-from miggy.operations import AddField, MigrateOperation, RemoveField, RunSql
-from miggy.router import Migration, Router, detect_changes, get_router
+from miggy.operations import AddField, MigrateOperation, Migration, RemoveField, RunSql
+from miggy.router import Router, detect_changes, get_router
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
 from tests.helpers import get_active_status
@@ -135,10 +135,10 @@ def test_compile(tmp_path: pathlib.Path) -> None:
         assert (
             dedent(
                 """
-        class Migration:
+        class Migration(operations.Migration):
             atomic = True
 
-            migrate = [
+            forward = [
                 operations.AddField(
                     model_name='test',
                     name='field',
@@ -273,10 +273,10 @@ def test_router_run_operations_selects_schema(patched_pg_db: PatchedPgDatabase, 
 def test_router_change_history(router: Router) -> None:
     assert router.done == []
 
-    router.change_history("001_test", downgrade=False)
+    router.change_history("001_test", backward=False)
     assert router.done == ["001_test"]
 
-    router.change_history("001_test", downgrade=True)
+    router.change_history("001_test", backward=True)
     assert router.done == []
 
 
@@ -289,8 +289,8 @@ def _build_migration(
         pass
 
     _Migration.atomic = atomic
-    _Migration.migrate = migrate
-    _Migration.rollback = rollback
+    _Migration.forward = migrate
+    _Migration.backward = rollback
     return _Migration()
 
 
@@ -310,7 +310,7 @@ def test_router_add_operations_not_downgrade(router: Router, patched_pg_db: Patc
         rollback=[],
     )
 
-    operations = router.add_operations(migration, downgrade=False)
+    operations = router.add_operations(migration, backward=False)
     assert len(operations) == 1
 
     router.run_operations(operations)
@@ -332,7 +332,7 @@ def test_router_add_operations_downgrade(router: Router, patched_pg_db: PatchedP
         rollback=[AddField("order", "phone", pw.CharField(null=True))],
     )
 
-    operations = router.add_operations(migration, downgrade=True)
+    operations = router.add_operations(migration, backward=True)
     assert len(operations) == 1
 
     router.run_operations(operations)
@@ -389,7 +389,7 @@ def test_router_run_one(tmp_path: pathlib.Path) -> None:
     assert "tag" in router.state
     assert db.table_exists("tag")
 
-    router.run_one(name, change_schema=True, change_history=True, downgrade=True)
+    router.run_one(name, change_schema=True, change_history=True, backward=True)
     assert "tag" not in router.state
     assert not db.table_exists("tag")
 
@@ -405,10 +405,10 @@ def test_router_run_one_new_format(tmp_path: pathlib.Path) -> None:
             from miggy import operations
 
 
-            class Migration:
+            class Migration(operations.Migration):
                 atomic = True
 
-                migrate = [
+                forward = [
                     operations.CreateModel(
                         'tag',
                         {'tag': pw.CharField()},
@@ -416,7 +416,7 @@ def test_router_run_one_new_format(tmp_path: pathlib.Path) -> None:
                     ),
                 ]
 
-                rollback = [
+                backward = [
                     operations.RemoveModel(
                         'tag',
                     ),
@@ -429,15 +429,15 @@ def test_router_run_one_new_format(tmp_path: pathlib.Path) -> None:
 
     migration = router.read(name, fake=True)
     assert migration.atomic is True
-    assert [type(op).__name__ for op in migration.migrate] == ["CreateModel"]
-    assert [type(op).__name__ for op in migration.rollback] == ["RemoveModel"]
+    assert [type(op).__name__ for op in migration.forward] == ["CreateModel"]
+    assert [type(op).__name__ for op in migration.backward] == ["RemoveModel"]
 
     router.run_one(name, change_schema=True, change_history=True)
 
     assert "tag" in router.state
     assert db.table_exists("tag")
 
-    router.run_one(name, change_schema=True, change_history=True, downgrade=True)
+    router.run_one(name, change_schema=True, change_history=True, backward=True)
     assert "tag" not in router.state
     assert not db.table_exists("tag")
 
@@ -452,10 +452,10 @@ def test_router_read_new_format_wo_transaction(tmp_path: pathlib.Path) -> None:
             from miggy import operations
 
 
-            class Migration:
+            class Migration(operations.Migration):
                 atomic = False
 
-                migrate = [
+                forward = [
                     operations.RemoveModel(
                         'tag',
                     ),
@@ -467,7 +467,7 @@ def test_router_read_new_format_wo_transaction(tmp_path: pathlib.Path) -> None:
 
     migration = router.read("001_create", fake=True)
     assert migration.atomic is False
-    assert migration.rollback == []
+    assert migration.backward == []
 
 
 def test_router_build_state_from_migrations(tmp_path: pathlib.Path) -> None:

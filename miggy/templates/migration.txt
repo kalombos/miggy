@@ -1,10 +1,10 @@
 """Peewee migrations -- {name}.
 
-A migration is a `Migration` class. `migrate` and `rollback` are lists of
+A migration is a `Migration` class. `forward` and `backward` are lists of
 operations from `miggy.operations` to apply forward and backward.
 Set `atomic = True` to run the migration inside a single transaction.
 
-Some examples (model - class or model name)::
+Some examples ::
 
     > operations.RunSql(sql, params: tuple[Any, ...] | None = None)       # Run custom SQL
     > operations.RunPython(func: RunPythonF)                              # Run python code
@@ -37,13 +37,13 @@ Some examples (model - class or model name)::
 from miggy import operations
 
 
-class Migration:
+class Migration(operations.Migration):
     atomic = True
 
-    migrate = [
-{migrate}
+    forward = [
+{forward}
     ]
 
-    rollback = [
-{rollback}
+    backward = [
+{backward}
     ]
