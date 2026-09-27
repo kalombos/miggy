@@ -143,12 +143,12 @@ def test_router_read_extracts_operations(tmp_path: pathlib.Path) -> None:
     router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=mig_dir)
 
     migration = router.read("001_test", fake=True)
-    assert [type(op).__name__ for op in migration.migrate] == ["CreateModel"]
-    assert [type(op).__name__ for op in migration.rollback] == ["RemoveModel"]
+    assert [type(op).__name__ for op in migration.forward] == ["CreateModel"]
+    assert [type(op).__name__ for op in migration.backward] == ["RemoveModel"]
     assert migration.atomic is True
 
     migration = router.read("001_test", fake=False)
-    assert [type(op).__name__ for op in migration.migrate] == ["CreateModel", "RunSql"]
+    assert [type(op).__name__ for op in migration.forward] == ["CreateModel", "RunSql"]
 
 
 def test_router_read__no_operations(tmp_path: pathlib.Path) -> None:
@@ -159,5 +159,5 @@ def test_router_read__no_operations(tmp_path: pathlib.Path) -> None:
 
     migration = router.read("001_test", fake=True)
 
-    assert migration.migrate == []
-    assert migration.rollback == []
+    assert migration.forward == []
+    assert migration.backward == []

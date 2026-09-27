@@ -114,7 +114,7 @@ def test_extract_index_meta__advanced__str_field_error() -> None:
     [
         (
             IndexMeta(model="model", fields=("f1", "f2"), name="some_name"),
-            "migrator.add_index('model','f1','f2',name='some_name',)",
+            "operations.AddIndex('model','f1','f2',name='some_name',),",
         ),
         (
             IndexMeta(
@@ -124,7 +124,7 @@ def test_extract_index_meta__advanced__str_field_error() -> None:
                 name="n",
                 where="first_name = 'bob'",
             ),
-            """migrator.add_index('model','f1','f2',name='n',unique=True,where=pw.SQL("first_name = 'bob'"),)""",
+            """operations.AddIndex('model','f1','f2',name='n',unique=True,where=pw.SQL("first_name = 'bob'"),),""",
         ),
     ],
 )

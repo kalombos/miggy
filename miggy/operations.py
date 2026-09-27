@@ -1,4 +1,3 @@
-import re
 from collections import namedtuple
 from collections.abc import Callable
 from enum import Enum, auto
@@ -46,9 +45,7 @@ class MigrateOperation:
         return self._deps
 
     def get_operation_call(self) -> str:
-        name = self.__class__.__name__
-        shortcut = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-        return f"migrator.{shortcut}"
+        return f"operations.{self.__class__.__name__}"
 
     def deconstruct(self):
         """
@@ -468,3 +465,10 @@ class RemovePrimaryKeyConstraint(MigrateOperation):
     ) -> list[Operation]:
         model = from_state[self.model_name]
         return [schema_migrator.drop_primary_key_constraint(model._meta.table_name)]
+
+
+class Migration:
+    atomic = True
+
+    forward: list[MigrateOperation] = []
+    backward: list[MigrateOperation] = []

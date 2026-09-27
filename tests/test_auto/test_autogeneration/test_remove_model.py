@@ -16,4 +16,4 @@ def test_remove_model() -> None:
 
     diffs = MigrationAutodetector(State({"test": Test}), State()).diff_many()
     changes = [operation_to_one_line(c) for c in diffs]
-    assert changes == ["migrator.remove_model('test',)"]
+    assert changes == ["operations.RemoveModel('test',),"]

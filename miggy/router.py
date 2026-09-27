@@ -18,15 +18,14 @@ from playhouse.migrate import (
 )
 
 from miggy import LOGGER, MigrateHistory
-from miggy.auto import NEWLINE, MigrationAutodetector
+from miggy.auto import MigrationAutodetector
 from miggy.compat.migrator import Migrator
-from miggy.operations import MigrateOperation
+from miggy.operations import MigrateOperation, Migration
 from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
 from miggy.writer import OperationWriter
 
-CLEAN_RE = re.compile(r"\s+$", re.M)
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
 VOID = lambda migrator, database, fake: None  # noqa
@@ -35,13 +34,6 @@ VOID = lambda migrator, database, fake: None  # noqa
 def add_to_sys_path(directory: str | Path) -> None:
     if directory not in sys.path:
         sys.path.insert(0, str(directory))
-
-
-class Migration:
-    atomic = True
-
-    migrate: list[MigrateOperation]
-    rollback: list[MigrateOperation]
 
 
 class Router(object):
@@ -126,8 +118,8 @@ class Router(object):
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
-        migrate_changes = []
-        rollback_changes = []
+        forward_changes = []
+        backward_changes = []
         if auto:
             try:
                 project_state = self.load_project_state(auto)
@@ -136,14 +128,14 @@ class Router(object):
 
             self.build_state_from_migrations(use_unapplied=True)
 
-            migrate_changes = detect_changes(self.state, project_state)
-            if not migrate_changes:
+            forward_changes = detect_changes(self.state, project_state)
+            if not forward_changes:
                 return self.logger.warning("No changes found.")
 
-            rollback_changes = detect_changes(project_state, self.state)
+            backward_changes = detect_changes(project_state, self.state)
 
         self.logger.info('Creating migration "%s"', name)
-        name = self.compile(name, migrate_changes, rollback_changes)
+        name = self.compile(name, forward_changes, backward_changes)
         self.logger.info('Migration has been created as "%s"', name)
         return name
 
@@ -155,20 +147,19 @@ class Router(object):
             serialized_changes.append(writer.serialize())
             imports.update(writer.imports)
 
-        line = NEWLINE + NEWLINE.join("\n\n".join(serialized_changes).split("\n"))
-        return CLEAN_RE.sub("\n", line), imports
+        return "\n".join(serialized_changes), imports
 
     def _compile_template(
-        self, name: str, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation]
+        self, name: str, forward_changes: list[MigrateOperation], backward_changes: list[MigrateOperation]
     ) -> str:
-        migrate, imports = self._serialize_changes(migrate_changes)
-        rollback, rollback_imports = self._serialize_changes(rollback_changes)
-        imports.update(rollback_imports)
+        forward, imports = self._serialize_changes(forward_changes)
+        backward, backward_imports = self._serialize_changes(backward_changes)
+        imports.update(backward_imports)
 
-        return self.migration_template.format(migrate=migrate, rollback=rollback, name=name, imports="\n".join(imports))
+        return self.migration_template.format(forward=forward, backward=backward, name=name, imports="\n".join(imports))
 
     def compile(
-        self, name, migrate_changes: list[MigrateOperation], rollback_changes: list[MigrateOperation], num=None
+        self, name, forward_changes: list[MigrateOperation], backward_changes: list[MigrateOperation], num=None
     ) -> str:
         """Create a migration."""
 
@@ -178,13 +169,13 @@ class Router(object):
         name = f"{num + 1:03}_{name}"
         filename = f"{name}.py"
         path = os.path.join(self.migrate_dir, filename)
-        template = self._compile_template(filename, migrate_changes=migrate_changes, rollback_changes=rollback_changes)
+        template = self._compile_template(filename, forward_changes=forward_changes, backward_changes=backward_changes)
         with open(path, "w") as f:
             f.write(template)
 
         return name
 
-    def read(self, name, fake: bool):
+    def read(self, name, fake: bool) -> type[Migration]:
         """Read migration from file."""
         call_params: dict[str, str] = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
@@ -192,36 +183,43 @@ class Router(object):
             call_params["encoding"] = "utf-8"
         with open(os.path.join(self.migrate_dir, name + ".py"), **call_params) as f:  # type: ignore[call-overload]
             code = f.read()
-            scope: dict[str, Any] = {}
-            exec_in(code, scope)
 
-            atomic, migrate, rollback = (
-                scope.get("__ATOMIC", True),
-                scope.get("migrate", VOID),
-                scope.get("rollback", VOID),
-            )
+        scope: dict[str, Any] = {}
+        exec_in(code, scope)
 
-            def extract_operations(f) -> list[MigrateOperation]:
-                m = Migrator()
-                f(m, self.database, fake=fake)
-                _operations = m.operations[:]
-                m.operations = []
-                return _operations
+        if migration_cls := scope.get("Migration"):
+            return migration_cls
 
-            class _Migration(Migration):
-                pass
+        return self.create_migration_from_legacy_format(scope, fake)
 
-            _Migration.atomic = atomic
-            _Migration.migrate = extract_operations(migrate)
-            _Migration.rollback = extract_operations(rollback)
-            return _Migration
+    def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
+        atomic, migrate, rollback = (
+            scope.get("__ATOMIC", True),
+            scope.get("migrate", VOID),
+            scope.get("rollback", VOID),
+        )
+
+        def extract_operations(f) -> list[MigrateOperation]:
+            m = Migrator()
+            f(m, self.database, fake=fake)
+            _operations = m.operations[:]
+            m.operations = []
+            return _operations
+
+        class _Migration(Migration):
+            pass
+
+        _Migration.atomic = atomic
+        _Migration.forward = extract_operations(migrate)
+        _Migration.backward = extract_operations(rollback)
+        return _Migration
 
     def run_one(
         self,
         name: str,
         change_schema: bool = False,
         change_history: bool = False,
-        downgrade: bool = False,
+        backward: bool = False,
     ) -> None:
         """Run/emulate a migration with given name."""
         try:
@@ -229,20 +227,20 @@ class Router(object):
             atomic = self.database.atomic() if migration.atomic and change_schema else nullcontext()
 
             with atomic:
-                self.logger.info('%s "%s"', "Rolling back" if downgrade else "Migrate", name)
-                operations = self.add_operations(migration, downgrade)
+                self.logger.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
+                operations = self.add_operations(migration, backward)
                 if change_history:
-                    self.change_history(name, downgrade)
+                    self.change_history(name, backward)
                 if change_schema:
                     self.run_operations(operations)
 
         except Exception:
-            operation = "Migration" if not downgrade else "Rollback"
+            operation = "Migration" if not backward else "Rollback"
             self.logger.exception("%s failed: %s", operation, name)
             raise
 
-    def change_history(self, name: str, downgrade: bool) -> None:
-        if downgrade:
+    def change_history(self, name: str, backward: bool) -> None:
+        if backward:
             self.model.delete().where(self.model.name == name).execute()
         else:
             self.model.create(name=name)
@@ -255,9 +253,9 @@ class Router(object):
         operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
         return operations
 
-    def add_operations(self, migration: Migration, downgrade: bool) -> list[Operation | Callable]:
+    def add_operations(self, migration: type[Migration], backward: bool) -> list[Operation | Callable]:
         operations = []
-        ops = migration.rollback if downgrade else migration.migrate
+        ops = migration.backward if backward else migration.forward
         for op in ops:
             operations.extend(self.add_operation(op))
         return operations
@@ -303,7 +301,7 @@ class Router(object):
             raise RuntimeError("Only last migration can be canceled.")
 
         self.build_state_from_migrations()
-        self.run_one(name, change_schema=True, downgrade=True, change_history=True)
+        self.run_one(name, change_schema=True, backward=True, change_history=True)
         self.logger.warning("Downgraded migration: %s", name)
 
     # Candidates for deprecation

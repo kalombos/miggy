@@ -19,44 +19,44 @@ class _M1(pw.Model):
         pytest.param(
             pw.IntegerField(constraints=[pw.SQL("DEFAULT 5")]),
             """
-            migrator.add_field(
+            operations.AddField(
                 model_name='test',
                 name='field',
                 field=pw.IntegerField(constraints=[pw.SQL('DEFAULT 5')]),
-            )
+            ),
             """,
             id="add_constraint",
         ),
         pytest.param(
             pw.IntegerField(default=5),
             """
-            migrator.add_field(
+            operations.AddField(
                 model_name='test',
                 name='field',
                 field=pw.IntegerField(default=5),
-            )
+            ),
             """,
             id="add_default",
         ),
         pytest.param(
             pw.CharField(default=get_active_status),
             """
-            migrator.add_field(
+            operations.AddField(
                 model_name='test',
                 name='field',
                 field=pw.CharField(default=tests.helpers.get_active_status),
-            )
+            ),
             """,
             id="add_default_callable",
         ),
         pytest.param(
             pw.ForeignKeyField(_M1, on_delete="CASCADE", null=True),
             """
-            migrator.add_field(
+            operations.AddField(
                 model_name='test',
                 name='field',
                 field=pw.ForeignKeyField(model='_m1', null=True, on_delete='CASCADE'),
-            )
+            ),
             """,
             id="add_fk",
         ),
@@ -103,20 +103,20 @@ def test_add_few_fields() -> None:
     compare_dedent(
         serialized[0],
         """
-        migrator.add_field(
+        operations.AddField(
             model_name='test',
             name='email',
             field=pw.CharField(),
-        )
+        ),
         """,
     )
     compare_dedent(
         serialized[1],
         """
-        migrator.add_field(
+        operations.AddField(
             model_name='test',
             name='last_name',
             field=pw.CharField(),
-        )
+        ),
         """,
     )

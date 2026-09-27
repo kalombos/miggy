@@ -17,13 +17,13 @@ def test_create_model_w_constraint() -> None:
     changes = [operation_to_one_line(o) for o in diffs]
     assert changes == [
         to_one_line(
-            """migrator.create_model(
+            """operations.CreateModel(
                 name='Test',
                 fields={
                     'first_name': pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")]),
                     'age': pw.IntegerField(),
                 },
-                meta={'constraints': [pw.Check('age > 5', name='check_age')],},)"""
+                meta={'constraints': [pw.Check('age > 5', name='check_age')],},),"""
         )
     ]
 
@@ -44,15 +44,15 @@ def test_create_model() -> None:
 
     assert operation_to_one_line(create_model_code) == to_one_line(
         """
-            migrator.create_model(
+            operations.CreateModel(
                 name='Test',
                 fields={
                     'constraint': pw.CharField(constraints=[pw.SQL("DEFAULT 'music'")]),
                     'i1': pw.IntegerField(),
                     'i2': pw.IntegerField(),},
                 meta={},
-        )
+        ),
         """
     )
-    assert operation_to_one_line(changes[1]) == "migrator.add_index('test','i1','i2',name='test_i1_i2',unique=True,)"
-    assert operation_to_one_line(changes[2]) == "migrator.add_index('test','i1','i2',name='i3',)"
+    assert operation_to_one_line(changes[1]) == "operations.AddIndex('test','i1','i2',name='test_i1_i2',unique=True,),"
+    assert operation_to_one_line(changes[2]) == "operations.AddIndex('test','i1','i2',name='i3',),"
