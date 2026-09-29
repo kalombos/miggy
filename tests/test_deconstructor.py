@@ -15,7 +15,7 @@ from miggy.ext import IntEnumField
 from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
 from miggy.utils import CheckMeta, DefaultMeta
-from tests.helpers import Rating, Status, get_active_status, get_inactive_status
+from tests.helpers import Default, Rating, Status, get_active_status, get_inactive_status
 
 
 class _M1(pw.Model):
@@ -202,7 +202,7 @@ def test_foreignkey_field_deconstruct_fk_params(field: pw.Field, expected: dict[
         (pw.AutoField(index=True, unique=True, primary_key=True), {}),
         # test default callable
         (pw.CharField(default=get_active_status), {"default": get_active_status}),
-        (pw.IntegerField(constraints=[pw.Default(5)]), {"constraints": [DefaultMeta("5")]}),
+        (pw.IntegerField(constraints=[Default(5)]), {"constraints": [DefaultMeta("5")]}),
         # test check constraints
         (
             pw.IntegerField(

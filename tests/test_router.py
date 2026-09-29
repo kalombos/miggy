@@ -7,7 +7,11 @@ import peewee as pw
 import playhouse
 import pytest
 from playhouse.migrate import Operation
-from playhouse.postgres_ext import Psycopg3Database
+
+try:
+    from playhouse.postgres_ext import Psycopg3Database
+except ImportError:  # peewee == 3.17.9
+    Psycopg3Database = None
 
 from miggy.operations import AddField, MigrateOperation, Migration, RemoveField, RunSql
 from miggy.router import Router, detect_changes, get_router
@@ -103,6 +107,7 @@ def test_migration_atomic(resources_dir: pathlib.Path, expected: bool, migration
         assert transaction_called is expected
 
 
+@pytest.mark.skipif(Psycopg3Database is None, reason="Psycopg3Database requires peewee >= 3.18")
 def test_compile(tmp_path: pathlib.Path) -> None:
     def from_state() -> State:
         class Test(pw.Model):
@@ -266,7 +271,11 @@ def test_router_run_operations_selects_schema(patched_pg_db: PatchedPgDatabase, 
     operations = router.add_operation(RunSql("SELECT 1"))
     router.run_operations(operations)
 
-    assert patched_pg_db.queries[0] == f'SET search_path TO "{schema_name}"'
+    q = patched_pg_db.queries[0]
+    assert q in (
+        f'SET search_path TO "{schema_name}"',
+        f"SET search_path TO {schema_name}",  # peewee == 3.17.9
+    )
     patched_pg_db.execute_sql(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE;")
 
 

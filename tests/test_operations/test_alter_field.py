@@ -6,7 +6,7 @@ from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import copy_model
 from tests.conftest import PatchedPgDatabase
-from tests.helpers import run_operations
+from tests.helpers import Default, run_operations
 
 
 def test_state_forwards() -> None:
@@ -43,7 +43,7 @@ def test_state_forwards() -> None:
         ),
         pytest.param(
             pw.IntegerField(),
-            pw.IntegerField(constraints=[pw.Default(5)]),
+            pw.IntegerField(constraints=[Default(5)]),
             ['ALTER TABLE "oldmodel" ALTER COLUMN "field" SET DEFAULT 5'],
             id="default_constraint",
         ),

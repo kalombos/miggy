@@ -4,13 +4,14 @@ import peewee as pw
 import pytest
 
 from miggy.utils import CheckMeta, DefaultMeta, copy_model, extract_check_meta, extract_default_meta
+from tests.helpers import Default
 
 
 @pytest.mark.parametrize(
     ("field_params", "expected"),
     [
         ({}, None),
-        ({"constraints": [pw.Default("'couple words'"), pw.Check("price > 0")]}, DefaultMeta(value="'couple words'")),
+        ({"constraints": [Default("'couple words'"), pw.Check("price > 0")]}, DefaultMeta(value="'couple words'")),
         ({"constraints": [pw.SQL("DEFAULT 5"), pw.Check("price > 0")]}, DefaultMeta(value="5")),
     ],
 )
@@ -59,7 +60,7 @@ def test_extract_check_meta(field_params: dict[str, Any], expected: str) -> None
 
 def test_extract_default_meta__error() -> None:
     class User(pw.Model):
-        name = pw.CharField(constraints=[pw.Default("5"), pw.SQL("DEFAULT 10")])
+        name = pw.CharField(constraints=[Default("5"), pw.SQL("DEFAULT 10")])
 
     with pytest.raises(ValueError):
         extract_default_meta(User.name)
@@ -110,7 +111,7 @@ def test_check_meta_from_node_unnamed() -> None:
 def test_copy_model() -> None:
     class User(pw.Model):
         my_pk = pw.CharField(primary_key=True)
-        name = pw.CharField(constraints=[pw.Default("5"), pw.Check("name > 0", name="some_name")])
+        name = pw.CharField(constraints=[Default("5"), pw.Check("name > 0", name="some_name")])
 
     NewModel = copy_model(User)
 
