@@ -59,3 +59,4 @@ docs/_build
 
 # pyenv
 .python-version
+opencode.jsonc
