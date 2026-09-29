@@ -5,6 +5,7 @@ from playhouse.postgres_ext import ArrayField
 from miggy.schema import SchemaMigrator
 from miggy.utils import ModelIndex, copy_model
 from tests.conftest import PatchedPgDatabase
+from tests.helpers import Default
 
 
 @pytest.mark.parametrize(
@@ -211,22 +212,22 @@ def test__resolve_alter_column_type(
     ("old_field", "new_field", "expected"),
     [
         pytest.param(
-            pw.CharField(constraints=[pw.Default("'5'")]),
-            pw.CharField(constraints=[pw.Default("'5'")]),
+            pw.CharField(constraints=[Default("'5'")]),
+            pw.CharField(constraints=[Default("'5'")]),
             [],
         ),
         pytest.param(
-            pw.CharField(constraints=[pw.Default("'5'")]),
-            pw.CharField(constraints=[pw.Default("'6'")]),
+            pw.CharField(constraints=[Default("'5'")]),
+            pw.CharField(constraints=[Default("'6'")]),
             ['ALTER TABLE "oldmodel" ALTER COLUMN "field" SET DEFAULT \'6\''],
         ),
         pytest.param(
             pw.CharField(),
-            pw.CharField(constraints=[pw.Default("'6'")]),
+            pw.CharField(constraints=[Default("'6'")]),
             ['ALTER TABLE "oldmodel" ALTER COLUMN "field" SET DEFAULT \'6\''],
         ),
         pytest.param(
-            pw.CharField(constraints=[pw.Default("'5'")]),
+            pw.CharField(constraints=[Default("'5'")]),
             pw.CharField(),
             ['ALTER TABLE "oldmodel" ALTER COLUMN "field" DROP DEFAULT'],
         ),
@@ -714,7 +715,7 @@ def test__resolve_alter_fk_constraint_column_is_renamed(patched_pg_db: PatchedPg
         ),
         pytest.param(
             pw.IntegerField(),
-            pw.IntegerField(constraints=[pw.Default(5)]),
+            pw.IntegerField(constraints=[Default(5)]),
             ['ALTER TABLE "model" ALTER COLUMN "field" SET DEFAULT 5'],
             id="default_constraint",
         ),

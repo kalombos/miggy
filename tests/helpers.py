@@ -2,6 +2,7 @@ from collections.abc import Callable
 from enum import IntEnum
 from textwrap import dedent
 
+import peewee as pw
 from playhouse.migrate import Operation
 
 from miggy.auto import MigrationAutodetector
@@ -10,6 +11,13 @@ from miggy.operations import MigrateOperation
 from miggy.state import State
 from miggy.types import ModelCls
 from miggy.writer import OperationWriter
+
+try:
+    from peewee import Default
+except ImportError:  # peewee == 3.17.9
+
+    def Default(value) -> pw.SQL:
+        return pw.SQL(f"DEFAULT {value}")
 
 
 def get_active_status() -> str:
