@@ -4,6 +4,7 @@ import peewee as pw
 import pytest
 from playhouse.postgres_ext import ArrayField, DateTimeTZField
 
+from miggy import ext
 from miggy.deconstructor import (
     Deconstructed,
     ForeignKeyFieldDeconstructor,
@@ -11,11 +12,9 @@ from miggy.deconstructor import (
     deconstructor_factory,
     fields_not_equal,
 )
-from miggy.ext import IntEnumField
-from miggy.ext.fields import CharEnumField
 from miggy.types import ModelCls
-from miggy.utils import CheckMeta, DefaultMeta
-from tests.helpers import Default, Rating, Status, get_active_status, get_inactive_status
+from miggy.utils import CheckMeta, DefaultMeta, EnumField, IntEnumField
+from tests.helpers import Default, Rating, Status, get_active_status, get_inactive_status, skip_if_no_enum
 
 
 class _M1(pw.Model):
@@ -248,8 +247,8 @@ def test_field_deconstruct_params(field: pw.Field, expected: dict[str, Any]) -> 
             Deconstructed("peewee.IntegerField", {"column_name": "some_name"}),
         ),
         (DateTimeTZField(), Deconstructed("playhouse.postgres_ext.DateTimeTZField", {})),
-        (CharEnumField(Status, max_length=50), Deconstructed("peewee.CharField", {"max_length": 50})),
-        (IntEnumField(Rating), Deconstructed("peewee.SmallIntegerField", {})),
+        (ext.CharEnumField(Status, max_length=50), Deconstructed("peewee.CharField", {"max_length": 50})),
+        (ext.IntEnumField(Rating), Deconstructed("peewee.SmallIntegerField", {})),
         (ArrayField(), Deconstructed("playhouse.postgres_ext.ArrayField", {})),
     ],
 )
@@ -258,6 +257,18 @@ def test_field_deconstruct(field: pw.Field, expected: dict[str, Any]) -> None:
         some_field = field
 
     assert deconstructor_factory(MyTestModel.some_field).deconstruct() == expected
+
+
+@skip_if_no_enum
+def test_enum_fields_deconstruct() -> None:
+    class MyTestModel(pw.Model):
+        status = EnumField(Status, max_length=50)
+        rating = IntEnumField(Rating)
+
+    assert deconstructor_factory(MyTestModel.status).deconstruct() == Deconstructed(
+        "peewee.CharField", {"max_length": 50}
+    )
+    assert deconstructor_factory(MyTestModel.rating).deconstruct() == Deconstructed("peewee.SmallIntegerField", {})
 
 
 @pytest.mark.parametrize(

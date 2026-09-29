@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any
 import peewee as pw
 from playhouse.postgres_ext import ArrayField
 
-from miggy.ext.fields import CharEnumField, IntEnumField
-from miggy.utils import array_field, extract_check_meta, extract_default_meta, fk_postfix
+from miggy import ext
+from miggy.utils import EnumField, IntEnumField, array_field, extract_check_meta, extract_default_meta, fk_postfix
 
 if TYPE_CHECKING:
     from miggy.types import ModelCls
@@ -197,9 +197,9 @@ class ModelDeconstructor:
 
 
 def deconstructor_factory(f: pw.Field) -> FieldDeconstructor | CharFieldDeconstructor:
-    if isinstance(f, IntEnumField):
+    if isinstance(f, ext.IntEnumField) or (IntEnumField is not None and isinstance(f, IntEnumField)):
         return IntEnumFieldDeconstructor(f)
-    if isinstance(f, CharEnumField):
+    if isinstance(f, ext.CharEnumField) or (EnumField is not None and isinstance(f, EnumField)):
         return CharEnumFieldDeconstructor(f)
     if isinstance(f, pw.ForeignKeyField):
         return ForeignKeyFieldDeconstructor(f)

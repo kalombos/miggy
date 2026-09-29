@@ -12,6 +12,12 @@ import peewee as pw
 
 from miggy.types import ModelCls
 
+try:
+    from playhouse.fields import EnumField, IntEnumField
+except ImportError:  # playhouse enum fields are only available in peewee >= 4.5
+    EnumField = None  # type: ignore[assignment, misc]
+    IntEnumField = None  # type: ignore[assignment, misc]
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
