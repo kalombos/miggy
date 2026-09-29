@@ -268,7 +268,12 @@ class Router(object):
 
         for op in _ops:
             if isinstance(op, Operation):
-                self.logger.info("%s %s", op.method, op.args)
+                if hasattr(op, "fn"):
+                    fn = op.fn
+                else:
+                    fn = op.method  # peewee < 4.4
+                name = fn if isinstance(fn, str) else fn.__name__
+                self.logger.info("%s %s", name, op.args)
                 op.run()
             else:
                 op()
