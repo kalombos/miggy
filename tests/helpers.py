@@ -3,6 +3,7 @@ from enum import IntEnum
 from textwrap import dedent
 
 import peewee as pw
+import pytest
 from playhouse.migrate import Operation
 
 from miggy.auto import MigrationAutodetector
@@ -10,6 +11,7 @@ from miggy.ext.utils import StrEnum
 from miggy.operations import MigrateOperation
 from miggy.state import State
 from miggy.types import ModelCls
+from miggy.utils import EnumField, IntEnumField
 from miggy.writer import OperationWriter
 
 try:
@@ -18,6 +20,12 @@ except ImportError:  # peewee == 3.17.9
 
     def Default(value) -> pw.SQL:
         return pw.SQL(f"DEFAULT {value}")
+
+
+skip_if_no_enum = pytest.mark.skipif(
+    EnumField is None or IntEnumField is None,
+    reason="enum fields are only available in peewee >= 4.5",
+)
 
 
 def get_active_status() -> str:

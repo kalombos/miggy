@@ -2,11 +2,10 @@ import peewee as pw
 import pytest
 from playhouse.postgres_ext import ArrayField, DateTimeTZField
 
-from miggy.ext import IntEnumField
-from miggy.ext.fields import CharEnumField
+from miggy import ext
 from miggy.serializer import FieldSerializer, SerializedCode, serializer_factory
-from miggy.utils import CheckMeta, DefaultMeta
-from tests.helpers import Rating, Status, get_active_status
+from miggy.utils import CheckMeta, DefaultMeta, EnumField, IntEnumField
+from tests.helpers import Rating, Status, get_active_status, skip_if_no_enum
 
 
 @pytest.mark.parametrize(
@@ -48,8 +47,8 @@ def test_field_serializer_serialize() -> None:
 
     class SomeModel(pw.Model):
         name = pw.CharField(max_length=5, constraints=[pw.SQL("DEFAULT 'Some'")])
-        status = CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
-        rating = IntEnumField(Rating)
+        status = ext.CharEnumField(Status, null=True, max_length=100, default=Status.ACTIVE)
+        rating = ext.IntEnumField(Rating)
         updated_at = DateTimeTZField()
         link_model = pw.ForeignKeyField(LinkModel)
         index_field = pw.IntegerField(index=True, unique=True)
@@ -69,3 +68,13 @@ def test_field_serializer_serialize() -> None:
         "pw_pext.ArrayField(field_class=pw.CharField, field_kwargs={'max_length': 10})",
         imports={"import peewee as pw", "import playhouse.postgres_ext as pw_pext"},
     )
+
+
+@skip_if_no_enum
+def test_field_serializer_playhouse_enum_fields() -> None:
+    class SomeModel(pw.Model):
+        status = EnumField(Status, max_length=100, null=True)
+        rating = IntEnumField(Rating)
+
+    assert FieldSerializer(SomeModel.status).serialize().code == ("""pw.CharField(max_length=100, null=True)""")
+    assert FieldSerializer(SomeModel.rating).serialize().code == ("""pw.SmallIntegerField()""")
