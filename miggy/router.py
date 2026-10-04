@@ -50,6 +50,7 @@ class Router(object):
         schema: str | None = None,
         logger: Logger = LOGGER,
         working_dir: str | Path | None = None,
+        sources: list[str] | None = None
     ) -> None:
         if isinstance(database, str):
             database = connect(database)
@@ -59,6 +60,7 @@ class Router(object):
             # Legacy
             database = database.obj
         self.database = cast("pw.Database", database)
+        self.sources = sources
         self.schema_migrator = SchemaMigrator.from_database(self.database)
         working_dir = working_dir or os.getcwd()
         self.working_dir = Path(working_dir)
@@ -105,7 +107,7 @@ class Router(object):
         done = set(self.done)
         return [name for name in self.todo if name not in done]
 
-    def load_project_state(self, auto) -> State:
+    def load_project_state(self, auto: bool | str) -> State:
         modules = [auto]
         if isinstance(auto, bool):
             modules = [m for _, m, ispkg in pkgutil.iter_modules([str(self.working_dir)]) if ispkg]
@@ -114,7 +116,7 @@ class Router(object):
 
         return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
-    def create(self, name="auto", auto=False):
+    def create(self, name="auto", auto: bool | str = False):
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
@@ -389,6 +391,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
     working_directory = os.getcwd()
     migrate_dir = directory
     ignore = None
+    sources = None
 
     if conf_path:
         working_directory = conf_path.parent.as_posix()
@@ -406,6 +409,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             schema = config.get("SCHEMA", schema)
             migrate_table = config.get("MIGRATE_TABLE", migrate_table)
             migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
+            sources = config.get("SOURCES", sources)
             logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
 
     LOGGER.setLevel(logging_level)
@@ -418,6 +422,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             ignore=ignore,
             schema=schema,
             working_dir=working_directory,
+            sources=sources
         )
     except RuntimeError as exc:
         LOGGER.error(exc)
