@@ -74,34 +74,24 @@ def test_router_merge(router: Router, migrations_dir: pathlib.Path):
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-def test_router_schema(tmpdir):
-    schema_name = "test"
-    migrations = tmpdir.mkdir("migrations")
+@pytest.mark.parametrize(
+    ("schema", "expected"),
+    [
+        ("test_schema", ["SET search_path TO test_schema"]),
+        (None, []),
+    ],
+)
+def test_router_resolve_schema(
+    schema: str | None, expected: list[str], patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path
+) -> None:
+    patched_pg_db.execute_sql("CREATE SCHEMA IF NOT EXISTS test_schema;")
+    router = Router(patched_pg_db, migrate_dir=migrations_dir, schema=schema)
+    patched_pg_db.clear_queries()
 
-    with mock.patch("miggy.router.Router.done"):
-        router = Router(database="postgres:///fake", migrate_dir=str(migrations), schema=schema_name)
+    router.resolve_schema()
 
-        assert router.schema == schema_name
-        # TODO: test schema change
-
-
-# def test_migration_run_operations_with_schema(patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path) -> None:
-#     schema_name = "test_schema"
-#     patched_pg_db.execute_sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
-#     router = Router(patched_pg_db, migrate_dir=migrations_dir, schema=schema_name)
-#     _ = router.model
-#     patched_pg_db.clear_queries()
-
-#     migration = _build_migration(router, migrate=[], rollback=[])
-#     operations = migration.add_operation(router.state, RunSql("SELECT 1"))
-#     migration.run_operations(operations)
-
-#     q = patched_pg_db.queries[0]
-#     assert q in (
-#         f'SET search_path TO "{schema_name}"',
-#         f"SET search_path TO {schema_name}",  # peewee == 3.17.9
-#     )
-#     patched_pg_db.execute_sql(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE;")
+    assert patched_pg_db.queries == expected
+    patched_pg_db.execute_sql("DROP SCHEMA IF EXISTS test_schema CASCADE;")
 
 
 @pytest.mark.skipif(Psycopg3Database is None, reason="Psycopg3Database requires peewee >= 3.18")
@@ -224,8 +214,7 @@ def test_router_unwraps_proxy_database(patched_pg_db: PatchedPgDatabase, migrati
     assert router.schema_migrator.database is patched_pg_db
 
 
-def test_router_run_one(tmp_path: pathlib.Path) -> None:
-    db = pw.SqliteDatabase(":memory:")
+def test_router_run_one(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
     mig_dir = tmp_path / "migrations"
     mig_dir.mkdir()
     (mig_dir / "001_create.py").write_text(
@@ -255,16 +244,57 @@ def test_router_run_one(tmp_path: pathlib.Path) -> None:
         )
     )
     name = "001_create"
-    router = Router(db, migrate_dir=mig_dir)
+    router = Router(patched_pg_db, migrate_dir=mig_dir)
 
     router.run_one(name, change_schema=True, change_history=True)
 
     assert "tag" in router.state
-    assert db.table_exists("tag")
+    assert patched_pg_db.table_exists("tag")
 
     router.run_one(name, change_schema=True, change_history=True, backward=True)
     assert "tag" not in router.state
-    assert not db.table_exists("tag")
+    assert not patched_pg_db.table_exists("tag")
+
+
+def test_router_run_one_resolves_schema(patched_pg_db: PatchedPgDatabase, tmp_path: pathlib.Path) -> None:
+    schema_name = "test_schema"
+    patched_pg_db.execute_sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
+    mig_dir = tmp_path / "migrations"
+    mig_dir.mkdir()
+    (mig_dir / "001_create.py").write_text(
+        dedent(
+            """
+            import peewee as pw
+            from miggy import operations
+
+
+            class Migration(operations.Migration):
+                atomic = True
+
+                forward = [
+                    operations.CreateModel(
+                        'tag',
+                        {'tag': pw.CharField()},
+                        {},
+                    ),
+                ]
+
+                backward = [
+                    operations.RemoveModel(
+                        'tag',
+                    ),
+                ]
+            """
+        )
+    )
+    router = Router(patched_pg_db, migrate_dir=mig_dir, schema=schema_name)
+    patched_pg_db.clear_queries()
+
+    router.run_one("001_create", change_schema=True, change_history=True)
+
+    assert patched_pg_db.queries[1] == f"SET search_path TO {schema_name}"
+
+    patched_pg_db.execute_sql(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE;")
 
 
 def test_router_read_new_format_wo_transaction(tmp_path: pathlib.Path) -> None:
