@@ -3,8 +3,6 @@ import pkgutil
 import re
 import sys
 import typing
-from collections.abc import Callable
-from contextlib import nullcontext
 from functools import cached_property
 from importlib import import_module
 from logging import Logger
@@ -13,9 +11,6 @@ from typing import Any, cast
 
 import peewee as pw
 from playhouse.db_url import connect
-from playhouse.migrate import (
-    Operation,
-)
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import MigrationAutodetector
@@ -175,7 +170,7 @@ class Router(object):
 
         return name
 
-    def read(self, name, fake: bool) -> type[Migration]:
+    def read(self, name, fake: bool) -> Migration:
         """Read migration from file."""
         call_params: dict[str, str] = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
@@ -187,10 +182,13 @@ class Router(object):
         scope: dict[str, Any] = {}
         exec_in(code, scope)
 
-        if migration_cls := scope.get("Migration"):
-            return migration_cls
 
-        return self.create_migration_from_legacy_format(scope, fake)
+        migration_cls = scope.get("Migration", None)
+
+        if migration_cls is None:
+            migration_cls = self.create_migration_from_legacy_format(scope, fake)
+
+        return migration_cls(name, self.schema_migrator, self.schema, self.model)
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
         atomic, migrate, rollback = (
@@ -224,59 +222,13 @@ class Router(object):
         """Run/emulate a migration with given name."""
         try:
             migration = self.read(name, not change_schema)
-            atomic = self.database.atomic() if migration.atomic and change_schema else nullcontext()
 
-            with atomic:
-                self.logger.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
-                operations = self.add_operations(migration, backward)
-                if change_history:
-                    self.change_history(name, backward)
-                if change_schema:
-                    self.run_operations(operations)
-
+            self.logger.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
+            migration.apply(self.state, change_schema, change_history, backward)
         except Exception:
             operation = "Migration" if not backward else "Rollback"
             self.logger.exception("%s failed: %s", operation, name)
             raise
-
-    def change_history(self, name: str, backward: bool) -> None:
-        if backward:
-            self.model.delete().where(self.model.name == name).execute()
-        else:
-            self.model.create(name=name)
-
-    def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
-        operations: list[Operation | Callable] = []
-        self.state.create_snapshot()
-        op.state_forwards(self.state)
-        from_state = self.state.pop_snapshot()
-        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
-        return operations
-
-    def add_operations(self, migration: type[Migration], backward: bool) -> list[Operation | Callable]:
-        operations = []
-        ops = migration.backward if backward else migration.forward
-        for op in ops:
-            operations.extend(self.add_operation(op))
-        return operations
-
-    def run_operations(self, operations: list[Operation | Callable]) -> None:
-        if self.schema:
-            _ops = [self.schema_migrator.select_schema(self.schema), *operations]
-        else:
-            _ops = [*operations]
-
-        for op in _ops:
-            if isinstance(op, Operation):
-                if hasattr(op, "fn"):
-                    fn = op.fn
-                else:
-                    fn = op.method  # peewee < 4.4
-                name = fn if isinstance(fn, str) else fn.__name__
-                self.logger.info("%s %s", name, op.args)
-                op.run()
-            else:
-                op()
 
     def run(self, name=None, fake=False):
         """Run migrations."""

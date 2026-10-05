@@ -13,7 +13,8 @@ try:
 except ImportError:  # peewee == 3.17.9
     Psycopg3Database = None
 
-from miggy.operations import AddField, MigrateOperation, Migration, RemoveField, RunSql
+from miggy.migration import Migration
+from miggy.operations import AddField, MigrateOperation, RemoveField, RunSql
 from miggy.router import Router, detect_changes, get_router
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
