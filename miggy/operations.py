@@ -7,6 +7,7 @@ from typing import Any
 import peewee as pw
 from playhouse.migrate import Operation
 
+from miggy import LOGGER, MigrateHistory
 from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.types import ModelCls
@@ -474,14 +475,12 @@ class Migration:
     backward: list[MigrateOperation] = []
 
     def __init__(
-            self, 
-            name: str, 
-            schema_migrator: SchemaMigrator,
-            schema: str | None,
-            migrate_model: pw.Model
+        self,
+        name: str,
+        schema_migrator: SchemaMigrator,
+        migrate_model: type[MigrateHistory],
     ) -> None:
         self.name = name
-        self.schema = schema
         self.schema_migrator = schema_migrator
         self.migrate_model = migrate_model
 
@@ -490,10 +489,10 @@ class Migration:
 
     def add_operation(self, state: State, op: MigrateOperation) -> list[Operation | Callable]:
         operations: list[Operation | Callable] = []
-        self.state.create_snapshot()
-        op.state_forwards(self.state)
-        from_state = self.state.pop_snapshot()
-        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
+        state.create_snapshot()
+        op.state_forwards(state)
+        from_state = state.pop_snapshot()
+        operations.extend(op.database_forwards(self.schema_migrator, from_state, state))
         return operations
 
     def add_operations(self, state: State, backward: bool) -> list[Operation | Callable]:
@@ -504,25 +503,21 @@ class Migration:
         return operations
 
     def run_operations(self, operations: list[Operation | Callable]) -> None:
-        if self.schema:
-            _ops = [self.schema_migrator.select_schema(self.schema), *operations]
-        else:
-            _ops = [*operations]
-
-        for op in _ops:
+        for op in operations:
             if isinstance(op, Operation):
                 if hasattr(op, "fn"):
                     fn = op.fn
                 else:
                     fn = op.method  # peewee < 4.4
                 name = fn if isinstance(fn, str) else fn.__name__
-                self.logger.info("%s %s", name, op.args)
+                LOGGER.info("%s %s", name, op.args)
                 op.run()
             else:
                 op()
 
-    def check_all_models_created(self, state: State) -> None:
-        return True
+    def check_all_models_created(self, state: State) -> bool:
+        db = self.schema_migrator.database
+        return all(db.table_exists(model._meta.table_name) for model in state.values())
 
     def apply(self, state: State, change_schema: bool, change_history: bool, backward: bool) -> None:
         operations = self.add_operations(state, backward)
@@ -531,7 +526,7 @@ class Migration:
             if self.is_fake_initial() and self.check_all_models_created(state):
                 change_schema = False
 
-        atomic = self.database.atomic() if self.atomic and change_schema else nullcontext()
+        atomic = self.schema_migrator.database.atomic() if self.atomic and change_schema else nullcontext()
 
         with atomic:
             if change_history:
