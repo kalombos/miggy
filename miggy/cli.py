@@ -74,7 +74,7 @@ def init() -> None:
 )
 @deprecated_options
 def makemigrations(
-    name=None, database=None, auto=True, auto_source=False, directory=None, schema=None, verbose=None
+    name=None, database=None, auto: bool = True, auto_source: str | None = None, directory=None, schema=None, verbose=None
 ) -> None:
     """Create a migration automatically
 
