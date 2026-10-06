@@ -1,4 +1,3 @@
-
 import peewee as pw
 import pytest
 from playhouse.migrate import Operation
