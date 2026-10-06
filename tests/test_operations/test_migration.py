@@ -1,4 +1,3 @@
-from multiprocessing.resource_tracker import ResourceTracker
 
 import peewee as pw
 import pytest
@@ -189,7 +188,7 @@ def test_apply__change_history_change_schema(router: Router, change_history: boo
     assert router.model.select().exists() is change_history
 
 
-def test_apply__backward(router: ResourceTracker) -> None:
+def test_apply__backward(router: Router) -> None:
     migration = _build_migration(
         router, migrate=[CreateModel("tag", fields={"tag": pw.CharField()}, meta={})], rollback=[RemoveModel("tag")]
     )
