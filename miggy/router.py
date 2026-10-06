@@ -3,19 +3,13 @@ import pkgutil
 import re
 import sys
 import typing
-from collections.abc import Callable
-from contextlib import nullcontext
 from functools import cached_property
 from importlib import import_module
-from logging import Logger
 from pathlib import Path
 from typing import Any, cast
 
 import peewee as pw
 from playhouse.db_url import connect
-from playhouse.migrate import (
-    Operation,
-)
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import MigrationAutodetector
@@ -48,7 +42,6 @@ class Router(object):
         migrate_dir: str | Path = "migrations",
         ignore: list[str] | None = None,
         schema: str | None = None,
-        logger: Logger = LOGGER,
         working_dir: str | Path | None = None,
     ) -> None:
         if isinstance(database, str):
@@ -68,7 +61,6 @@ class Router(object):
         self.migrate_table = migrate_table
         self.schema = schema
         self.ignore = ignore or []
-        self.logger = logger
         self.migration_template = MIGRATION_TEMPLATE.read_text()
         self.state = State()
 
@@ -90,7 +82,7 @@ class Router(object):
     def todo(self):
         """Scan migrations in file system."""
         if not os.path.exists(self.migrate_dir):
-            self.logger.warning("Migration directory: %s does not exist.", self.migrate_dir)
+            LOGGER.warning("Migration directory: %s does not exist.", self.migrate_dir)
             os.makedirs(self.migrate_dir)
         return sorted(f[:-3] for f in os.listdir(self.migrate_dir) if self.filemask.match(f))
 
@@ -124,19 +116,19 @@ class Router(object):
             try:
                 project_state = self.load_project_state(auto)
             except ImportError:
-                return self.logger.exception("Can't import models module")
+                return LOGGER.exception("Can't import models module")
 
             self.build_state_from_migrations(use_unapplied=True)
 
             forward_changes = detect_changes(self.state, project_state)
             if not forward_changes:
-                return self.logger.warning("No changes found.")
+                return LOGGER.warning("No changes found.")
 
             backward_changes = detect_changes(project_state, self.state)
 
-        self.logger.info('Creating migration "%s"', name)
+        LOGGER.info('Creating migration "%s"', name)
         name = self.compile(name, forward_changes, backward_changes)
-        self.logger.info('Migration has been created as "%s"', name)
+        LOGGER.info('Migration has been created as "%s"', name)
         return name
 
     def _serialize_changes(self, changes: list[MigrateOperation]):
@@ -175,7 +167,7 @@ class Router(object):
 
         return name
 
-    def read(self, name, fake: bool) -> type[Migration]:
+    def read(self, name, fake: bool) -> Migration:
         """Read migration from file."""
         call_params: dict[str, str] = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
@@ -187,10 +179,12 @@ class Router(object):
         scope: dict[str, Any] = {}
         exec_in(code, scope)
 
-        if migration_cls := scope.get("Migration"):
-            return migration_cls
+        migration_cls = scope.get("Migration", None)
 
-        return self.create_migration_from_legacy_format(scope, fake)
+        if migration_cls is None:
+            migration_cls = self.create_migration_from_legacy_format(scope, fake)
+
+        return migration_cls(name, self.schema_migrator, self.model)
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
         atomic, migrate, rollback = (
@@ -214,6 +208,10 @@ class Router(object):
         _Migration.backward = extract_operations(rollback)
         return _Migration
 
+    def resolve_schema(self) -> None:
+        if self.schema:
+            self.database.execute_sql("SET search_path TO %s", (self.schema,))
+
     def run_one(
         self,
         name: str,
@@ -224,68 +222,22 @@ class Router(object):
         """Run/emulate a migration with given name."""
         try:
             migration = self.read(name, not change_schema)
-            atomic = self.database.atomic() if migration.atomic and change_schema else nullcontext()
-
-            with atomic:
-                self.logger.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
-                operations = self.add_operations(migration, backward)
-                if change_history:
-                    self.change_history(name, backward)
-                if change_schema:
-                    self.run_operations(operations)
-
+            LOGGER.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
+            self.resolve_schema()
+            migration.apply(self.state, change_schema, change_history, backward)
         except Exception:
             operation = "Migration" if not backward else "Rollback"
-            self.logger.exception("%s failed: %s", operation, name)
+            LOGGER.exception("%s failed: %s", operation, name)
             raise
-
-    def change_history(self, name: str, backward: bool) -> None:
-        if backward:
-            self.model.delete().where(self.model.name == name).execute()
-        else:
-            self.model.create(name=name)
-
-    def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
-        operations: list[Operation | Callable] = []
-        self.state.create_snapshot()
-        op.state_forwards(self.state)
-        from_state = self.state.pop_snapshot()
-        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
-        return operations
-
-    def add_operations(self, migration: type[Migration], backward: bool) -> list[Operation | Callable]:
-        operations = []
-        ops = migration.backward if backward else migration.forward
-        for op in ops:
-            operations.extend(self.add_operation(op))
-        return operations
-
-    def run_operations(self, operations: list[Operation | Callable]) -> None:
-        if self.schema:
-            _ops = [self.schema_migrator.select_schema(self.schema), *operations]
-        else:
-            _ops = [*operations]
-
-        for op in _ops:
-            if isinstance(op, Operation):
-                if hasattr(op, "fn"):
-                    fn = op.fn
-                else:
-                    fn = op.method  # peewee < 4.4
-                name = fn if isinstance(fn, str) else fn.__name__
-                self.logger.info("%s %s", name, op.args)
-                op.run()
-            else:
-                op()
 
     def run(self, name=None, fake=False):
         """Run migrations."""
-        self.logger.info("Starting migrations")
+        LOGGER.info("Starting migrations")
 
         done = []
         diff = self.diff
         if not diff:
-            self.logger.info("There is nothing to migrate")
+            LOGGER.info("There is nothing to migrate")
             return done
 
         self.build_state_from_migrations()
@@ -307,7 +259,7 @@ class Router(object):
 
         self.build_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
-        self.logger.warning("Downgraded migration: %s", name)
+        LOGGER.warning("Downgraded migration: %s", name)
 
     # Candidates for deprecation
 
@@ -316,17 +268,17 @@ class Router(object):
         self.build_state_from_migrations()
         migrate_changes = detect_changes(State(), self.state)
         if not migrate_changes:
-            return self.logger.error("Can't merge migrations")
+            return LOGGER.error("Can't merge migrations")
 
         self.clear()
 
-        self.logger.info('Merge migrations into "%s"', name)
+        LOGGER.info('Merge migrations into "%s"', name)
         rollback_changes = detect_changes(self.state, State())
         name = self.compile(name, migrate_changes, rollback_changes, 0)
 
         self.state = State()
         self.run_one(name, change_schema=False, change_history=True)
-        self.logger.info('Migrations has been merged into "%s"', name)
+        LOGGER.info('Migrations has been merged into "%s"', name)
 
     def clear(self):
         """Clear migrations."""

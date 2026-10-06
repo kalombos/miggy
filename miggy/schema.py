@@ -174,11 +174,6 @@ class SchemaMigrator(ScM):
         ]
 
     @operation
-    def select_schema(self, schema):
-        """Select database schema"""
-        raise NotImplementedError
-
-    @operation
     def sql(self, sql, params: tuple[Any, ...] | None = None):
         """Execute raw SQL."""
         return pw.SQL(sql, params)
@@ -290,11 +285,6 @@ class MySQLMigrator(SchemaMigrator, MqM):
 
 class PostgresqlMigrator(SchemaMigrator, PgM):
     """Support the migrations in postgresql."""
-
-    @operation
-    def select_schema(self, schema):
-        """Select database schema"""
-        return self.set_search_path(schema)
 
     def get_foreign_key_constraint(self, table: str, column_name: str) -> str:
         sql = """

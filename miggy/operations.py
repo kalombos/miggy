@@ -1,11 +1,14 @@
 from collections import namedtuple
 from collections.abc import Callable
+from contextlib import nullcontext
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import peewee as pw
 from playhouse.migrate import Operation
 
+from miggy import LOGGER, MigrateHistory
+from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
@@ -13,9 +16,6 @@ from miggy.utils import (
     indexes_state,
     resolve_field,
 )
-
-if TYPE_CHECKING:
-    from miggy.schema import SchemaMigrator
 
 RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
@@ -469,6 +469,73 @@ class RemovePrimaryKeyConstraint(MigrateOperation):
 
 class Migration:
     atomic = True
+    fake_initial = False
 
     forward: list[MigrateOperation] = []
     backward: list[MigrateOperation] = []
+
+    def __init__(
+        self,
+        name: str,
+        schema_migrator: SchemaMigrator,
+        migrate_model: type[MigrateHistory],
+    ) -> None:
+        self.name = name
+        self.schema_migrator = schema_migrator
+        self.migrate_model = migrate_model
+
+    def is_fake_initial(self) -> bool:
+        return self.fake_initial and self.name[:3] == "001"
+
+    def add_operation(self, state: State, op: MigrateOperation) -> list[Operation | Callable]:
+        operations: list[Operation | Callable] = []
+        state.create_snapshot()
+        op.state_forwards(state)
+        from_state = state.pop_snapshot()
+        operations.extend(op.database_forwards(self.schema_migrator, from_state, state))
+        return operations
+
+    def add_operations(self, state: State, backward: bool) -> list[Operation | Callable]:
+        operations = []
+        ops = self.backward if backward else self.forward
+        for op in ops:
+            operations.extend(self.add_operation(state, op))
+        return operations
+
+    def run_operations(self, operations: list[Operation | Callable]) -> None:
+        for op in operations:
+            if isinstance(op, Operation):
+                if hasattr(op, "fn"):
+                    fn = op.fn
+                else:
+                    fn = op.method  # peewee < 4.4
+                name = fn if isinstance(fn, str) else fn.__name__
+                LOGGER.info("%s %s", name, op.args)
+                op.run()
+            else:
+                op()
+
+    def check_all_models_created(self, state: State) -> bool:
+        db = self.schema_migrator.database
+        return all(db.table_exists(model._meta.table_name) for model in state.values())
+
+    def apply(self, state: State, change_schema: bool, change_history: bool, backward: bool) -> None:
+        operations = self.add_operations(state, backward)
+
+        if change_schema and not backward:
+            if self.is_fake_initial() and self.check_all_models_created(state):
+                change_schema = False
+
+        atomic = self.schema_migrator.database.atomic() if self.atomic and change_schema else nullcontext()
+
+        with atomic:
+            if change_history:
+                self.change_history(self.name, backward)
+            if change_schema:
+                self.run_operations(operations)
+
+    def change_history(self, name: str, backward: bool) -> None:
+        if backward:
+            self.migrate_model.delete().where(self.migrate_model.name == name).execute()
+        else:
+            self.migrate_model.create(name=name)
