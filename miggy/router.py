@@ -18,7 +18,14 @@ from miggy.operations import MigrateOperation, Migration
 from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
-from miggy.writer import OperationWriter
+from miggy.writer import MigrationAttrWriter, OperationWriter
+
+
+class MigrationError(Exception):
+    pass
+
+class FakeInitialError(MigrationError):
+    pass
 
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
@@ -106,7 +113,7 @@ class Router(object):
 
         return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
-    def create(self, name="auto", auto=False):
+    def create(self, name="auto", auto=False, fake_initial: bool = False) -> str:
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
@@ -127,7 +134,7 @@ class Router(object):
             backward_changes = detect_changes(project_state, self.state)
 
         LOGGER.info('Creating migration "%s"', name)
-        name = self.compile(name, forward_changes, backward_changes)
+        name = self.compile(name, forward_changes, backward_changes, fake_initial)
         LOGGER.info('Migration has been created as "%s"', name)
         return name
 
@@ -151,17 +158,35 @@ class Router(object):
         return self.migration_template.format(forward=forward, backward=backward, name=name, imports="\n".join(imports))
 
     def compile(
-        self, name, forward_changes: list[MigrateOperation], backward_changes: list[MigrateOperation], num=None
+        self, 
+        name, 
+        forward_changes: list[MigrateOperation], 
+        backward_changes: list[MigrateOperation], 
+        num=None, 
+        fake_initial: bool = False
     ) -> str:
         """Create a migration."""
 
         if num is None:
-            num = len(self.todo)
+            num = len(self.todo) + 1
 
-        name = f"{num + 1:03}_{name}"
+        attrs = {"atomic": True}
+        if fake_initial:
+            attrs["fake_initial"] = True
+
+        name = f"{num:03}_{name}"
+        if fake_initial and num != 1:
+            raise FakeInitialError(
+                f'fake_initial=True is only supported for migration "001", got "{name}".'
+            )
         filename = f"{name}.py"
         path = os.path.join(self.migrate_dir, filename)
-        template = self._compile_template(filename, forward_changes=forward_changes, backward_changes=backward_changes)
+        template = self._compile_template(
+            filename, 
+            forward_changes=forward_changes, 
+            backward_changes=backward_changes,
+            attrs=MigrationAttrWriter(attrs).serialize()
+        )
         with open(path, "w") as f:
             f.write(template)
 
@@ -253,9 +278,9 @@ class Router(object):
         name = name.strip()
         done = self.done
         if not done:
-            raise RuntimeError("No migrations are found.")
+            raise MigrationError("No migrations are found.")
         if name != done[-1]:
-            raise RuntimeError("Only last migration can be canceled.")
+            raise MigrationError("Only last migration can be canceled.")
 
         self.build_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
@@ -274,7 +299,7 @@ class Router(object):
 
         LOGGER.info('Merge migrations into "%s"', name)
         rollback_changes = detect_changes(self.state, State())
-        name = self.compile(name, migrate_changes, rollback_changes, 0)
+        name = self.compile(name, migrate_changes, rollback_changes, num=1)
 
         self.state = State()
         self.run_one(name, change_schema=False, change_history=True)
