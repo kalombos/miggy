@@ -468,7 +468,7 @@ class RemovePrimaryKeyConstraint(MigrateOperation):
 
 
 class Migration:
-    # Whether to wrap the whole migration in a transaction. 
+    # Whether to wrap the whole migration in a transaction.
     atomic = True
 
     # Fake-apply the migration if its name starts with "001" and all its tables already exist.

@@ -15,7 +15,7 @@ from miggy.operations import (
     RenameTable,
 )
 from miggy.utils import CheckMeta
-from miggy.writer import OperationWriter
+from miggy.writer import MigrationAttrWriter, OperationWriter
 from tests.helpers import compare_dedent
 
 
@@ -173,3 +173,23 @@ class Car(pw.Model):
 )
 def test_serialize(operation: MigrateOperation, expected: str) -> None:
     compare_dedent(OperationWriter(operation).serialize(), expected)
+
+
+@pytest.mark.parametrize(
+    ("attrs", "expected"),
+    [
+        pytest.param({"atomic": True}, "    atomic = True", id="atomic_only"),
+        pytest.param(
+            {"atomic": True, "fake_initial": True},
+            "    atomic = True\n\n    fake_initial = True",
+            id="atomic_and_fake_initial",
+        ),
+        pytest.param({}, "", id="empty"),
+    ],
+)
+def test_migration_attr_writer(attrs: dict[str, object], expected: str) -> None:
+    assert MigrationAttrWriter(attrs).serialize() == expected
+
+
+def test_migration_attr_writer_indentation() -> None:
+    assert MigrationAttrWriter({"atomic": True}, indentation=2).serialize() == "        atomic = True"

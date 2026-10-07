@@ -76,6 +76,55 @@ def test_makemigrations__autosource(dir_option, db_option):
     assert "Migration created: 001_auto_" in result.output
 
 
+def test_makemigrations_fake_initial_help():
+    result = runner.invoke(cli, ["makemigrations", "--help"])
+    assert result.exit_code == 0
+    assert "--fake-initial" in result.output
+
+
+def test_makemigrations_fake_initial(dir_option, db_option, db_url, tmpdir):
+    result = runner.invoke(
+        cli,
+        [
+            "makemigrations",
+            dir_option,
+            db_option,
+            "--fake-initial",
+            "--auto-source",
+            "tests.test_autodiscover.some_folder_one",
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Migration created: 001_auto_" in result.output
+
+    migration_file = next(Path(tmpdir).glob("001_auto_*.py"))
+    assert "atomic = True" in migration_file.read_text()
+    assert "fake_initial = True" in migration_file.read_text()
+
+    router = Router(database=db_url, migrate_dir=str(tmpdir))
+    migration = router.read(migration_file.stem, fake=True)
+    assert migration.atomic is True
+    assert migration.fake_initial is True
+    assert migration.is_fake_initial() is True
+
+
+def test_makemigrations_fake_initial_not_first_migration(dir_option, db_option, tmpdir, migrations):
+    result = runner.invoke(
+        cli,
+        [
+            "makemigrations",
+            dir_option,
+            db_option,
+            "--fake-initial",
+            "--auto-source",
+            "tests.test_autodiscover.some_folder_one",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "The --fake-initial option can only be used with the first migration." in result.output
+    assert not list(Path(tmpdir).glob("006_*.py"))
+
+
 def test_list(dir_option, db_option, migrations):
     result = runner.invoke(cli, ["list", dir_option, db_option])
     assert "Migrations are done:\n" in result.output

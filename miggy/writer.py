@@ -58,11 +58,11 @@ class OperationWriter(SerializeValueMixin):
 class MigrationAttrWriter:
     def __init__(self, attrs: dict[str, Any], indentation: int = 1) -> None:
         self.attrs = attrs
+        self.indentation = indentation
 
-    def serialize(self) -> None:
+    def serialize(self) -> str:
         buff = []
         for attr, value in self.attrs.items():
             line = f"{attr} = {value}"
             buff.append(" " * (self.indentation * 4) + line)
         return "\n\n".join(buff)
-

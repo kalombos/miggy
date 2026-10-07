@@ -24,8 +24,10 @@ from miggy.writer import MigrationAttrWriter, OperationWriter
 class MigrationError(Exception):
     pass
 
+
 class FakeInitialError(MigrationError):
     pass
+
 
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
@@ -134,7 +136,7 @@ class Router(object):
             backward_changes = detect_changes(project_state, self.state)
 
         LOGGER.info('Creating migration "%s"', name)
-        name = self.compile(name, forward_changes, backward_changes, fake_initial)
+        name = self.compile(name, forward_changes, backward_changes, fake_initial=fake_initial)
         LOGGER.info('Migration has been created as "%s"', name)
         return name
 
@@ -149,21 +151,27 @@ class Router(object):
         return "\n".join(serialized_changes), imports
 
     def _compile_template(
-        self, name: str, forward_changes: list[MigrateOperation], backward_changes: list[MigrateOperation]
+        self,
+        name: str,
+        forward_changes: list[MigrateOperation],
+        backward_changes: list[MigrateOperation],
+        attrs: str,
     ) -> str:
         forward, imports = self._serialize_changes(forward_changes)
         backward, backward_imports = self._serialize_changes(backward_changes)
         imports.update(backward_imports)
 
-        return self.migration_template.format(forward=forward, backward=backward, name=name, imports="\n".join(imports))
+        return self.migration_template.format(
+            forward=forward, backward=backward, name=name, imports="\n".join(imports), attrs=attrs
+        )
 
     def compile(
-        self, 
-        name, 
-        forward_changes: list[MigrateOperation], 
-        backward_changes: list[MigrateOperation], 
-        num=None, 
-        fake_initial: bool = False
+        self,
+        name,
+        forward_changes: list[MigrateOperation],
+        backward_changes: list[MigrateOperation],
+        num=None,
+        fake_initial: bool = False,
     ) -> str:
         """Create a migration."""
 
@@ -176,16 +184,14 @@ class Router(object):
 
         name = f"{num:03}_{name}"
         if fake_initial and num != 1:
-            raise FakeInitialError(
-                f'fake_initial=True is only supported for migration "001", got "{name}".'
-            )
+            raise FakeInitialError(f'fake_initial=True is only supported for migration "001", got "{name}".')
         filename = f"{name}.py"
         path = os.path.join(self.migrate_dir, filename)
         template = self._compile_template(
-            filename, 
-            forward_changes=forward_changes, 
+            filename,
+            forward_changes=forward_changes,
             backward_changes=backward_changes,
-            attrs=MigrationAttrWriter(attrs).serialize()
+            attrs=MigrationAttrWriter(attrs).serialize(),
         )
         with open(path, "w") as f:
             f.write(template)
