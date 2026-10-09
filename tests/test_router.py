@@ -11,7 +11,7 @@ try:
 except ImportError:  # peewee == 3.17.9
     Psycopg3Database = None
 
-from miggy.router import Router, detect_changes, get_router
+from miggy.router import FakeInitialError, MigrationError, Router, detect_changes, get_router
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
 from tests.helpers import get_active_status
@@ -362,3 +362,102 @@ def test_router_build_state_from_migrations(tmp_path: pathlib.Path) -> None:
     router.build_state_from_migrations()
 
     assert "tag" in router.state
+
+
+def test_migration_error_hierarchy() -> None:
+    assert issubclass(MigrationError, Exception)
+    assert issubclass(FakeInitialError, MigrationError)
+
+
+def test_compile_numbering(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+
+    assert router.compile("first", [], []) == "001_first"
+    assert (d / "001_first.py").exists()
+
+    assert router.compile("second", [], []) == "002_second"
+    assert (d / "002_second.py").exists()
+
+
+def test_compile_attrs_default(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+
+    name = router.compile("first", [], [])
+
+    content = (d / f"{name}.py").read_text()
+    assert "atomic = True" in content
+    assert "fake_initial" not in content
+
+
+def test_compile_fake_initial(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+
+    name = router.compile("initial", [], [], fake_initial=True)
+
+    assert name == "001_initial"
+    content = (d / "001_initial.py").read_text()
+    assert "    atomic = True\n\n    fake_initial = True" in content
+
+    migration = router.read(name, fake=True)
+    assert migration.atomic is True
+    assert migration.fake_initial is True
+    assert migration.is_fake_initial() is True
+
+
+def test_compile_fake_initial_not_first(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+    router.compile("first", [], [])
+
+    with pytest.raises(FakeInitialError, match='only supported for migration "001"'):
+        router.compile("second", [], [], fake_initial=True)
+
+    assert not (d / "002_second.py").exists()
+
+
+def test_compile_fake_initial_explicit_num(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+
+    with pytest.raises(FakeInitialError, match='got "002_second"'):
+        router.compile("second", [], [], num=2, fake_initial=True)
+
+    name = router.compile("initial", [], [], num=1, fake_initial=True)
+    assert name == "001_initial"
+
+
+def test_create_fake_initial(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+
+    name = router.create("init", fake_initial=True)
+
+    assert name == "001_init"
+    assert "fake_initial = True" in (d / "001_init.py").read_text()
+
+    with pytest.raises(FakeInitialError):
+        router.create("second", fake_initial=True)
+
+
+def test_rollback_raises_migration_error(tmp_path: pathlib.Path) -> None:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+
+    with pytest.raises(MigrationError, match="No migrations are found."):
+        router.rollback("001_test")
+
+    router.model.create(name="001_test")
+    router.model.create(name="002_test")
+
+    with pytest.raises(MigrationError, match="Only last migration can be canceled."):
+        router.rollback("001_test")
