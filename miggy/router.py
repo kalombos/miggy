@@ -115,7 +115,7 @@ class Router(object):
 
         return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
-    def create(self, name="auto", auto=False, fake_initial: bool = False) -> str:
+    def create(self, name="auto", auto=False, fake_initial: bool = False) -> str | None:
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
@@ -125,13 +125,15 @@ class Router(object):
             try:
                 project_state = self.load_project_state(auto)
             except ImportError:
-                return LOGGER.exception("Can't import models module")
+                LOGGER.exception("Can't import models module")
+                return None
 
             self.build_state_from_migrations(use_unapplied=True)
 
             forward_changes = detect_changes(self.state, project_state)
             if not forward_changes:
-                return LOGGER.warning("No changes found.")
+                LOGGER.warning("No changes found.")
+                return None
 
             backward_changes = detect_changes(project_state, self.state)
 

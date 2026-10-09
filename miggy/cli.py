@@ -69,7 +69,7 @@ def init() -> None:
     ),
 )
 @click.option(
-    "--auto",
+    "--auto/--empty",
     default=True,
     is_flag=True,
     help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
