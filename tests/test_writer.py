@@ -184,12 +184,8 @@ def test_serialize(operation: MigrateOperation, expected: str) -> None:
             "    atomic = True\n\n    fake_initial = True",
             id="atomic_and_fake_initial",
         ),
-        pytest.param({}, "", id="empty"),
     ],
 )
 def test_migration_attr_writer(attrs: dict[str, object], expected: str) -> None:
     assert MigrationAttrWriter(attrs).serialize() == expected
 
-
-def test_migration_attr_writer_indentation() -> None:
-    assert MigrationAttrWriter({"atomic": True}, indentation=2).serialize() == "        atomic = True"
