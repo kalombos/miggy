@@ -11,12 +11,6 @@ POSTGRES_DSN = "postgresql://postgres:postgres@localhost:5432/postgres"
 
 
 @pytest.fixture()
-def migrations_dir():
-    """Migrations dir"""
-    return pathlib.Path(__file__).with_name("migrations")
-
-
-@pytest.fixture()
 def resources_dir() -> pathlib.Path:
     return pathlib.Path(__file__).with_name("resources")
 
@@ -51,5 +45,22 @@ def patched_pg_db(request: pytest.FixtureRequest) -> Generator[PatchedPgDatabase
 
 
 @pytest.fixture()
+def migrations_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    d = tmp_path / "migrations"
+    d.mkdir()
+    return tmp_path
+
+
+@pytest.fixture()
 def router(migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> Router:
     return Router(patched_pg_db, migrate_dir=migrations_dir)
+
+
+@pytest.fixture()
+def person_migrations_dir(resources_dir: pathlib.Path) -> pathlib.Path:
+    return resources_dir / "person_migrations"
+
+
+@pytest.fixture()
+def person_router(person_migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> Router:
+    return Router(patched_pg_db, migrate_dir=person_migrations_dir)

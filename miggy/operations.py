@@ -468,7 +468,11 @@ class RemovePrimaryKeyConstraint(MigrateOperation):
 
 
 class Migration:
+    # Whether to wrap the whole migration in a transaction.
     atomic = True
+
+    # Fake-apply the migration if its name starts with "001" and all its tables already exist.
+    # If any table is missing, apply the migration normally.
     fake_initial = False
 
     forward: list[MigrateOperation] = []

@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from miggy.compat.cli import deprecated_options
-from miggy.router import Router, get_router
+from miggy.router import FakeInitialError, Router, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
 
@@ -59,7 +59,17 @@ def init() -> None:
     help=("Migration file name. By default will be 'auto_YYYYmmdd_HHMM'"),
 )
 @click.option(
-    "--auto",
+    "--fake-initial",
+    default=False,
+    is_flag=True,
+    help=(
+        "Detect whether tables already exist and fake-apply initial migrations if they do. "
+        "Make sure the current database schema matches your initial migration before using "
+        "this flag. Miggy only checks whether the table names exist."
+    ),
+)
+@click.option(
+    "--auto/--empty",
     default=True,
     is_flag=True,
     help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
@@ -74,7 +84,7 @@ def init() -> None:
 )
 @deprecated_options
 def makemigrations(
-    name=None, database=None, auto=True, auto_source=False, directory=None, schema=None, verbose=None
+    name, fake_initial: bool, database, auto: bool, auto_source, directory=None, schema=None, verbose=None
 ) -> None:
     """Create a migration automatically
 
@@ -87,7 +97,10 @@ def makemigrations(
 
     if auto and auto_source:
         auto = auto_source
-    name = router.create(name, auto=auto)
+    try:
+        name = router.create(name, auto=auto, fake_initial=fake_initial)
+    except FakeInitialError:
+        raise click.ClickException("The --fake-initial option can only be used with the first migration.") from None
     if name:
         click.echo(f"Migration created: {name}")
 
