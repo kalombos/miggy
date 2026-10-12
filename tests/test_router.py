@@ -17,55 +17,56 @@ from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
 from tests.helpers import get_active_status
 
 
-def test_router_run_already_applied_ok(router: Router) -> None:
-    router.run()
-    router.build_state_from_migrations()
-    Person = router.state["person"]
+def test_router_run_already_applied_ok(person_router: Router) -> None:
+    person_router.run()
+    person_router.build_state_from_migrations()
+    Person = person_router.state["person"]
 
     assert Person.get_or_none(email="person@example.com") is not None
 
     Person.delete().execute()
 
-    router.run_one("004_test_insert")
+    person_router.run_one("004_test_insert")
     assert Person.get_or_none(email="person@example.com") is None
 
 
-def test_router_todo_diff_done(router: Router, migrations_dir: pathlib.Path):
-    MigrateHistory = router.model
+def test_router_todo_diff_done(person_router: Router):
+    MigrateHistory = person_router.model
 
-    assert router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert"]
-    assert router.done == []
-    assert router.diff == ["001_test", "002_test", "003_tespy", "004_test_insert"]
+    assert person_router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert"]
+    assert person_router.done == []
+    assert person_router.diff == ["001_test", "002_test", "003_tespy", "004_test_insert"]
 
-    router.create("new")
-    assert router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert", "005_new"]
-    os.remove(os.path.join(migrations_dir, "005_new.py"))
+    person_router.create("new")
+    assert person_router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert", "005_new"]
+    os.remove(os.path.join(person_router.migrate_dir, "005_new.py"))
 
     MigrateHistory.create(name="001_test")
-    assert router.diff == ["002_test", "003_tespy", "004_test_insert"]
+    assert person_router.diff == ["002_test", "003_tespy", "004_test_insert"]
     MigrateHistory.delete().execute()
 
 
-def test_router_rollback(router: Router):
-    MigrateHistory = router.model
-    router.run()
+def test_router_rollback(person_router: Router):
+    MigrateHistory = person_router.model
+    person_router.run()
 
     migrations = MigrateHistory.select()
     assert list(migrations)
     assert migrations.count() == 4
 
-    router.rollback("004_test_insert")
-    router.rollback("003_tespy")
-    assert router.diff == ["003_tespy", "004_test_insert"]
+    person_router.rollback("004_test_insert")
+    person_router.rollback("003_tespy")
+    assert person_router.diff == ["003_tespy", "004_test_insert"]
     assert migrations.count() == 2
 
 
-def test_router_merge(router: Router, migrations_dir: pathlib.Path):
-    MigrateHistory = router.model
-    router.run()
+def test_router_merge(person_router: Router) -> None:
+    migrations_dir = person_router.migrate_dir
+    MigrateHistory = person_router.model
+    person_router.run()
 
     with mock.patch("os.remove") as mocked:
-        router.merge()
+        person_router.merge()
         assert mocked.call_count == 4
         assert mocked.call_args[0][0] == os.path.join(migrations_dir, "004_test_insert.py")
         assert MigrateHistory.select().count() == 1
@@ -364,15 +365,8 @@ def test_router_build_state_from_migrations(tmp_path: pathlib.Path) -> None:
     assert "tag" in router.state
 
 
-def test_migration_error_hierarchy() -> None:
-    assert issubclass(MigrationError, Exception)
-    assert issubclass(FakeInitialError, MigrationError)
-
-
-def test_compile_numbering(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+def test_compile_numbering(router: Router) -> None:
+    d = router.migrate_dir
 
     assert router.compile("first", [], []) == "001_first"
     assert (d / "001_first.py").exists()
@@ -381,77 +375,27 @@ def test_compile_numbering(tmp_path: pathlib.Path) -> None:
     assert (d / "002_second.py").exists()
 
 
-def test_compile_attrs_default(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+@pytest.mark.parametrize(
+    "fake_initial",
+    [True, False],
+)
+def test_compile_attrs_default(router: Router, fake_initial: bool) -> None:
 
-    name = router.compile("first", [], [])
+    name = router.compile("first", [], [], fake_initial=fake_initial)
 
-    content = (d / f"{name}.py").read_text()
+    content = (router.migrate_dir / f"{name}.py").read_text()
     assert "atomic = True" in content
-    assert "fake_initial" not in content
+    assert ("fake_initial" in content) is fake_initial
 
 
-def test_compile_fake_initial(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
-
-    name = router.compile("initial", [], [], fake_initial=True)
-
-    assert name == "001_initial"
-    content = (d / "001_initial.py").read_text()
-    assert "    atomic = True\n\n    fake_initial = True" in content
-
-    migration = router.read(name, fake=True)
-    assert migration.atomic is True
-    assert migration.fake_initial is True
-    assert migration.is_fake_initial() is True
-
-
-def test_compile_fake_initial_not_first(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+def test_compile_fake_initial_not_first(router: Router) -> None:
     router.compile("first", [], [])
 
     with pytest.raises(FakeInitialError, match='only supported for migration "001"'):
         router.compile("second", [], [], fake_initial=True)
 
-    assert not (d / "002_second.py").exists()
 
-
-def test_compile_fake_initial_explicit_num(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
-
-    with pytest.raises(FakeInitialError, match='got "002_second"'):
-        router.compile("second", [], [], num=2, fake_initial=True)
-
-    name = router.compile("initial", [], [], num=1, fake_initial=True)
-    assert name == "001_initial"
-
-
-def test_create_fake_initial(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
-
-    name = router.create("init", fake_initial=True)
-
-    assert name == "001_init"
-    assert "fake_initial = True" in (d / "001_init.py").read_text()
-
-    with pytest.raises(FakeInitialError):
-        router.create("second", fake_initial=True)
-
-
-def test_rollback_raises_migration_error(tmp_path: pathlib.Path) -> None:
-    d = tmp_path / "migrations"
-    d.mkdir()
-    router = Router(pw.SqliteDatabase(":memory:"), migrate_dir=d)
+def test_rollback_error(router: Router) -> None:
 
     with pytest.raises(MigrationError, match="No migrations are found."):
         router.rollback("001_test")

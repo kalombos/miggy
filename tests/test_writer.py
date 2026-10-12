@@ -178,14 +178,21 @@ def test_serialize(operation: MigrateOperation, expected: str) -> None:
 @pytest.mark.parametrize(
     ("attrs", "expected"),
     [
-        pytest.param({"atomic": True}, "    atomic = True", id="atomic_only"),
+        pytest.param(
+            {"atomic": True},
+            """
+                atomic = True
+            """,
+        ),
         pytest.param(
             {"atomic": True, "fake_initial": True},
-            "    atomic = True\n\n    fake_initial = True",
-            id="atomic_and_fake_initial",
+            """
+                atomic = True
+
+                fake_initial = True
+            """,
         ),
     ],
 )
 def test_migration_attr_writer(attrs: dict[str, object], expected: str) -> None:
-    assert MigrationAttrWriter(attrs).serialize() == expected
-
+    compare_dedent(MigrationAttrWriter(attrs).serialize(), expected)
