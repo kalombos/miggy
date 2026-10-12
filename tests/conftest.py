@@ -64,3 +64,8 @@ def person_migrations_dir(resources_dir: pathlib.Path) -> pathlib.Path:
 @pytest.fixture()
 def person_router(person_migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> Router:
     return Router(patched_pg_db, migrate_dir=person_migrations_dir)
+
+
+@pytest.fixture()
+def prepend_resources(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
+    monkeypatch.syspath_prepend(str(resources_dir))

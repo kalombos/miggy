@@ -131,14 +131,14 @@ def test_init_does_not_overwrite_existing_config(default_config: Path) -> None:
     assert default_config.read_text() == "DATABASE = 'sqlite:///:memory:'\nMIGRATE_DIR = 'custom_migrations'"
 
 
-def test_makemigrations__autosource(dir_option, db_option):
+def test_makemigrations__autosource(dir_option, db_option, prepend_resources: None) -> None:
     result = runner.invoke(
-        cli, ["makemigrations", dir_option, db_option, "--auto-source", "tests.test_autodiscover.some_folder_one"]
+        cli, ["makemigrations", dir_option, db_option, "--auto-source", "autodiscover.some_folder_one"]
     )
     assert "Migration created: 001_auto_" in result.output
 
 
-def test_makemigrations_fake_initial(default_config: Path) -> None:
+def test_makemigrations_fake_initial(default_config: Path, prepend_resources: None) -> None:
     migration_dir = default_config.parent / "custom_migrations"
     result = runner.invoke(
         cli,
@@ -148,7 +148,7 @@ def test_makemigrations_fake_initial(default_config: Path) -> None:
             "makemigrations",
             "--fake-initial",
             "--auto-source",
-            "tests.test_autodiscover.some_folder_one",
+            "autodiscover.some_folder_one",
         ],
     )
     assert result.exit_code == 0
