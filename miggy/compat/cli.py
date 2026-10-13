@@ -17,7 +17,6 @@ def deprecated_options(func) -> Any:
     return func
 
 
-
 @click.argument("name")
 @click.option(
     "--auto",
@@ -37,6 +36,7 @@ def deprecated_options(func) -> Any:
 def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
     """Create a migration."""
     from miggy.cli import _load_router
+
     router = _load_router(directory, database, schema, verbose)
     if auto and auto_source:
         auto = auto_source

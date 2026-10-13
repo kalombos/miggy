@@ -162,6 +162,7 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
 
 cli.command(deprecated="Use `makemigrations --empty` instead.")(create)
 
+
 @cli.command()
 @deprecated_options
 def merge(database=None, directory=None, schema=None, verbose=None):
