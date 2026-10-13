@@ -11,7 +11,7 @@ try:
 except ImportError:  # peewee == 3.17.9
     Psycopg3Database = None
 
-from miggy.router import FakeInitialError, MigrationError, Router, detect_changes, get_router
+from miggy.router import FakeInitialError, MigrationError, Router, detect_changes, get_router, load_models
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
 from tests.helpers import get_active_status
@@ -405,3 +405,27 @@ def test_rollback_error(router: Router) -> None:
 
     with pytest.raises(MigrationError, match="Only last migration can be canceled."):
         router.rollback("001_test")
+
+
+def test_load_models(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
+    monkeypatch.syspath_prepend(str(resources_dir))
+
+    def fqn(obj) -> str:
+        return obj.__module__ + "." + obj.__name__
+
+    result = load_models("autodiscover")
+    result = sorted(fqn(x) for x in result)
+    assert result == sorted(
+        [
+            "autodiscover.some_folder_one.another_models.Object1",
+            "autodiscover.some_folder_one.another_models.Object2",
+            "autodiscover.some_folder_one.one_models.Object3",
+            "autodiscover.some_folder_three.base_model_s.Model1",
+            "autodiscover.some_folder_three.nested_referenced_model_s.Model3",
+            "autodiscover.some_folder_three.referenced_model_s.Model2",
+            "autodiscover.some_folder_two.another_model.Object1",
+            "autodiscover.some_folder_two.another_model.Object2",
+            "autodiscover.some_folder_two.base_model.BaseModel",
+            "autodiscover.some_folder_two.one_model.Object3",
+        ]
+    )
