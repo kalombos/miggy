@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from miggy.compat.cli import deprecated_options
+from miggy.compat.cli import create, deprecated_options
 from miggy.router import FakeInitialError, Router, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
@@ -69,10 +69,10 @@ def init() -> None:
     ),
 )
 @click.option(
-    "--auto/--empty",
-    default=True,
+    "--empty",
+    default=False,
     is_flag=True,
-    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
+    help=("Outputs an empty migration for manual editing."),
 )
 @click.option(
     "--auto-source",
@@ -84,7 +84,7 @@ def init() -> None:
 )
 @deprecated_options
 def makemigrations(
-    name, fake_initial: bool, database, auto: bool, auto_source, directory=None, schema=None, verbose=None
+    name, fake_initial: bool, database, empty: bool, auto_source, directory=None, schema=None, verbose=None
 ) -> None:
     """Create a migration automatically
 
@@ -95,6 +95,7 @@ def makemigrations(
 
     router = _load_router(directory, database, schema, verbose)
 
+    auto = not empty
     if auto and auto_source:
         auto = auto_source
     try:
@@ -156,7 +157,10 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
     click.echo("\n".join(router.diff))
 
 
-# Candidates for deprecation
+# Deprecated commands
+
+
+cli.command(deprecated="Use `makemigrations --empty` instead.")(create)
 
 
 @cli.command()
@@ -165,28 +169,3 @@ def merge(database=None, directory=None, schema=None, verbose=None):
     """Merge migrations into one."""
     router = _load_router(directory, database, schema, verbose)
     router.merge()
-
-
-@cli.command()
-@click.argument("name")
-@click.option(
-    "--auto",
-    default=False,
-    is_flag=True,
-    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
-)
-@click.option(
-    "--auto-source",
-    default=False,
-    help=(
-        "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "Current directory will be recursively scanned by default."
-    ),
-)
-@deprecated_options
-def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
-    """Create a migration."""
-    router = _load_router(directory, database, schema, verbose)
-    if auto and auto_source:
-        auto = auto_source
-    router.create(name, auto=auto)
