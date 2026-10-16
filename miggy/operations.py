@@ -475,6 +475,8 @@ class Migration:
     # If any table is missing, apply the migration normally.
     fake_initial = False
 
+    replaces = []
+
     forward: list[MigrateOperation] = []
     backward: list[MigrateOperation] = []
 
@@ -523,20 +525,31 @@ class Migration:
         db = self.schema_migrator.database
         return all(db.table_exists(model._meta.table_name) for model in state.values())
 
+    def check_replace_history_consistensy(self, state: State) -> bool:
+        db = self.schema_migrator.database
+        return all(db.table_exists(model._meta.table_name) for model in state.values())
+
     def apply(self, state: State, change_schema: bool, change_history: bool, backward: bool) -> None:
         operations = self.add_operations(state, backward)
 
         if change_schema and not backward:
             if self.is_fake_initial() and self.check_all_models_created(state):
                 change_schema = False
+            if self.replaces and self.check_replace_history_consistensy():
+                change_schema = False
 
         atomic = self.schema_migrator.database.atomic() if self.atomic and change_schema else nullcontext()
 
         with atomic:
+            if self.replaces:
+                self.clear_history()
             if change_history:
                 self.change_history(self.name, backward)
             if change_schema:
                 self.run_operations(operations)
+
+    def clear_history(self) -> None:
+        self.migrate_model.delete().execute()
 
     def change_history(self, name: str, backward: bool) -> None:
         if backward:

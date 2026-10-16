@@ -174,6 +174,7 @@ class Router(object):
         backward_changes: list[MigrateOperation],
         num=None,
         fake_initial: bool = False,
+        replaces: list[str] = None
     ) -> str:
         """Create a migration."""
 
@@ -183,6 +184,8 @@ class Router(object):
         attrs = {"atomic": True}
         if fake_initial:
             attrs["fake_initial"] = True
+        if replaces:
+            attrs["replaces"] = replaces
 
         name = f"{num:03}_{name}"
         if fake_initial and num != 1:
@@ -293,6 +296,27 @@ class Router(object):
         self.build_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
         LOGGER.warning("Downgraded migration: %s", name)
+
+    def squash(self, name="squashed"):
+        """Merge migrations into one."""
+
+        todo = self.todo
+        if len(todo) == 0:
+            return LOGGER.error("Migrations not found")
+        
+        for name in todo:
+            filename = os.path.join(self.migrate_dir, name + ".py")
+            os.remove(filename)
+
+        self.build_state_from_migrations()
+        migrate_changes = detect_changes(State(), self.state)
+        rollback_changes = detect_changes(self.state, State())
+        
+        name = self.compile(name, migrate_changes, rollback_changes, num=1, replaces=todo)
+
+        self.state = State()
+        self.run_one(name, change_schema=False, change_history=True)
+        LOGGER.info('Migrations has been squashed into "%s"', name)
 
     # Candidates for deprecation
 
