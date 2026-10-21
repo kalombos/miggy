@@ -152,6 +152,11 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
 @deprecated_options
 def squash(database=None, directory=None, schema=None, verbose=None) -> None:
     """Squash migrations into one."""
+
+    click.confirm(
+        "This will delete all existing migration files and squash them into a single migration. Continue?",
+        abort=True,
+    )
     router = _load_router(directory, database, schema, verbose)
     router.squash()
 

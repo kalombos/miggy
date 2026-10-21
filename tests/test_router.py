@@ -19,7 +19,7 @@ from tests.helpers import get_active_status
 
 def test_router_run_already_applied_ok(person_router: Router) -> None:
     person_router.run()
-    person_router.build_state_from_migrations()
+    person_router.init_state_from_migrations()
     Person = person_router.state["person"]
 
     assert Person.get_or_none(email="person@example.com") is not None
@@ -360,7 +360,7 @@ def test_router_build_state_from_migrations(tmp_path: pathlib.Path) -> None:
     router = Router(db, migrate_dir=mig_dir)
     router.model.create(name="001_create")
 
-    router.build_state_from_migrations()
+    router.init_state_from_migrations()
 
     assert "tag" in router.state
 

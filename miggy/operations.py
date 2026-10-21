@@ -471,41 +471,50 @@ class Migration:
     # Whether to wrap the whole migration in a transaction.
     atomic = True
 
-    # Fake-apply the migration if its name starts with "001" and all its tables already exist.
+    # Fake-apply the migration if all its tables already exist.
     # If any table is missing, apply the migration normally.
+    # Only works for the first migration.
     fake_initial = False
 
-    replaces = []
+    # Fake-apply the migration if the migration history contains any records.
+    # Apply the migration normally if the migration history is empty.
+    # Only works for the first migration.
+    squash = False
 
     forward: list[MigrateOperation] = []
     backward: list[MigrateOperation] = []
 
     def __init__(
         self,
+        state: State,
         name: str,
         schema_migrator: SchemaMigrator,
         migrate_model: type[MigrateHistory],
     ) -> None:
+        self.state = state
         self.name = name
         self.schema_migrator = schema_migrator
         self.migrate_model = migrate_model
+        assert self.squash and self.is_first, "Squash migration name must start with 001."
+        assert self.fake_initial and self.is_first, "Fake-initial migration name must start with 001."
 
-    def is_fake_initial(self) -> bool:
-        return self.fake_initial and self.name[:3] == "001"
+    @property
+    def is_first(self) -> None:
+        return self.name[:3] == "001"
 
-    def add_operation(self, state: State, op: MigrateOperation) -> list[Operation | Callable]:
+    def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
         operations: list[Operation | Callable] = []
-        state.create_snapshot()
-        op.state_forwards(state)
-        from_state = state.pop_snapshot()
-        operations.extend(op.database_forwards(self.schema_migrator, from_state, state))
+        self.state.create_snapshot()
+        op.state_forwards(self.state)
+        from_state = self.state.pop_snapshot()
+        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
         return operations
 
-    def add_operations(self, state: State, backward: bool) -> list[Operation | Callable]:
+    def add_operations(self, backward: bool) -> list[Operation | Callable]:
         operations = []
         ops = self.backward if backward else self.forward
         for op in ops:
-            operations.extend(self.add_operation(state, op))
+            operations.extend(self.add_operation(op))
         return operations
 
     def run_operations(self, operations: list[Operation | Callable]) -> None:
@@ -521,29 +530,33 @@ class Migration:
             else:
                 op()
 
-    def check_all_models_created(self, state: State) -> bool:
+    def check_all_models_created(self) -> bool:
         db = self.schema_migrator.database
-        return all(db.table_exists(model._meta.table_name) for model in state.values())
+        return all(db.table_exists(model._meta.table_name) for model in self.state.values())
 
-    def check_replace_history_consistensy(self, state: State) -> bool:
-        db = self.schema_migrator.database
-        return all(db.table_exists(model._meta.table_name) for model in state.values())
+    def has_history(self) -> bool:
+        return self.migrate_model.select().exists()
 
-    def apply(self, state: State, change_schema: bool, change_history: bool, backward: bool) -> None:
-        operations = self.add_operations(state, backward)
 
+    def resolve_change_schema(self, change_schema: bool, backward: bool) -> bool:
         if change_schema and not backward:
-            if self.is_fake_initial() and self.check_all_models_created(state):
+            if self.fake_initial and self.check_all_models_created(self.state):
                 change_schema = False
-            if self.replaces and self.check_replace_history_consistensy():
+            if self.squash and self.has_history():
                 change_schema = False
+        return change_schema
 
+    def apply(self, change_schema: bool, change_history: bool, backward: bool) -> None:
+        operations = self.add_operations(backward)
+
+
+        change_schema = self.resolve_change_schema(change_schema, backward)
         atomic = self.schema_migrator.database.atomic() if self.atomic and change_schema else nullcontext()
 
         with atomic:
-            if self.replaces:
-                self.clear_history()
             if change_history:
+                if self.squash:
+                    self.clear_history()
                 self.change_history(self.name, backward)
             if change_schema:
                 self.run_operations(operations)
