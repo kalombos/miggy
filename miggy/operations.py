@@ -495,11 +495,11 @@ class Migration:
         self.name = name
         self.schema_migrator = schema_migrator
         self.migrate_model = migrate_model
-        assert self.squash and self.is_first, "Squash migration name must start with 001."
-        assert self.fake_initial and self.is_first, "Fake-initial migration name must start with 001."
+        assert not self.squash or self.is_first, "Squash migration name must start with 001."
+        assert not self.fake_initial or self.is_first, "Fake-initial migration name must start with 001."
 
     @property
-    def is_first(self) -> None:
+    def is_first(self) -> bool:
         return self.name[:3] == "001"
 
     def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
@@ -537,10 +537,9 @@ class Migration:
     def has_history(self) -> bool:
         return self.migrate_model.select().exists()
 
-
     def resolve_change_schema(self, change_schema: bool, backward: bool) -> bool:
         if change_schema and not backward:
-            if self.fake_initial and self.check_all_models_created(self.state):
+            if self.fake_initial and self.check_all_models_created():
                 change_schema = False
             if self.squash and self.has_history():
                 change_schema = False
@@ -548,7 +547,6 @@ class Migration:
 
     def apply(self, change_schema: bool, change_history: bool, backward: bool) -> None:
         operations = self.add_operations(backward)
-
 
         change_schema = self.resolve_change_schema(change_schema, backward)
         atomic = self.schema_migrator.database.atomic() if self.atomic and change_schema else nullcontext()

@@ -174,7 +174,7 @@ class Router(object):
         backward_changes: list[MigrateOperation],
         num=None,
         fake_initial: bool = False,
-        replaces: list[str] = None
+        squash: bool = False,
     ) -> str:
         """Create a migration."""
 
@@ -184,8 +184,8 @@ class Router(object):
         attrs = {"atomic": True}
         if fake_initial:
             attrs["fake_initial"] = True
-        if replaces:
-            attrs["replaces"] = replaces
+        if squash:
+            attrs["squash"] = True
 
         name = f"{num:03}_{name}"
         if fake_initial and num != 1:
@@ -220,7 +220,12 @@ class Router(object):
         if migration_cls is None:
             migration_cls = self.create_migration_from_legacy_format(scope, fake)
 
-        return migration_cls(self.state, name, self.schema_migrator, self.model,)
+        return migration_cls(
+            self.state,
+            name,
+            self.schema_migrator,
+            self.model,
+        )
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
         atomic, migrate, rollback = (
@@ -302,16 +307,14 @@ class Router(object):
 
         self.init_state_from_migrations()
 
-        todo = self.todo
-        for name in self.todo:
-            filename = os.path.join(self.migrate_dir, name + ".py")
+        for mname in self.todo:
+            filename = os.path.join(self.migrate_dir, mname + ".py")
             os.remove(filename)
 
-        
         migrate_changes = detect_changes(State(), self.state)
         rollback_changes = detect_changes(self.state, State())
-        
-        name = self.compile(name, migrate_changes, rollback_changes, num=1, replaces=todo)
+
+        name = self.compile(name, migrate_changes, rollback_changes, num=1, squash=True)
 
         self.state = State()
         self.run_one(name, change_schema=False, change_history=True)
