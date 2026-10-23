@@ -91,7 +91,10 @@ def makemigrations(
     Similar to `create` command, but `auto` is True by default, and `name` not required
     """
     if name is None:
-        name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
+        if fake_initial:
+            name = "initial"
+        else:
+            name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
 
     router = _load_router(directory, database, schema, verbose)
 
@@ -143,6 +146,19 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
             router.rollback(name)
     else:
         router.rollback(name)
+
+
+@cli.command()
+@deprecated_options
+def squash(database=None, directory=None, schema=None, verbose=None) -> None:
+    """Squash migrations into one."""
+
+    click.confirm(
+        "This will delete all existing migration files and squash them into a single migration. Continue?",
+        abort=True,
+    )
+    router = _load_router(directory, database, schema, verbose)
+    router.squash()
 
 
 @cli.command()

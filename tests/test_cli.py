@@ -70,6 +70,7 @@ def test_help() -> None:
     assert "makemigrations" in result.output
     assert "migrate" in result.output
     assert "rollback" in result.output
+    assert "squash" in result.output
     assert "list" in result.output
 
 
@@ -152,9 +153,9 @@ def test_makemigrations_fake_initial(default_config: Path, prepend_resources: No
         ],
     )
     assert result.exit_code == 0
-    assert "Migration created: 001_auto_" in result.output
+    assert "Migration created: 001_initial" in result.output
 
-    migration_file = next(Path(migration_dir).glob("001_auto_*.py"))
+    migration_file = migration_dir / "001_initial.py"
     assert "fake_initial = True" in migration_file.read_text()
 
 
@@ -222,6 +223,31 @@ def test_list(dir_option, db_option, migrations):
     result = runner.invoke(cli, ["list", dir_option, db_option])
     assert "Migrations are done:\n" in result.output
     assert "Migrations are undone:\n%s" % "\n".join(migrations) in result.output
+
+
+def test_squash_rejected(tmpdir, dir_option, db_option, migrations):
+    result = runner.invoke(cli, ["squash", dir_option, db_option], input="n")
+
+    assert result.exit_code == 1
+    assert "delete all existing migration files" in result.output
+
+    # Migrations are left untouched.
+    for name in migrations:
+        assert (tmpdir / (name + ".py")).exists()
+
+
+def test_squash(tmpdir, dir_option, db_option, migrations, router):
+    router().run()
+    assert router().done == migrations
+
+    result = runner.invoke(cli, ["squash", dir_option, db_option], input="y")
+    assert result.exit_code == 0, result.output
+
+    assert router().todo == ["001_squashed"]
+    assert router().done == ["001_squashed"]
+    assert (tmpdir / "001_squashed.py").exists()
+    for name in migrations:
+        assert not (tmpdir / (name + ".py")).exists()
 
 
 # Candidates for deprecation

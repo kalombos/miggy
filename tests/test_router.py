@@ -19,7 +19,7 @@ from tests.helpers import get_active_status
 
 def test_router_run_already_applied_ok(person_router: Router) -> None:
     person_router.run()
-    person_router.build_state_from_migrations()
+    person_router.init_state_from_migrations()
     Person = person_router.state["person"]
 
     assert Person.get_or_none(email="person@example.com") is not None
@@ -73,6 +73,87 @@ def test_router_merge(person_router: Router) -> None:
 
     # after merge we have new migration, remove it for cleanup purposes
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
+
+
+def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
+    mig_dir = tmp_path / "migrations"
+    mig_dir.mkdir()
+    (mig_dir / "001_create.py").write_text(
+        dedent(
+            """
+            import peewee as pw
+            from miggy import operations
+
+
+            class Migration(operations.Migration):
+                atomic = True
+
+                forward = [
+                    operations.CreateModel(
+                        'tag',
+                        {'tag': pw.CharField()},
+                        {},
+                    ),
+                ]
+
+                backward = [
+                    operations.RemoveModel(
+                        'tag',
+                    ),
+                ]
+            """
+        )
+    )
+    (mig_dir / "002_add_field.py").write_text(
+        dedent(
+            """
+            import peewee as pw
+            from miggy import operations
+
+
+            class Migration(operations.Migration):
+                atomic = True
+
+                forward = [
+                    operations.AddField(
+                        'tag',
+                        'created_at',
+                        pw.DateTimeField(null=True),
+                    ),
+                ]
+
+                backward = [
+                    operations.RemoveField(
+                        'tag',
+                        'created_at',
+                    ),
+                ]
+            """
+        )
+    )
+    router = Router(patched_pg_db, migrate_dir=mig_dir)
+    router.run()
+    assert router.done == ["001_create", "002_add_field"]
+    assert patched_pg_db.table_exists("tag")
+
+    router.squash()
+
+    # Old migration files are deleted and replaced with a single squashed one.
+    assert router.todo == ["001_squashed"]
+    assert not (mig_dir / "001_create.py").exists()
+    assert not (mig_dir / "002_add_field.py").exists()
+
+    content = (mig_dir / "001_squashed.py").read_text()
+    assert "squash = True" in content
+    assert "operations.CreateModel" in content
+    assert "created_at" in content
+
+    # History is replaced with a single record for the squashed migration.
+    assert [m.name for m in router.model.select().order_by(router.model.id)] == ["001_squashed"]
+
+    # The schema is left untouched, so there is nothing left to migrate.
+    assert patched_pg_db.table_exists("tag")
+    assert router.run() == []
 
 
 @pytest.mark.parametrize(
@@ -360,7 +441,7 @@ def test_router_build_state_from_migrations(tmp_path: pathlib.Path) -> None:
     router = Router(db, migrate_dir=mig_dir)
     router.model.create(name="001_create")
 
-    router.build_state_from_migrations()
+    router.init_state_from_migrations()
 
     assert "tag" in router.state
 

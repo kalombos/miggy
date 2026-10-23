@@ -73,7 +73,7 @@ class Router(object):
         self.migration_template = MIGRATION_TEMPLATE.read_text()
         self.state = State()
 
-    def build_state_from_migrations(self, use_unapplied: bool = False) -> None:
+    def init_state_from_migrations(self, use_unapplied: bool = False) -> None:
         migrations = self.todo if use_unapplied else self.done
         for name in migrations:
             self.run_one(name)
@@ -128,7 +128,7 @@ class Router(object):
                 LOGGER.exception("Can't import models module")
                 return None
 
-            self.build_state_from_migrations(use_unapplied=True)
+            self.init_state_from_migrations(use_unapplied=True)
 
             forward_changes = detect_changes(self.state, project_state)
             if not forward_changes:
@@ -174,6 +174,7 @@ class Router(object):
         backward_changes: list[MigrateOperation],
         num=None,
         fake_initial: bool = False,
+        squash: bool = False,
     ) -> str:
         """Create a migration."""
 
@@ -183,6 +184,8 @@ class Router(object):
         attrs = {"atomic": True}
         if fake_initial:
             attrs["fake_initial"] = True
+        if squash:
+            attrs["squash"] = True
 
         name = f"{num:03}_{name}"
         if fake_initial and num != 1:
@@ -217,7 +220,12 @@ class Router(object):
         if migration_cls is None:
             migration_cls = self.create_migration_from_legacy_format(scope, fake)
 
-        return migration_cls(name, self.schema_migrator, self.model)
+        return migration_cls(
+            self.state,
+            name,
+            self.schema_migrator,
+            self.model,
+        )
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
         atomic, migrate, rollback = (
@@ -257,7 +265,7 @@ class Router(object):
             migration = self.read(name, not change_schema)
             LOGGER.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
             self.resolve_schema()
-            migration.apply(self.state, change_schema, change_history, backward)
+            migration.apply(change_schema, change_history, backward)
         except Exception:
             operation = "Migration" if not backward else "Rollback"
             LOGGER.exception("%s failed: %s", operation, name)
@@ -273,7 +281,7 @@ class Router(object):
             LOGGER.info("There is nothing to migrate")
             return done
 
-        self.build_state_from_migrations()
+        self.init_state_from_migrations()
         for mname in diff:
             self.run_one(mname, change_schema=not fake, change_history=True)
             done.append(mname)
@@ -290,15 +298,33 @@ class Router(object):
         if name != done[-1]:
             raise MigrationError("Only last migration can be canceled.")
 
-        self.build_state_from_migrations()
+        self.init_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
         LOGGER.warning("Downgraded migration: %s", name)
+
+    def squash(self, name="squashed"):
+        """Merge migrations into one."""
+
+        self.init_state_from_migrations()
+
+        for mname in self.todo:
+            filename = os.path.join(self.migrate_dir, mname + ".py")
+            os.remove(filename)
+
+        migrate_changes = detect_changes(State(), self.state)
+        rollback_changes = detect_changes(self.state, State())
+
+        name = self.compile(name, migrate_changes, rollback_changes, num=1, squash=True)
+
+        self.state = State()
+        self.run_one(name, change_schema=False, change_history=True)
+        LOGGER.info('Migrations has been squashed into "%s"', name)
 
     # Candidates for deprecation
 
     def merge(self, name="initial"):
         """Merge migrations into one."""
-        self.build_state_from_migrations()
+        self.init_state_from_migrations()
         migrate_changes = detect_changes(State(), self.state)
         if not migrate_changes:
             return LOGGER.error("Can't merge migrations")

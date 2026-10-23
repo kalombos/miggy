@@ -29,7 +29,7 @@ def test_router_build_state_from_migrations(tmp_path: pathlib.Path) -> None:
     router = Router(db, migrate_dir=mig_dir)
     router.model.create(name="001_create")
 
-    router.build_state_from_migrations()
+    router.init_state_from_migrations()
 
     assert "tag" in router.state
 
