@@ -1,3 +1,5 @@
+from typing import Any
+
 import peewee as pw
 import pytest
 from playhouse.migrate import Operation
@@ -18,7 +20,6 @@ from tests.conftest import PatchedPgDatabase
 
 def _build_migration(
     router: Router,
-    state: State,
     migrate: list[MigrateOperation],
     rollback: list[MigrateOperation],
     atomic: bool = True,
@@ -34,7 +35,7 @@ def _build_migration(
     _Migration.squash = squash
     _Migration.forward = migrate
     _Migration.backward = rollback
-    return _Migration(state, name, router.schema_migrator, router.model)
+    return _Migration(router.state, name, router.schema_migrator, router.model)
 
 
 @pytest.mark.parametrize(
@@ -42,28 +43,28 @@ def _build_migration(
     [("001_initial", True), ("002_initial", False)],
 )
 def test_is_first(router: Router, name: str, expected: bool) -> None:
-    migration = _build_migration(router, State(), [], [], name=name)
+    migration = _build_migration(router, [], [], name=name)
 
     assert migration.is_first is expected
 
 
 @pytest.mark.parametrize(
-    ("attr", "match"),
+    ("attrs", "match"),
     [
-        ("squash", "Squash migration name must start with 001"),
-        ("fake_initial", "Fake-initial migration name must start with 001"),
+        ({"squash": True}, "Squash migration name must start with 001"),
+        ({"fake_initial": True}, "Fake-initial migration name must start with 001"),
     ],
 )
-def test_init__special_migration_not_first_raises(router: Router, attr: str, match: str) -> None:
+def test_init__special_migration_not_first_raises(router: Router, attrs: dict[str, Any], match: str) -> None:
     with pytest.raises(AssertionError, match=match):
-        _build_migration(router, State(), [], [], **{attr: True}, name="002_test")
+        _build_migration(router, [], [], **attrs, name="002_test")
 
 
 def test_init__first_migrations_ok(router: Router) -> None:
     # A regular, fake-initial and squash migration may all be the first migration.
-    _build_migration(router, State(), [], [], name="001_test")
-    _build_migration(router, State(), [], [], fake_initial=True, name="001_test")
-    _build_migration(router, State(), [], [], squash=True, name="001_test")
+    _build_migration(router, [], [], name="001_test")
+    _build_migration(router, [], [], fake_initial=True, name="001_test")
+    _build_migration(router, [], [], squash=True, name="001_test")
 
 
 def test_migration_add_operation(router: Router) -> None:
@@ -72,7 +73,7 @@ def test_migration_add_operation(router: Router) -> None:
 
     router.state["user"] = User
 
-    migration = _build_migration(router, router.state, migrate=[], rollback=[])
+    migration = _build_migration(router, migrate=[], rollback=[])
     operations = migration.add_operation(AddField("user", "email", pw.CharField(max_length=255, null=True)))
 
     user = router.state["user"]
@@ -96,7 +97,6 @@ def test_migration_add_operations_not_downgrade(router: Router, patched_pg_db: P
 
     migration = _build_migration(
         router,
-        router.state,
         migrate=[RemoveField("user", "email")],
         rollback=[],
     )
@@ -120,7 +120,6 @@ def test_migration_add_operations_downgrade(router: Router, patched_pg_db: Patch
 
     migration = _build_migration(
         router,
-        router.state,
         migrate=[],
         rollback=[AddField("order", "phone", pw.CharField(null=True))],
     )
@@ -144,7 +143,7 @@ def test_migration_run_operations(router: Router, patched_pg_db: PatchedPgDataba
     router.state["user"] = User
     patched_pg_db.clear_queries()
 
-    migration = _build_migration(router, router.state, migrate=[], rollback=[])
+    migration = _build_migration(router, migrate=[], rollback=[])
     operations = migration.add_operation(RemoveField("user", "last_name"))
     migration.run_operations(operations)
 
@@ -166,8 +165,9 @@ def test_check_all_models_created(router: Router) -> None:
         class Meta:
             database = router.database
 
-    state = State({Tag._meta.name: Tag, Person._meta.name: Person})
-    migration = _build_migration(router, state, [], [])
+    router.state = State({Tag._meta.name: Tag, Person._meta.name: Person})
+
+    migration = _build_migration(router, [], [])
 
     Tag.create_table()
 
@@ -180,7 +180,7 @@ def test_check_all_models_created(router: Router) -> None:
 def test_migration_change_history(router: Router) -> None:
     name = "001_test"
 
-    migration = _build_migration(router, State(), migrate=[], rollback=[])
+    migration = _build_migration(router, migrate=[], rollback=[])
     migration.change_history(name, backward=False)
 
     assert migration.migrate_model.get_or_none(name=name) is not None
@@ -190,7 +190,7 @@ def test_migration_change_history(router: Router) -> None:
 
 
 def test_has_history(router: Router) -> None:
-    migration = _build_migration(router, State(), [], [])
+    migration = _build_migration(router, [], [])
 
     assert migration.has_history() is False
 
@@ -199,7 +199,7 @@ def test_has_history(router: Router) -> None:
 
 
 def test_clear_history(router: Router) -> None:
-    migration = _build_migration(router, State(), [], [])
+    migration = _build_migration(router, [], [])
     router.model.create(name="001_old")
     router.model.create(name="002_old")
 
@@ -214,7 +214,7 @@ def test_clear_history(router: Router) -> None:
 )
 def test_apply__change_history_change_schema(router: Router, change_history: bool, change_schema: bool) -> None:
     migration = _build_migration(
-        router, router.state, migrate=[CreateModel("tag", fields={"tag": pw.CharField()}, meta={})], rollback=[]
+        router, migrate=[CreateModel("tag", fields={"tag": pw.CharField()}, meta={})], rollback=[]
     )
     migration.apply(change_schema=change_schema, change_history=change_history, backward=False)
 
@@ -227,7 +227,6 @@ def test_apply__change_history_change_schema(router: Router, change_history: boo
 def test_apply__backward(router: Router) -> None:
     migration = _build_migration(
         router,
-        router.state,
         migrate=[CreateModel("tag", fields={"tag": pw.CharField()}, meta={})],
         rollback=[RemoveModel("tag")],
     )
@@ -246,7 +245,7 @@ def test_apply__backward(router: Router) -> None:
     [(True, False, False), (True, True, True), (False, True, False), (False, False, False)],
 )
 def test_apply_atomic(router: Router, atomic: bool, change_schema: bool, expected: bool) -> None:
-    migration = _build_migration(router, State(), migrate=[], rollback=[], atomic=atomic)
+    migration = _build_migration(router, migrate=[], rollback=[], atomic=atomic)
 
     with mock.patch.object(router.database, "transaction") as mocked:
         migration.apply(change_schema, True, False)
@@ -276,7 +275,6 @@ def test_apply__fake_initial(router: Router, fake_initial: bool, models_created:
 
     migration = _build_migration(
         router,
-        router.state,
         migrate=[CreateModel("tag", fields={"tag": pw.CharField()}, meta={})],
         rollback=[],
         fake_initial=fake_initial,
@@ -289,35 +287,42 @@ def test_apply__fake_initial(router: Router, fake_initial: bool, models_created:
 
 
 @pytest.mark.parametrize(
-    ("has_history", "expected_schema"),
+    ("squash", "has_history", "expected"),
     [
-        # Empty history: the squashed migration creates the schema normally.
-        (False, True),
-        # History exists: the schema is already there, so the migration is fake-applied.
-        (True, False),
+        (True, False, True),
+        (False, False, True),
+        (True, True, False),
     ],
 )
-def test_apply__squash__change_schema(router: Router, has_history: bool, expected_schema: bool) -> None:
+def test_apply__squash__change_schema(router: Router, squash: bool, has_history: bool, expected: bool) -> None:
     if has_history:
         router.model.create(name="001_old")
 
     migration = _build_migration(
         router,
-        State(),
         migrate=[CreateModel("tag", fields={"tag": pw.CharField()}, meta={})],
         rollback=[],
-        squash=True,
+        squash=squash,
     )
     migration.apply(change_schema=True, change_history=True, backward=False)
 
-    assert router.database.table_exists("tag") is expected_schema
+    q = router.database.queries[-1]
+    run_migration = q == 'CREATE TABLE "tag" ("id" SERIAL NOT NULL PRIMARY KEY, "tag" VARCHAR(255) NOT NULL)'
+    assert run_migration is expected
 
 
-def test_apply__squash__clears_history(router: Router) -> None:
+@pytest.mark.parametrize(
+    ("squash", "expected"),
+    [
+        (True, ["001_test"]),
+        (False, ["001_old", "002_old", "001_test"]),
+    ],
+)
+def test_apply__squash__clears_history(router: Router, squash: bool, expected: list[str]) -> None:
     router.model.create(name="001_old")
     router.model.create(name="002_old")
 
-    migration = _build_migration(router, State(), migrate=[], rollback=[], squash=True)
-    migration.apply(change_schema=False, change_history=True, backward=False)
+    migration = _build_migration(router, migrate=[], rollback=[], squash=squash)
+    migration.apply(change_schema=True, change_history=True, backward=False)
 
-    assert [m.name for m in router.model.select().order_by(router.model.id)] == ["001_test"]
+    assert [m.name for m in router.model.select().order_by(router.model.id)] == expected
