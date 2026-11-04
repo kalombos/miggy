@@ -15,7 +15,7 @@ from tests.helpers import diff_one, operation_to_one_line
 def test_on_real_migrations(person_migrations_dir: Path) -> None:
     router = Router("sqlite:///:memory:", migrate_dir=person_migrations_dir)
     router.run()
-    router.build_state_from_migrations()
+    router.init_state_from_migrations()
     state = router.state
     Person_ = state["person"]
     Tag_ = state["tag"]

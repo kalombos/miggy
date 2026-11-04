@@ -7,10 +7,33 @@ import pytest
 from click.testing import CliRunner
 
 from miggy.cli import _load_router, cli
-from miggy.router import Router
+from miggy.router import Router, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
 runner = CliRunner()
+
+
+@pytest.fixture
+def default_config(tmp_path: Path) -> Path:
+    conf = tmp_path / "miggyconf.py"
+    conf.write_text("DATABASE = 'sqlite:///:memory:'\nMIGRATE_DIR = 'custom_migrations'")
+    os.mkdir(tmp_path / "custom_migrations")
+    return conf
+
+
+@pytest.fixture
+def default_router(default_config: Path) -> Router:
+    return get_router("mock", "mock", conf_path=default_config)
+
+
+@pytest.fixture
+def default_migrations(default_router: Router) -> list[str]:
+    default_router.create("some1")
+    default_router.create("some2")
+    return ["001_some1", "002_some2"]
+
+
+# LEGACY FIXTURES
 
 
 @pytest.fixture
@@ -19,28 +42,20 @@ def dir_option(tmpdir):
 
 
 @pytest.fixture
-def default_config(tmp_path: Path) -> None:
-    conf = tmp_path / "miggyconf.py"
-    conf.write_text("DATABASE = 'sqlite:///:memory:'\nMIGRATE_DIR = 'custom_migrations'")
-    os.mkdir(tmp_path / "custom_migrations")
-    return conf
-
-
-@pytest.fixture
-def db_url(tmpdir):
-    db_path = "%s/test_sqlite.db" % tmpdir
+def db_url(tmp_path: Path) -> str:
+    db_path = "%s/test_sqlite.db" % tmp_path
     open(db_path, "a").close()
     return "sqlite:///%s" % db_path
 
 
 @pytest.fixture
-def db_option(db_url):
+def db_option(db_url: str) -> str:
     return "--database=%s" % db_url
 
 
 @pytest.fixture
-def router(tmpdir, db_url):
-    return lambda: Router(database=db_url, migrate_dir=str(tmpdir))
+def router(tmp_path: Path, db_url: str):
+    return lambda: Router(database=db_url, migrate_dir=str(tmp_path))
 
 
 @pytest.fixture
@@ -70,6 +85,7 @@ def test_help() -> None:
     assert "makemigrations" in result.output
     assert "migrate" in result.output
     assert "rollback" in result.output
+    assert "squash" in result.output
     assert "list" in result.output
 
 
@@ -152,9 +168,9 @@ def test_makemigrations_fake_initial(default_config: Path, prepend_resources: No
         ],
     )
     assert result.exit_code == 0
-    assert "Migration created: 001_auto_" in result.output
+    assert "Migration created: 001_initial" in result.output
 
-    migration_file = next(Path(migration_dir).glob("001_auto_*.py"))
+    migration_file = migration_dir / "001_initial.py"
     assert "fake_initial = True" in migration_file.read_text()
 
 
@@ -176,10 +192,11 @@ def test_makemigrations_fake_initial_not_first_migration(default_config: Path) -
     assert "The --fake-initial option can only be used with the first migration." in result.output
 
 
-def test_migrate(dir_option, db_option, migrations_str):
-    result = runner.invoke(cli, ["migrate", dir_option, db_option])
+def test_migrate(default_config: Path, default_migrations: list[str]) -> None:
+    # TODO check migrations applied in router.done
+    result = runner.invoke(cli, ["--config", str(default_config), "migrate"])
     assert result.exit_code == 0
-    assert "Migrations completed: %s" % migrations_str in result.output
+    assert "Migrations completed: %s" % ", ".join(default_migrations) in result.output
 
 
 def test_fake(dir_option, db_option, migrations_str, router):
@@ -218,10 +235,33 @@ def test_rollback(dir_option, db_option, router, migrations):
     assert router().done == migrations[:-4]
 
 
-def test_list(dir_option, db_option, migrations):
-    result = runner.invoke(cli, ["list", dir_option, db_option])
+def test_list(default_config: Path, default_migrations: list[str]):
+    result = runner.invoke(cli, ["--config", str(default_config), "list"])
     assert "Migrations are done:\n" in result.output
-    assert "Migrations are undone:\n%s" % "\n".join(migrations) in result.output
+    assert "Migrations are undone:\n%s" % "\n".join(default_migrations) in result.output
+
+
+def test_squash_rejected(default_config: Path, default_router: Router, default_migrations: list[str]) -> None:
+
+    result = runner.invoke(cli, ["--config", str(default_config), "squash"], input="n")
+
+    assert result.exit_code == 1
+    assert "delete all existing migration files" in result.output
+
+    assert sorted(os.listdir(default_router.migrate_dir)) == ["001_some1.py", "002_some2.py"]
+
+
+def test_squash(default_config: Path, default_router: Router, default_migrations: list[str]) -> None:
+    router = default_router
+    router.run()
+    assert router.done == ["001_some1", "002_some2"]
+
+    result = runner.invoke(cli, ["--config", str(default_config), "squash"], input="y")
+    assert result.exit_code == 0, result.output
+
+    assert router.todo == ["001_squashed"]
+    assert router.done == ["001_squashed"]
+    assert sorted(os.listdir(router.migrate_dir)) == ["001_squashed.py"]
 
 
 # Candidates for deprecation
