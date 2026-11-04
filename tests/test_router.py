@@ -146,7 +146,8 @@ def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase)
     content = (mig_dir / "001_squashed.py").read_text()
     assert "squash = True" in content
     assert "operations.CreateModel" in content
-    assert "created_at" in content
+    assert "'tag': pw.CharField()" in content
+    assert "'created_at': pw.DateTimeField(null=True)" in content
 
     # History is replaced with a single record for the squashed migration.
     assert [m.name for m in router.model.select().order_by(router.model.id)] == ["001_squashed"]
