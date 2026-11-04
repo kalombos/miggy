@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from miggy.cli import _load_router, cli
-from miggy.router import Router
+from miggy.router import Router, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
 runner = CliRunner()
@@ -27,20 +27,20 @@ def default_config(tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def db_url(tmpdir):
-    db_path = "%s/test_sqlite.db" % tmpdir
+def db_url(tmp_path: Path) -> str:
+    db_path = "%s/test_sqlite.db" % tmp_path
     open(db_path, "a").close()
     return "sqlite:///%s" % db_path
 
 
 @pytest.fixture
-def db_option(db_url):
+def db_option(db_url: str) -> str:
     return "--database=%s" % db_url
 
 
 @pytest.fixture
-def router(tmpdir, db_url):
-    return lambda: Router(database=db_url, migrate_dir=str(tmpdir))
+def router(tmp_path: Path, db_url: str):
+    return lambda: Router(database=db_url, migrate_dir=str(tmp_path))
 
 
 @pytest.fixture
@@ -225,29 +225,33 @@ def test_list(dir_option, db_option, migrations):
     assert "Migrations are undone:\n%s" % "\n".join(migrations) in result.output
 
 
-def test_squash_rejected(tmpdir, dir_option, db_option, migrations):
-    result = runner.invoke(cli, ["squash", dir_option, db_option], input="n")
+def test_squash_rejected(default_config: Path) -> None:
+    router = get_router("mock", "mock", conf_path=default_config)
+    router.create("some1")
+    router.create("some2")
+
+    result = runner.invoke(cli, ["--config", str(default_config), "squash"], input="n")
 
     assert result.exit_code == 1
     assert "delete all existing migration files" in result.output
 
-    # Migrations are left untouched.
-    for name in migrations:
-        assert (tmpdir / (name + ".py")).exists()
+    assert sorted(os.listdir(router.migrate_dir)) == ["001_some1.py", "002_some2.py"]
 
 
-def test_squash(tmpdir, dir_option, db_option, migrations, router):
-    router().run()
-    assert router().done == migrations
+def test_squash(default_config: Path) -> None:
+    router = get_router("mock", "mock", conf_path=default_config)
+    router.create("some1")
+    router.create("some2")
 
-    result = runner.invoke(cli, ["squash", dir_option, db_option], input="y")
+    router.run()
+    assert router.done == ["001_some1", "002_some2"]
+
+    result = runner.invoke(cli, ["--config", str(default_config), "squash"], input="y")
     assert result.exit_code == 0, result.output
 
-    assert router().todo == ["001_squashed"]
-    assert router().done == ["001_squashed"]
-    assert (tmpdir / "001_squashed.py").exists()
-    for name in migrations:
-        assert not (tmpdir / (name + ".py")).exists()
+    assert router.todo == ["001_squashed"]
+    assert router.done == ["001_squashed"]
+    assert sorted(os.listdir(router.migrate_dir)) == ["001_squashed.py"]
 
 
 # Candidates for deprecation
