@@ -32,8 +32,7 @@ Contents
 .. toctree::
    :maxdepth: 2
 
-   quickstart
-   howto
+   migrations
    cli
    api
    ext
