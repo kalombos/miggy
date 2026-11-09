@@ -1,11 +1,14 @@
 from collections import namedtuple
 from collections.abc import Callable
+from contextlib import nullcontext
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import peewee as pw
 from playhouse.migrate import Operation
 
+from miggy import LOGGER, MigrateHistory
+from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.types import ModelCls
 from miggy.utils import (
@@ -13,9 +16,6 @@ from miggy.utils import (
     indexes_state,
     resolve_field,
 )
-
-if TYPE_CHECKING:
-    from miggy.schema import SchemaMigrator
 
 RunPythonF = Callable[["SchemaMigrator", "State"], None]
 
@@ -468,7 +468,102 @@ class RemovePrimaryKeyConstraint(MigrateOperation):
 
 
 class Migration:
+    # Whether to wrap the whole migration in a transaction.
     atomic = True
+
+    # Fake-apply the migration if all its tables already exist.
+    # If any table is missing, apply the migration normally.
+    # Only works for the first migration.
+    fake_initial = False
+
+    # Fake-apply the migration if the migration history contains any records.
+    # Apply the migration normally if the migration history is empty.
+    # Only works for the first migration.
+    squash = False
 
     forward: list[MigrateOperation] = []
     backward: list[MigrateOperation] = []
+
+    def __init__(
+        self,
+        state: State,
+        name: str,
+        schema_migrator: SchemaMigrator,
+        migrate_model: type[MigrateHistory],
+    ) -> None:
+        self.state = state
+        self.name = name
+        self.schema_migrator = schema_migrator
+        self.migrate_model = migrate_model
+        assert not self.squash or self.is_first, "Squash migration name must start with 001."
+        assert not self.fake_initial or self.is_first, "Fake-initial migration name must start with 001."
+
+    @property
+    def is_first(self) -> bool:
+        return self.name[:3] == "001"
+
+    def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
+        operations: list[Operation | Callable] = []
+        self.state.create_snapshot()
+        op.state_forwards(self.state)
+        from_state = self.state.pop_snapshot()
+        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
+        return operations
+
+    def add_operations(self, backward: bool) -> list[Operation | Callable]:
+        operations = []
+        ops = self.backward if backward else self.forward
+        for op in ops:
+            operations.extend(self.add_operation(op))
+        return operations
+
+    def run_operations(self, operations: list[Operation | Callable]) -> None:
+        for op in operations:
+            if isinstance(op, Operation):
+                if hasattr(op, "fn"):
+                    fn = op.fn
+                else:
+                    fn = op.method  # peewee < 4.4
+                name = fn if isinstance(fn, str) else fn.__name__
+                LOGGER.info("%s %s", name, op.args)
+                op.run()
+            else:
+                op()
+
+    def check_all_models_created(self) -> bool:
+        db = self.schema_migrator.database
+        return all(db.table_exists(model._meta.table_name) for model in self.state.values())
+
+    def has_history(self) -> bool:
+        return self.migrate_model.select().exists()
+
+    def resolve_change_schema(self, change_schema: bool, backward: bool) -> bool:
+        if change_schema and not backward:
+            if self.fake_initial and self.check_all_models_created():
+                change_schema = False
+            if self.squash and self.has_history():
+                change_schema = False
+        return change_schema
+
+    def apply(self, change_schema: bool, change_history: bool, backward: bool) -> None:
+        operations = self.add_operations(backward)
+
+        change_schema = self.resolve_change_schema(change_schema, backward)
+        atomic = self.schema_migrator.database.atomic() if self.atomic and change_schema else nullcontext()
+
+        with atomic:
+            if change_history:
+                if self.squash:
+                    self.clear_history()
+                self.change_history(self.name, backward)
+            if change_schema:
+                self.run_operations(operations)
+
+    def clear_history(self) -> None:
+        self.migrate_model.delete().execute()
+
+    def change_history(self, name: str, backward: bool) -> None:
+        if backward:
+            self.migrate_model.delete().where(self.migrate_model.name == name).execute()
+        else:
+            self.migrate_model.create(name=name)

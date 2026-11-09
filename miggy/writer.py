@@ -1,5 +1,7 @@
+from typing import Any
+
 from miggy.operations import MigrateOperation
-from miggy.serializer import SerializeValueMixin
+from miggy.serializer import SerializeValueMixin, serializer_factory
 
 
 class OperationWriter(SerializeValueMixin):
@@ -51,3 +53,17 @@ class OperationWriter(SerializeValueMixin):
 
     def render(self) -> str:
         return "\n".join(self.buff)
+
+
+class MigrationAttrWriter:
+    def __init__(self, attrs: dict[str, Any], indentation: int = 1) -> None:
+        self.attrs = attrs
+        self.indentation = indentation
+
+    def serialize(self) -> str:
+        buff = []
+        for attr, value in self.attrs.items():
+            code = serializer_factory(value).serialize().code
+            line = f"{attr} = {code}"
+            buff.append(" " * (self.indentation * 4) + line)
+        return "\n\n".join(buff)

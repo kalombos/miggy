@@ -6,8 +6,8 @@ from pathlib import Path
 
 import click
 
-from miggy.compat.cli import deprecated_options
-from miggy.router import Router, get_router
+from miggy.compat.cli import create, deprecated_options
+from miggy.router import FakeInitialError, Router, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
 
@@ -59,10 +59,20 @@ def init() -> None:
     help=("Migration file name. By default will be 'auto_YYYYmmdd_HHMM'"),
 )
 @click.option(
-    "--auto",
-    default=True,
+    "--fake-initial",
+    default=False,
     is_flag=True,
-    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
+    help=(
+        "Detect whether tables already exist and fake-apply initial migrations if they do. "
+        "Make sure the current database schema matches your initial migration before using "
+        "this flag. Miggy only checks whether the table names exist."
+    ),
+)
+@click.option(
+    "--empty",
+    default=False,
+    is_flag=True,
+    help=("Outputs an empty migration for manual editing."),
 )
 @click.option(
     "--auto-source",
@@ -74,20 +84,27 @@ def init() -> None:
 )
 @deprecated_options
 def makemigrations(
-    name=None, database=None, auto: bool = True, auto_source: str | None = None, directory=None, schema=None, verbose=None
+    name, fake_initial: bool, database, empty: bool, auto_source: str | None, directory=None, schema=None, verbose=None
 ) -> None:
     """Create a migration automatically
 
     Similar to `create` command, but `auto` is True by default, and `name` not required
     """
     if name is None:
-        name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
+        if fake_initial:
+            name = "initial"
+        else:
+            name = "auto_{0:%Y%m%d_%H%M}".format(datetime.datetime.now())  # noqa: DTZ005
 
     router = _load_router(directory, database, schema, verbose)
 
+    auto = not empty
     if auto and auto_source:
         auto = auto_source
-    name = router.create(name, auto=auto)
+    try:
+        name = router.create(name, auto=auto, fake_initial=fake_initial)
+    except FakeInitialError:
+        raise click.ClickException("The --fake-initial option can only be used with the first migration.") from None
     if name:
         click.echo(f"Migration created: {name}")
 
@@ -133,6 +150,19 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
 
 @cli.command()
 @deprecated_options
+def squash(database=None, directory=None, schema=None, verbose=None) -> None:
+    """Squash migrations into one."""
+
+    click.confirm(
+        "This will delete all existing migration files and squash them into a single migration. Continue?",
+        abort=True,
+    )
+    router = _load_router(directory, database, schema, verbose)
+    router.squash()
+
+
+@cli.command()
+@deprecated_options
 def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A001
     """List migrations."""
     router = _load_router(directory, database, schema, verbose)
@@ -143,7 +173,10 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
     click.echo("\n".join(router.diff))
 
 
-# Candidates for deprecation
+# Deprecated commands
+
+
+cli.command(deprecated="Use `makemigrations --empty` instead.")(create)
 
 
 @cli.command()
@@ -152,28 +185,3 @@ def merge(database=None, directory=None, schema=None, verbose=None):
     """Merge migrations into one."""
     router = _load_router(directory, database, schema, verbose)
     router.merge()
-
-
-@cli.command()
-@click.argument("name")
-@click.option(
-    "--auto",
-    default=False,
-    is_flag=True,
-    help=("Scan sources and create db migrations automatically. Supports autodiscovery."),
-)
-@click.option(
-    "--auto-source",
-    default=False,
-    help=(
-        "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "Current directory will be recursively scanned by default."
-    ),
-)
-@deprecated_options
-def create(name, database=None, auto=False, auto_source=False, directory=None, schema=None, verbose=None):
-    """Create a migration."""
-    router = _load_router(directory, database, schema, verbose)
-    if auto and auto_source:
-        auto = auto_source
-    router.create(name, auto=auto)

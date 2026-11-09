@@ -38,7 +38,7 @@ from miggy import operations
 
 
 class Migration(operations.Migration):
-    atomic = True
+{attrs}
 
     forward = [
 {forward}

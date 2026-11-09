@@ -34,9 +34,9 @@ dependencies = [
 dev = [
     "pytest==9.1.1",
     "psycopg2-binary>=2.8.1",
-    "ruff==0.16.9",
-    "poethepoet==0.48.0",
-    "mypy==2.3.1",
+    "ruff==0.17.0",
+    "poethepoet==0.49.0",
+    "mypy==2.4.0",
     "commitizen>=4.13.8,<5"
 
 ]
@@ -57,7 +57,7 @@ Issues = "https://github.com/kalombos/miggy/issues"
 miggy = "miggy.cli:cli"
 
 [build-system]
-requires = ["uv_build>=0.9.6,<0.13.0"]
+requires = ["uv_build>=0.9.6,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

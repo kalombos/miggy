@@ -3,19 +3,13 @@ import pkgutil
 import re
 import sys
 import typing
-from collections.abc import Callable
-from contextlib import nullcontext
 from functools import cached_property
 from importlib import import_module
-from logging import Logger
 from pathlib import Path
 from typing import Any, cast
 
 import peewee as pw
 from playhouse.db_url import connect
-from playhouse.migrate import (
-    Operation,
-)
 
 from miggy import LOGGER, MigrateHistory
 from miggy.auto import MigrationAutodetector
@@ -24,7 +18,16 @@ from miggy.operations import MigrateOperation, Migration
 from miggy.schema import SchemaMigrator
 from miggy.state import State
 from miggy.utils import MIGRATION_TEMPLATE, deprecated_warn, exec_in
-from miggy.writer import OperationWriter
+from miggy.writer import MigrationAttrWriter, OperationWriter
+
+
+class MigrationError(Exception):
+    pass
+
+
+class FakeInitialError(MigrationError):
+    pass
+
 
 DEFAULT_MIGRATE_DIR = "migrations"
 UNDEFINED = object()
@@ -48,7 +51,6 @@ class Router(object):
         migrate_dir: str | Path = "migrations",
         ignore: list[str] | None = None,
         schema: str | None = None,
-        logger: Logger = LOGGER,
         working_dir: str | Path | None = None,
         sources: list[str] | None = None
     ) -> None:
@@ -70,11 +72,10 @@ class Router(object):
         self.migrate_table = migrate_table
         self.schema = schema
         self.ignore = ignore or []
-        self.logger = logger
         self.migration_template = MIGRATION_TEMPLATE.read_text()
         self.state = State()
 
-    def build_state_from_migrations(self, use_unapplied: bool = False) -> None:
+    def init_state_from_migrations(self, use_unapplied: bool = False) -> None:
         migrations = self.todo if use_unapplied else self.done
         for name in migrations:
             self.run_one(name)
@@ -92,7 +93,7 @@ class Router(object):
     def todo(self):
         """Scan migrations in file system."""
         if not os.path.exists(self.migrate_dir):
-            self.logger.warning("Migration directory: %s does not exist.", self.migrate_dir)
+            LOGGER.warning("Migration directory: %s does not exist.", self.migrate_dir)
             os.makedirs(self.migrate_dir)
         return sorted(f[:-3] for f in os.listdir(self.migrate_dir) if self.filemask.match(f))
 
@@ -108,15 +109,24 @@ class Router(object):
         return [name for name in self.todo if name not in done]
 
     def load_project_state(self, auto: bool | str) -> State:
-        modules = [auto]
-        if isinstance(auto, bool):
+        """Load project state from model sources.
+
+        ``SOURCES`` from the config file takes precedence over the ``auto``
+        argument. If it is not set, a module path given in ``auto`` is scanned,
+        or all packages in the working directory are auto-discovered.
+        """
+        if self.sources:
+            modules: list[str] = self.sources
+        elif isinstance(auto, str):
+            modules = [auto]
+        else:
             modules = [m for _, m, ispkg in pkgutil.iter_modules([str(self.working_dir)]) if ispkg]
 
         models = [m for module in modules for m in load_models(module)]
 
         return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
-    def create(self, name="auto", auto: bool | str = False):
+    def create(self, name="auto", auto: bool | str = False, fake_initial: bool = False) -> str | None:
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
@@ -126,19 +136,21 @@ class Router(object):
             try:
                 project_state = self.load_project_state(auto)
             except ImportError:
-                return self.logger.exception("Can't import models module")
+                LOGGER.exception("Can't import models module")
+                return None
 
-            self.build_state_from_migrations(use_unapplied=True)
+            self.init_state_from_migrations(use_unapplied=True)
 
             forward_changes = detect_changes(self.state, project_state)
             if not forward_changes:
-                return self.logger.warning("No changes found.")
+                LOGGER.warning("No changes found.")
+                return None
 
             backward_changes = detect_changes(project_state, self.state)
 
-        self.logger.info('Creating migration "%s"', name)
-        name = self.compile(name, forward_changes, backward_changes)
-        self.logger.info('Migration has been created as "%s"', name)
+        LOGGER.info('Creating migration "%s"', name)
+        name = self.compile(name, forward_changes, backward_changes, fake_initial=fake_initial)
+        LOGGER.info('Migration has been created as "%s"', name)
         return name
 
     def _serialize_changes(self, changes: list[MigrateOperation]):
@@ -152,32 +164,57 @@ class Router(object):
         return "\n".join(serialized_changes), imports
 
     def _compile_template(
-        self, name: str, forward_changes: list[MigrateOperation], backward_changes: list[MigrateOperation]
+        self,
+        name: str,
+        forward_changes: list[MigrateOperation],
+        backward_changes: list[MigrateOperation],
+        attrs: str,
     ) -> str:
         forward, imports = self._serialize_changes(forward_changes)
         backward, backward_imports = self._serialize_changes(backward_changes)
         imports.update(backward_imports)
 
-        return self.migration_template.format(forward=forward, backward=backward, name=name, imports="\n".join(imports))
+        return self.migration_template.format(
+            forward=forward, backward=backward, name=name, imports="\n".join(imports), attrs=attrs
+        )
 
     def compile(
-        self, name, forward_changes: list[MigrateOperation], backward_changes: list[MigrateOperation], num=None
+        self,
+        name,
+        forward_changes: list[MigrateOperation],
+        backward_changes: list[MigrateOperation],
+        num=None,
+        fake_initial: bool = False,
+        squash: bool = False,
     ) -> str:
         """Create a migration."""
 
         if num is None:
-            num = len(self.todo)
+            num = len(self.todo) + 1
 
-        name = f"{num + 1:03}_{name}"
+        attrs = {"atomic": True}
+        if fake_initial:
+            attrs["fake_initial"] = True
+        if squash:
+            attrs["squash"] = True
+
+        name = f"{num:03}_{name}"
+        if fake_initial and num != 1:
+            raise FakeInitialError(f'fake_initial=True is only supported for migration "001", got "{name}".')
         filename = f"{name}.py"
         path = os.path.join(self.migrate_dir, filename)
-        template = self._compile_template(filename, forward_changes=forward_changes, backward_changes=backward_changes)
+        template = self._compile_template(
+            filename,
+            forward_changes=forward_changes,
+            backward_changes=backward_changes,
+            attrs=MigrationAttrWriter(attrs).serialize(),
+        )
         with open(path, "w") as f:
             f.write(template)
 
         return name
 
-    def read(self, name, fake: bool) -> type[Migration]:
+    def read(self, name, fake: bool) -> Migration:
         """Read migration from file."""
         call_params: dict[str, str] = {}
         if os.name == "nt" and sys.version_info >= (3, 0):
@@ -189,10 +226,17 @@ class Router(object):
         scope: dict[str, Any] = {}
         exec_in(code, scope)
 
-        if migration_cls := scope.get("Migration"):
-            return migration_cls
+        migration_cls = scope.get("Migration", None)
 
-        return self.create_migration_from_legacy_format(scope, fake)
+        if migration_cls is None:
+            migration_cls = self.create_migration_from_legacy_format(scope, fake)
+
+        return migration_cls(
+            self.state,
+            name,
+            self.schema_migrator,
+            self.model,
+        )
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
         atomic, migrate, rollback = (
@@ -216,6 +260,10 @@ class Router(object):
         _Migration.backward = extract_operations(rollback)
         return _Migration
 
+    def resolve_schema(self) -> None:
+        if self.schema:
+            self.database.execute_sql("SET search_path TO %s", (self.schema,))
+
     def run_one(
         self,
         name: str,
@@ -226,71 +274,25 @@ class Router(object):
         """Run/emulate a migration with given name."""
         try:
             migration = self.read(name, not change_schema)
-            atomic = self.database.atomic() if migration.atomic and change_schema else nullcontext()
-
-            with atomic:
-                self.logger.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
-                operations = self.add_operations(migration, backward)
-                if change_history:
-                    self.change_history(name, backward)
-                if change_schema:
-                    self.run_operations(operations)
-
+            LOGGER.info('%s "%s"', "Rolling back" if backward else "Migrate", name)
+            self.resolve_schema()
+            migration.apply(change_schema, change_history, backward)
         except Exception:
             operation = "Migration" if not backward else "Rollback"
-            self.logger.exception("%s failed: %s", operation, name)
+            LOGGER.exception("%s failed: %s", operation, name)
             raise
-
-    def change_history(self, name: str, backward: bool) -> None:
-        if backward:
-            self.model.delete().where(self.model.name == name).execute()
-        else:
-            self.model.create(name=name)
-
-    def add_operation(self, op: MigrateOperation) -> list[Operation | Callable]:
-        operations: list[Operation | Callable] = []
-        self.state.create_snapshot()
-        op.state_forwards(self.state)
-        from_state = self.state.pop_snapshot()
-        operations.extend(op.database_forwards(self.schema_migrator, from_state, self.state))
-        return operations
-
-    def add_operations(self, migration: type[Migration], backward: bool) -> list[Operation | Callable]:
-        operations = []
-        ops = migration.backward if backward else migration.forward
-        for op in ops:
-            operations.extend(self.add_operation(op))
-        return operations
-
-    def run_operations(self, operations: list[Operation | Callable]) -> None:
-        if self.schema:
-            _ops = [self.schema_migrator.select_schema(self.schema), *operations]
-        else:
-            _ops = [*operations]
-
-        for op in _ops:
-            if isinstance(op, Operation):
-                if hasattr(op, "fn"):
-                    fn = op.fn
-                else:
-                    fn = op.method  # peewee < 4.4
-                name = fn if isinstance(fn, str) else fn.__name__
-                self.logger.info("%s %s", name, op.args)
-                op.run()
-            else:
-                op()
 
     def run(self, name=None, fake=False):
         """Run migrations."""
-        self.logger.info("Starting migrations")
+        LOGGER.info("Starting migrations")
 
         done = []
         diff = self.diff
         if not diff:
-            self.logger.info("There is nothing to migrate")
+            LOGGER.info("There is nothing to migrate")
             return done
 
-        self.build_state_from_migrations()
+        self.init_state_from_migrations()
         for mname in diff:
             self.run_one(mname, change_schema=not fake, change_history=True)
             done.append(mname)
@@ -303,32 +305,50 @@ class Router(object):
         name = name.strip()
         done = self.done
         if not done:
-            raise RuntimeError("No migrations are found.")
+            raise MigrationError("No migrations are found.")
         if name != done[-1]:
-            raise RuntimeError("Only last migration can be canceled.")
+            raise MigrationError("Only last migration can be canceled.")
 
-        self.build_state_from_migrations()
+        self.init_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
-        self.logger.warning("Downgraded migration: %s", name)
+        LOGGER.warning("Downgraded migration: %s", name)
+
+    def squash(self, name="squashed"):
+        """Merge migrations into one."""
+
+        self.init_state_from_migrations()
+
+        for mname in self.todo:
+            filename = os.path.join(self.migrate_dir, mname + ".py")
+            os.remove(filename)
+
+        migrate_changes = detect_changes(State(), self.state)
+        rollback_changes = detect_changes(self.state, State())
+
+        name = self.compile(name, migrate_changes, rollback_changes, num=1, squash=True)
+
+        self.state = State()
+        self.run_one(name, change_schema=False, change_history=True)
+        LOGGER.info('Migrations has been squashed into "%s"', name)
 
     # Candidates for deprecation
 
     def merge(self, name="initial"):
         """Merge migrations into one."""
-        self.build_state_from_migrations()
+        self.init_state_from_migrations()
         migrate_changes = detect_changes(State(), self.state)
         if not migrate_changes:
-            return self.logger.error("Can't merge migrations")
+            return LOGGER.error("Can't merge migrations")
 
         self.clear()
 
-        self.logger.info('Merge migrations into "%s"', name)
+        LOGGER.info('Merge migrations into "%s"', name)
         rollback_changes = detect_changes(self.state, State())
-        name = self.compile(name, migrate_changes, rollback_changes, 0)
+        name = self.compile(name, migrate_changes, rollback_changes, num=1)
 
         self.state = State()
         self.run_one(name, change_schema=False, change_history=True)
-        self.logger.info('Migrations has been merged into "%s"', name)
+        LOGGER.info('Migrations has been merged into "%s"', name)
 
     def clear(self):
         """Clear migrations."""
@@ -410,6 +430,8 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             migrate_table = config.get("MIGRATE_TABLE", migrate_table)
             migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
             sources = config.get("SOURCES", sources)
+            if isinstance(sources, str):
+                sources = [sources]
             logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
 
     LOGGER.setLevel(logging_level)
