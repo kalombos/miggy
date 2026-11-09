@@ -52,7 +52,7 @@ class Router(object):
         ignore: list[str] | None = None,
         schema: str | None = None,
         working_dir: str | Path | None = None,
-        sources: list[str] | None = None
+        sources: list[str] | None = None,
     ) -> None:
         if isinstance(database, str):
             database = connect(database)
@@ -373,6 +373,10 @@ def _import_submodules(package, passed=UNDEFINED):
     if isinstance(package, str):
         package = import_module(package)
 
+    # A plain module (not a package) has no submodules to scan.
+    if not hasattr(package, "__path__"):
+        return [package]
+
     modules = []
 
     for _loader, name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
@@ -444,7 +448,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             ignore=ignore,
             schema=schema,
             working_dir=working_directory,
-            sources=sources
+            sources=sources,
         )
     except RuntimeError as exc:
         LOGGER.error(exc)

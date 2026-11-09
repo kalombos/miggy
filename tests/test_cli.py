@@ -98,6 +98,29 @@ def test_load_router(default_config: Path) -> None:
     assert router.migrate_dir == default_config.parent / "custom_migrations"
 
 
+def test_load_router__sources_not_set(default_router: Router) -> None:
+    assert default_router.sources is None
+
+
+def test_load_router__sources_from_config(tmp_path: Path) -> None:
+    conf = tmp_path / "miggyconf.py"
+    conf.write_text(
+        "DATABASE = 'sqlite:///:memory:'\n"
+        "SOURCES = ['autodiscover.some_folder_one', 'autodiscover.some_folder_three']\n"
+    )
+
+    router = get_router("mock", "mock", conf_path=conf)
+    assert router.sources == ["autodiscover.some_folder_one", "autodiscover.some_folder_three"]
+
+
+def test_load_router__sources_string_normalized(tmp_path: Path) -> None:
+    conf = tmp_path / "miggyconf.py"
+    conf.write_text("DATABASE = 'sqlite:///:memory:'\nSOURCES = 'autodiscover.some_folder_one'\n")
+
+    router = get_router("mock", "mock", conf_path=conf)
+    assert router.sources == ["autodiscover.some_folder_one"]
+
+
 def test_load_router_missing_config(capsys: pytest.CaptureFixture[str]) -> None:
     conf = pathlib.Path("miggyconf.py")
 
@@ -152,6 +175,42 @@ def test_makemigrations__autosource(dir_option, db_option, prepend_resources: No
         cli, ["makemigrations", dir_option, db_option, "--auto-source", "autodiscover.some_folder_one"]
     )
     assert "Migration created: 001_auto_" in result.output
+
+
+def test_makemigrations__sources_from_config(default_config: Path, prepend_resources: None) -> None:
+    default_config.write_text(default_config.read_text() + "\nSOURCES = ['autodiscover.some_folder_one']\n")
+
+    result = runner.invoke(cli, ["--config", str(default_config), "makemigrations"])
+    assert result.exit_code == 0, result.output
+    assert "Migration created: 001_auto_" in result.output
+
+    migration_file = next((default_config.parent / "custom_migrations").glob("001_auto_*.py"))
+    content = migration_file.read_text()
+    assert "name='Object1'" in content
+    assert "name='Object2'" in content
+    assert "name='Object3'" in content
+
+
+def test_makemigrations__sources_take_precedence(default_config: Path, prepend_resources: None) -> None:
+    default_config.write_text(default_config.read_text() + "\nSOURCES = ['autodiscover.some_folder_one']\n")
+
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(default_config),
+            "makemigrations",
+            "--auto-source",
+            "autodiscover.some_folder_three",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Migration created: 001_auto_" in result.output
+
+    migration_file = next((default_config.parent / "custom_migrations").glob("001_auto_*.py"))
+    content = migration_file.read_text()
+    assert "name='Object1'" in content
+    assert "name='Model1'" not in content
 
 
 def test_makemigrations_fake_initial(default_config: Path, prepend_resources: None) -> None:

@@ -79,7 +79,8 @@ def init() -> None:
     default=None,
     help=(
         "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "Current directory will be recursively scanned by default."
+        "SOURCES in the config file takes precedence over this option. "
+        "If neither is set, the current directory will be scanned recursively."
     ),
 )
 @deprecated_options
@@ -98,7 +99,7 @@ def makemigrations(
 
     router = _load_router(directory, database, schema, verbose)
 
-    auto = not empty
+    auto: bool | str = not empty
     if auto and auto_source:
         auto = auto_source
     try:

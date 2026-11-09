@@ -71,6 +71,11 @@ file, then edit ``miggyconf.py``:
    :language: python
 
 
+The ``SOURCES`` option points to the ``app`` package, which is where our
+models live — see the `Model Sources`_ section for details. If you remove
+it, Miggy will auto-discover model packages in the working directory
+instead.
+
 That's it! Now you can run ``miggy makemigrations`` to generate your first
 migration:
 
@@ -107,6 +112,27 @@ If you need the complete source code for this example, you can find it on
 `GitHub`_.
 
 .. _GitHub: https://github.com/kalombos/miggy/tree/master/examples/quickstart
+
+
+Model Sources
+-------------
+
+To detect changes, ``miggy makemigrations`` has to know where to look for
+your models. By default it scans all packages in the working directory
+(the directory containing ``miggyconf.py``) and their submodules
+recursively.
+
+If your models live somewhere else — or you don't want the working
+directory scanned at all — set the ``SOURCES`` config option to a list of
+module paths to scan instead::
+
+    SOURCES = ["app.models", "shared.models"]
+
+Every module listed in ``SOURCES`` is imported, and its submodules are
+scanned for models recursively. A package and a plain module are both
+accepted. ``SOURCES`` takes precedence over the ``--auto-source``
+command-line option, so it is best kept in the config file, while the
+option is handy for one-off runs against a specific module.
 
 
 Transactions

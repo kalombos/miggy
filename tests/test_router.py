@@ -511,3 +511,50 @@ def test_load_models(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Pat
             "autodiscover.some_folder_two.one_model.Object3",
         ]
     )
+
+
+def test_load_models__plain_module(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
+    monkeypatch.syspath_prepend(str(resources_dir))
+
+    result = load_models("autodiscover.some_folder_one.one_models")
+    assert [m.__name__ for m in result] == ["Object3"]
+
+
+def test_load_project_state__sources(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
+) -> None:
+    router = Router(patched_pg_db, migrate_dir=migrations_dir, sources=["autodiscover.some_folder_one"])
+
+    state = router.load_project_state(True)
+    assert sorted(state) == ["object1", "object2", "object3"]
+
+
+def test_load_project_state__sources_take_precedence(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
+) -> None:
+    router = Router(patched_pg_db, migrate_dir=migrations_dir, sources=["autodiscover.some_folder_one"])
+
+    state = router.load_project_state("autodiscover.some_folder_three")
+    assert sorted(state) == ["object1", "object2", "object3"]
+
+
+def test_load_project_state__auto_source(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
+) -> None:
+    router = Router(patched_pg_db, migrate_dir=migrations_dir)
+
+    state = router.load_project_state("autodiscover.some_folder_two")
+    assert sorted(state) == ["basemodel", "object1", "object2", "object3"]
+
+
+def test_load_project_state__auto_discover_working_dir(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    package = tmp_path / "app_models"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "models.py").write_text("import peewee as pw\n\n\nclass Thing(pw.Model):\n    name = pw.CharField()\n")
+    router = Router(patched_pg_db, migrate_dir=migrations_dir, working_dir=tmp_path)
+
+    state = router.load_project_state(True)
+    assert sorted(state) == ["thing"]
