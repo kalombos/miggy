@@ -1,35 +1,67 @@
+"""Peewee migrations -- 002_auto_20260903_1414.py.
+
+A migration is a `Migration` class. `forward` and `backward` are lists of
+operations from `miggy.operations` to apply forward and backward.
+Set `atomic = True` to run the migration inside a single transaction.
+
+Some examples ::
+
+    > operations.RunSql(sql, params: tuple[Any, ...] | None = None)       # Run custom SQL
+    > operations.RunPython(func: RunPythonF)                              # Run python code
+    > operations.CreateModel(name: str, fields: dict[str, pw.Field], meta: dict[str, Any])
+    > operations.RemoveModel(model_name: str)
+    > operations.AddField(model_name: str, name: str, field: pw.Field)
+    > operations.AlterField(model_name: str, name: str, field: pw.Field)
+    > operations.RemoveField(model_name: str, name: str)
+    > operations.RenameField(model_name: str, old_name: str, new_name: str)
+    > operations.RenameTable(model_name: str, new_table_name: str)
+    > operations.AddIndex(
+            model_name: str,
+            *fields: str,
+            name: str,
+            unique: bool = False,
+            where: pw.SQL | None = None,
+            safe: bool = False,
+            concurrently: bool = False
+      )
+    > operations.DropIndex(model_name: str, name: str)
+    > operations.AddPrimaryKeyConstraint(model_name: str, *fields: str)
+    > operations.RemovePrimaryKeyConstraint(model_name: str)
+    > operations.AddCheckConstraint(model_name: str, name: str, constraint: str)
+    > operations.RemoveCheckConstraint(model_name: str, name: str)
+
+
+"""
+
 import peewee as pw
 
-# Run the migration inside a single transaction
-__ATOMIC = True
+from miggy import operations
 
 
-def migrate(migrator, database, fake=False):
-    """Write your migrations here."""
+class Migration(operations.Migration):
+    atomic = True
 
-    migrator.add_field(
-        model_name="user",
-        name="age",
-        field=pw.IntegerField(null=True),
-    )
+    forward = [
+        operations.AddField(
+            model_name="user",
+            name="age",
+            field=pw.IntegerField(null=True),
+        ),
+        operations.AlterField(
+            model_name="user",
+            name="last_name",
+            field=pw.CharField(index=True),
+        ),
+    ]
 
-    migrator.alter_field(
-        model_name="user",
-        name="last_name",
-        field=pw.CharField(index=True),
-    )
-
-
-def rollback(migrator, database, fake=False):
-    """Write your rollback migrations here."""
-
-    migrator.remove_field(
-        model_name="user",
-        name="age",
-    )
-
-    migrator.alter_field(
-        model_name="user",
-        name="last_name",
-        field=pw.CharField(),
-    )
+    backward = [
+        operations.RemoveField(
+            model_name="user",
+            name="age",
+        ),
+        operations.AlterField(
+            model_name="user",
+            name="last_name",
+            field=pw.CharField(),
+        ),
+    ]

@@ -11,9 +11,9 @@ Miggy supports detecting changes to most Peewee classes used to define a table, 
 
 ### New to Miggy?
 
-* [Quickstart](https://miggy.readthedocs.io/en/latest/quickstart.html)
+* [Migrations](https://miggy.readthedocs.io/en/latest/migrations.html)
 * [Example app](https://github.com/kalombos/miggy/tree/master/examples/quickstart)
-* [How to start with an existing database schema](https://miggy.readthedocs.io/en/latest/howto.html#how-to-start-with-an-existing-database-schema)
+* [Existing database](https://miggy.readthedocs.io/en/latest/migrations.html#existing-database)
 * [Read the documentation](https://miggy.readthedocs.io)
 
 
@@ -46,13 +46,12 @@ Getting help:
         --help         Show this message and exit.
 
     Commands:
-        create          Create a migration.
         init            Create a default configuration file.
         list            List migrations.
         makemigrations  Create a migration automatically
-        merge           Merge migrations into one.
         migrate         Migrate database.
         rollback        Rollback a migration with given name or number of last...
+        squash          Squash migrations into one.
 
 
 
@@ -75,20 +74,37 @@ Getting help:
 
 ### Migration files
 
-By default, migration files are looked up in `config_path/migrations`
-directory, but custom directory can be given.
+By default, migration files are looked up in the `migrations` directory
+next to the config file, but a custom directory can be given with the
+`MIGRATE_DIR` setting.
 
 Migration files are sorted and applied in ascending order per their
 filename.
 
-Each migration file must specify `migrate()` function and may specify
-`rollback()` function:
+Each migration file specifies a `Migration` class with `forward` and
+`backward` lists of operations to apply when migrating forwards and
+rolling back:
 
-    def migrate(migrator, database, fake=False, **kwargs):
-        pass
+    import peewee as pw
+    from miggy import operations
 
-    def rollback(migrator, database, fake=False, **kwargs):
-        pass
+    class Migration(operations.Migration):
+        atomic = True
+
+        forward = [
+            operations.AddField(
+                model_name='user',
+                name='age',
+                field=pw.IntegerField(null=True),
+            ),
+        ]
+
+        backward = [
+            operations.RemoveField(
+                model_name='user',
+                name='age',
+            ),
+        ]
 
 
 
