@@ -240,6 +240,7 @@ def test_get_router_reads_config(tmp_path: pathlib.Path) -> None:
         "IGNORE = ['ignored_model']\n"
         "SCHEMA = 'config_schema'\n"
         "MIGRATE_TABLE = 'custom_history'\n"
+        "SOURCES = ['autodiscover.some_folder_one', 'autodiscover.some_folder_three']\n"
         "MIGRATE_DIR = 'custom_migrations'"
     )
 
@@ -248,6 +249,7 @@ def test_get_router_reads_config(tmp_path: pathlib.Path) -> None:
     assert router.ignore == ["ignored_model"]
     assert router.schema == "config_schema"
     assert router.migrate_table == "custom_history"
+    assert router.sources == ["autodiscover.some_folder_one", "autodiscover.some_folder_three"]
     assert router.migrate_dir == tmp_path / "custom_migrations"
     assert router.working_dir == tmp_path
 
@@ -529,32 +531,12 @@ def test_load_project_state__sources(
     assert sorted(state) == ["object1", "object2", "object3"]
 
 
-def test_load_project_state__sources_take_precedence(
-    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
+def test_load_project_state__default(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, resources_dir: pathlib.Path
 ) -> None:
-    router = Router(patched_pg_db, migrate_dir=migrations_dir, sources=["autodiscover.some_folder_one"])
-
-    state = router.load_project_state("autodiscover.some_folder_three")
-    assert sorted(state) == ["object1", "object2", "object3"]
-
-
-def test_load_project_state__auto_source(
-    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
-) -> None:
-    router = Router(patched_pg_db, migrate_dir=migrations_dir)
-
-    state = router.load_project_state("autodiscover.some_folder_two")
-    assert sorted(state) == ["basemodel", "object1", "object2", "object3"]
-
-
-def test_load_project_state__auto_discover_working_dir(
-    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
-    package = tmp_path / "app_models"
-    package.mkdir()
-    (package / "__init__.py").write_text("")
-    (package / "models.py").write_text("import peewee as pw\n\n\nclass Thing(pw.Model):\n    name = pw.CharField()\n")
-    router = Router(patched_pg_db, migrate_dir=migrations_dir, working_dir=tmp_path)
+    # TODO handle with imports
+    working_dir = resources_dir / "autodiscover"
+    router = Router(patched_pg_db, migrate_dir=migrations_dir, working_dir=working_dir)
 
     state = router.load_project_state(True)
-    assert sorted(state) == ["thing"]
+    assert sorted(state) == ["basemodel", "object1", "object2", "object3"]

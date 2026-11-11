@@ -105,12 +105,6 @@ class Router(object):
         return [name for name in self.todo if name not in done]
 
     def load_project_state(self, auto: bool | str) -> State:
-        """Load project state from model sources.
-
-        ``SOURCES`` from the config file takes precedence over the ``auto``
-        argument. If it is not set, a module path given in ``auto`` is scanned,
-        or all packages in the working directory are auto-discovered.
-        """
         if self.sources:
             modules: list[str] = self.sources
         elif isinstance(auto, str):
