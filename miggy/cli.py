@@ -77,10 +77,10 @@ def init() -> None:
 @click.option(
     "--auto-source",
     default=None,
+    deprecated=True,
     help=(
         "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "SOURCES in the config file takes precedence over this option. "
-        "If neither is set, the current directory will be scanned recursively."
+        "Deprecated, use the SOURCES config option instead."
     ),
 )
 @deprecated_options

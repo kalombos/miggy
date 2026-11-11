@@ -32,6 +32,28 @@ the ``--config`` option or the ``MIGGY_CONFIG`` environment variable.
 See :doc:`cli` for the full command reference.
 
 
+Configuration
+-------------
+
+Run ``miggy init`` to create a ``miggyconf.py`` file with default values,
+then edit it to fit your project. The config file is a plain Python file;
+the supported settings are:
+
+* ``DATABASE`` — the database connection: a DSN string, a
+  ``peewee.Database`` instance, or a ``peewee.Proxy`` object. Required.
+* ``IGNORE`` — a list of model names to ignore when detecting changes.
+  Use ``Model._meta.name`` to get a model name.
+* ``SCHEMA`` — if set, run ``SET search_path TO 'schema'`` before each
+  migration so that it is applied to a different schema.
+* ``MIGRATE_TABLE`` — the name of the table used to store the migration
+  history. Defaults to ``migratehistory``.
+* ``MIGRATE_DIR`` — the path to the migration directory. Defaults to
+  ``migrations``.
+* ``SOURCES`` — a list of module paths to scan for models
+  (e.g. ``["app.models"]``). If it is not set, all packages in the
+  working directory are scanned for models.
+
+
 Workflow
 --------
 
@@ -71,11 +93,6 @@ file, then edit ``miggyconf.py``:
    :language: python
 
 
-The ``SOURCES`` option points to the ``app`` package, which is where our
-models live — see the `Model Sources`_ section for details. If you remove
-it, Miggy will auto-discover model packages in the working directory
-instead.
-
 That's it! Now you can run ``miggy makemigrations`` to generate your first
 migration:
 
@@ -112,27 +129,6 @@ If you need the complete source code for this example, you can find it on
 `GitHub`_.
 
 .. _GitHub: https://github.com/kalombos/miggy/tree/master/examples/quickstart
-
-
-Model Sources
--------------
-
-To detect changes, ``miggy makemigrations`` has to know where to look for
-your models. By default it scans all packages in the working directory
-(the directory containing ``miggyconf.py``) and their submodules
-recursively.
-
-If your models live somewhere else — or you don't want the working
-directory scanned at all — set the ``SOURCES`` config option to a list of
-module paths to scan instead::
-
-    SOURCES = ["app.models", "shared.models"]
-
-Every module listed in ``SOURCES`` is imported, and its submodules are
-scanned for models recursively. A package and a plain module are both
-accepted. ``SOURCES`` takes precedence over the ``--auto-source``
-command-line option, so it is best kept in the config file, while the
-option is handy for one-off runs against a specific module.
 
 
 Transactions

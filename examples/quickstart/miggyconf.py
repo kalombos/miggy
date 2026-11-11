@@ -18,6 +18,5 @@ MIGRATE_TABLE = "migratehistory"
 MIGRATE_DIR = "migrations"
 
 # list[str]. Python module paths to scan for models (e.g. ["app.models"]).
-# Takes precedence over the --auto-source option.
 # If not set, the working directory is scanned for packages.
 SOURCES = ["app"]
