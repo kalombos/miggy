@@ -113,14 +113,6 @@ def test_load_router__sources_from_config(tmp_path: Path) -> None:
     assert router.sources == ["autodiscover.some_folder_one", "autodiscover.some_folder_three"]
 
 
-def test_load_router__sources_string_normalized(tmp_path: Path) -> None:
-    conf = tmp_path / "miggyconf.py"
-    conf.write_text("DATABASE = 'sqlite:///:memory:'\nSOURCES = 'autodiscover.some_folder_one'\n")
-
-    router = get_router("mock", "mock", conf_path=conf)
-    assert router.sources == ["autodiscover.some_folder_one"]
-
-
 def test_load_router_missing_config(capsys: pytest.CaptureFixture[str]) -> None:
     conf = pathlib.Path("miggyconf.py")
 

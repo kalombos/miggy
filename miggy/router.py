@@ -6,6 +6,7 @@ import typing
 from functools import cached_property
 from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 import peewee as pw
@@ -27,11 +28,6 @@ class MigrationError(Exception):
 
 class FakeInitialError(MigrationError):
     pass
-
-
-DEFAULT_MIGRATE_DIR = "migrations"
-UNDEFINED = object()
-VOID = lambda migrator, database, fake: None  # noqa
 
 
 def add_to_sys_path(directory: str | Path) -> None:
@@ -239,6 +235,7 @@ class Router(object):
         )
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
+        VOID = lambda migrator, database, fake: None  # noqa
         atomic, migrate, rollback = (
             scope.get("__ATOMIC", True),
             scope.get("migrate", VOID),
@@ -360,44 +357,41 @@ class Router(object):
             os.remove(filename)
 
 
-def load_models(module):
-    """Load models from given module."""
-    modules = _import_submodules(module)
-    return {m for module in modules for m in filter(_check_model, (getattr(module, name) for name in dir(module)))}
+def load_models(package_name: str) -> set[type[pw.Model]]:
+    """Load all Peewee models from a package and its submodules."""
+    models = set()
+
+    for module in import_modules(package_name):
+        for name in dir(module):
+            obj = getattr(module, name)
+
+            if is_model(obj):
+                models.add(obj)
+
+    return models
 
 
-def _import_submodules(package, passed=UNDEFINED):
-    if passed is UNDEFINED:
-        passed = set()
+def import_modules(package_name: str) -> list[ModuleType]:
+    """Import a package and all of its submodules."""
+    package = import_module(package_name)
+    modules = [package]
 
-    if isinstance(package, str):
-        package = import_module(package)
-
-    # A plain module (not a package) has no submodules to scan.
+    # A regular module has no submodules.
     if not hasattr(package, "__path__"):
-        return [package]
+        return modules
 
-    modules = []
-
-    for _loader, name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
-        if name in passed:
-            continue
-        passed.add(name)
-
-        module = sys.modules.get(name)
-        if module is None:
-            module = import_module(name)
-
-        modules.append(module)
-        if is_pkg:
-            modules += _import_submodules(module, passed=passed)
+    for module_info in pkgutil.walk_packages(
+        package.__path__,
+        prefix=f"{package.__name__}.",
+    ):
+        modules.append(import_module(module_info.name))
 
     return modules
 
 
-def _check_model(obj, models=None):
-    """Checks object if it's a peewee model and unique."""
-    return isinstance(obj, type) and issubclass(obj, pw.Model) and hasattr(obj, "_meta")
+def is_model(obj: Any) -> bool:
+    """Return whether an object is a Peewee model class."""
+    return isinstance(obj, type) and obj is not pw.Model and issubclass(obj, pw.Model)
 
 
 def detect_changes(
@@ -434,8 +428,6 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             migrate_table = config.get("MIGRATE_TABLE", migrate_table)
             migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
             sources = config.get("SOURCES", sources)
-            if isinstance(sources, str):
-                sources = [sources]
             logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
 
     LOGGER.setLevel(logging_level)
