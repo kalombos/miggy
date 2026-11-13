@@ -286,3 +286,38 @@ The same effect can be achieved by setting ``fake_initial = True`` manually
 in the first migration. From that point on you can use the regular
 workflow: change your models, run ``miggy makemigrations`` and
 ``miggy migrate``.
+
+
+Psycopg 3
+---------
+
+If you use Psycopg 3 as your PostgreSQL driver, you should configure it to
+use ``ClientCursor`` when running migrations.
+
+By default, Psycopg 3 sends the query parameters to the server for binding
+(server-side binding). PostgreSQL cannot determine the type of a parameter
+in certain statements, particularly DDL statements such as
+``ALTER TABLE ... SET DEFAULT`` and ``SET search_path``, so migrations may
+fail with errors such as::
+
+    psycopg.errors.IndeterminateDatatype:
+        could not determine data type of parameter $1
+
+To avoid this issue, use ``psycopg.ClientCursor``, which performs
+client-side parameter binding and provides behavior similar to Psycopg 2.
+Configure your database in ``miggyconf.py`` as follows:
+
+.. code-block:: python
+
+    import psycopg
+
+    from peewee import PostgresqlDatabase
+
+    DATABASE = PostgresqlDatabase(
+        "dbname",
+        user="user",
+        password="password",
+        host="localhost",
+        port=5432,
+        cursor_factory=psycopg.ClientCursor,
+    )
