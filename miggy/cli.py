@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from miggy.compat.cli import create, deprecated_options
-from miggy.router import FakeInitialError, Router, get_router
+from miggy.router import FakeInitialError, Router, UnappliedMigrationError, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
 
@@ -138,11 +138,12 @@ def rollback(name, count, database=None, directory=None, schema=None, verbose=No
     """
     router = _load_router(directory, database, schema, verbose)
     if not name:
-        if len(router.done) < count:
-            raise RuntimeError("Unable to rollback %s migrations from %s: %s" % (count, len(router.done), router.done))
+        applied = router.applied
+        if len(applied) < count:
+            raise RuntimeError("Unable to rollback %s migrations from %s: %s" % (count, len(applied), applied))
         for _ in range(count):
             router = _load_router(directory, database, schema, verbose)
-            name = router.done[-1]
+            name = router.applied[-1]
             router.rollback(name)
     else:
         router.rollback(name)
@@ -158,7 +159,10 @@ def squash(database=None, directory=None, schema=None, verbose=None) -> None:
         abort=True,
     )
     router = _load_router(directory, database, schema, verbose)
-    router.squash()
+    try:
+        router.squash()
+    except UnappliedMigrationError as exc:
+        raise click.ClickException(str(exc)) from None
 
 
 @cli.command()
@@ -167,10 +171,10 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
     """List migrations."""
     router = _load_router(directory, database, schema, verbose)
     click.echo("Migrations are done:")
-    click.echo("\n".join(router.done))
+    click.echo("\n".join(router.applied))
     click.echo("")
     click.echo("Migrations are undone:")
-    click.echo("\n".join(router.diff))
+    click.echo("\n".join(router.unapplied))
 
 
 # Deprecated commands

@@ -116,7 +116,7 @@ def test_integration_test_for_old_api(tmp_path: pathlib.Path) -> None:
     assert Order._meta.table_name == "new_name"
     assert not db.table_exists("order")
     assert db.table_exists("new_name")
-    assert router.done == ["001_create", "002_evolve", "003_finish", "004_rename"]
+    assert router.in_db == ["001_create", "002_evolve", "003_finish", "004_rename"]
     assert [c.name for c in db.get_columns("new_name")] == ["id", "identifier"]
 
 

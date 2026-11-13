@@ -11,7 +11,15 @@ try:
 except ImportError:  # peewee == 3.17.9
     Psycopg3Database = None
 
-from miggy.router import FakeInitialError, MigrationError, Router, detect_changes, get_router, load_models
+from miggy.router import (
+    FakeInitialError,
+    MigrationError,
+    Router,
+    UnappliedMigrationError,
+    detect_changes,
+    get_router,
+    load_models,
+)
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
 from tests.helpers import get_active_status
@@ -30,19 +38,21 @@ def test_router_run_already_applied_ok(person_router: Router) -> None:
     assert Person.get_or_none(email="person@example.com") is None
 
 
-def test_router_todo_diff_done(person_router: Router):
+def test_router_all_in_db_applied_unapplied(person_router: Router):
     MigrateHistory = person_router.model
 
-    assert person_router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert"]
-    assert person_router.done == []
-    assert person_router.diff == ["001_test", "002_test", "003_tespy", "004_test_insert"]
+    assert person_router.all == ["001_test", "002_test", "003_tespy", "004_test_insert"]
+    assert person_router.in_db == []
+    assert person_router.applied == []
+    assert person_router.unapplied == ["001_test", "002_test", "003_tespy", "004_test_insert"]
 
     person_router.create("new")
-    assert person_router.todo == ["001_test", "002_test", "003_tespy", "004_test_insert", "005_new"]
+    assert person_router.all == ["001_test", "002_test", "003_tespy", "004_test_insert", "005_new"]
     os.remove(os.path.join(person_router.migrate_dir, "005_new.py"))
 
     MigrateHistory.create(name="001_test")
-    assert person_router.diff == ["002_test", "003_tespy", "004_test_insert"]
+    assert person_router.applied == ["001_test"]
+    assert person_router.unapplied == ["002_test", "003_tespy", "004_test_insert"]
     MigrateHistory.delete().execute()
 
 
@@ -56,7 +66,7 @@ def test_router_rollback(person_router: Router):
 
     person_router.rollback("004_test_insert")
     person_router.rollback("003_tespy")
-    assert person_router.diff == ["003_tespy", "004_test_insert"]
+    assert person_router.unapplied == ["003_tespy", "004_test_insert"]
     assert migrations.count() == 2
 
 
@@ -75,9 +85,7 @@ def test_router_merge(person_router: Router) -> None:
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
-    mig_dir = tmp_path / "migrations"
-    mig_dir.mkdir()
+def write_tag_migrations(mig_dir: pathlib.Path) -> None:
     (mig_dir / "001_create.py").write_text(
         dedent(
             """
@@ -131,15 +139,21 @@ def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase)
             """
         )
     )
+
+
+def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
+    mig_dir = tmp_path / "migrations"
+    mig_dir.mkdir()
+    write_tag_migrations(mig_dir)
     router = Router(patched_pg_db, migrate_dir=mig_dir)
     router.run()
-    assert router.done == ["001_create", "002_add_field"]
+    assert router.in_db == ["001_create", "002_add_field"]
     assert patched_pg_db.table_exists("tag")
 
     router.squash()
 
     # Old migration files are deleted and replaced with a single squashed one.
-    assert router.todo == ["001_squashed"]
+    assert router.all == ["001_squashed"]
     assert not (mig_dir / "001_create.py").exists()
     assert not (mig_dir / "002_add_field.py").exists()
 
@@ -149,12 +163,36 @@ def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase)
     assert "'tag': pw.CharField()" in content
     assert "'created_at': pw.DateTimeField(null=True)" in content
 
-    # History is replaced with a single record for the squashed migration.
-    assert [m.name for m in router.model.select().order_by(router.model.id)] == ["001_squashed"]
+    # The database is left untouched: the old history rows remain,
+    # so the squashed migration is considered unapplied.
+    assert router.in_db == ["001_create", "002_add_field"]
+    assert router.applied == []
+    assert router.unapplied == ["001_squashed"]
+
+    # The next migrate fake-applies the squashed migration (the history is not
+    # empty, see the `squash` migration attribute) and rewrites the history.
+    assert router.run() == ["001_squashed"]
+    assert router.in_db == ["001_squashed"]
 
     # The schema is left untouched, so there is nothing left to migrate.
     assert patched_pg_db.table_exists("tag")
     assert router.run() == []
+
+
+def test_router_squash_with_unapplied_migrations(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
+    mig_dir = tmp_path / "migrations"
+    mig_dir.mkdir()
+    write_tag_migrations(mig_dir)
+    router = Router(patched_pg_db, migrate_dir=mig_dir)
+    router.run(name="001_create")
+
+    with pytest.raises(UnappliedMigrationError, match="Can't squash migrations: 002_add_field not applied yet"):
+        router.squash()
+
+    # Nothing is deleted.
+    assert router.all == ["001_create", "002_add_field"]
+    assert (mig_dir / "001_create.py").exists()
+    assert (mig_dir / "002_add_field.py").exists()
 
 
 @pytest.mark.parametrize(
@@ -482,11 +520,22 @@ def test_rollback_error(router: Router) -> None:
     with pytest.raises(MigrationError, match="No migrations are found."):
         router.rollback("001_test")
 
+    # Migrations without files on the file system cannot be rolled back.
     router.model.create(name="001_test")
     router.model.create(name="002_test")
 
-    with pytest.raises(MigrationError, match="Only last migration can be canceled."):
+    with pytest.raises(MigrationError, match="No migrations are found."):
         router.rollback("001_test")
+
+
+def test_rollback_only_last_migration(router: Router) -> None:
+    router.compile("test1", [], [])
+    router.compile("test2", [], [])
+    router.model.create(name="001_test1")
+    router.model.create(name="002_test2")
+
+    with pytest.raises(MigrationError, match="Only last migration can be canceled."):
+        router.rollback("001_test1")
 
 
 def test_load_models(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
