@@ -2,7 +2,6 @@ import os
 import pkgutil
 import re
 import sys
-import typing
 from functools import cached_property
 from importlib import import_module
 from pathlib import Path
@@ -27,6 +26,12 @@ class MigrationError(Exception):
 
 class FakeInitialError(MigrationError):
     pass
+
+
+class UnappliedMigrationError(MigrationError):
+    def __init__(self, migrations: list[str]) -> None:
+        self.migrations = migrations
+        super().__init__("The following migrations have not been applied: " + ", ".join(migrations))
 
 
 DEFAULT_MIGRATE_DIR = "migrations"
@@ -73,13 +78,13 @@ class Router(object):
         self.migration_template = MIGRATION_TEMPLATE.read_text()
         self.state = State()
 
-    def init_state_from_migrations(self, use_unapplied: bool = False) -> None:
-        migrations = self.todo if use_unapplied else self.done
+    def init_state_from_migrations(self, applied_only: bool = True) -> None:
+        migrations = self.applied if applied_only else self.all
         for name in migrations:
             self.run_one(name)
 
     @cached_property
-    def model(self) -> typing.Type[MigrateHistory]:
+    def model(self) -> type[MigrateHistory]:
         """Initialize and cache MigrationHistory model."""
         MigrateHistory._meta.database = self.database
         MigrateHistory._meta.table_name = self.migrate_table
@@ -88,7 +93,7 @@ class Router(object):
         return MigrateHistory
 
     @property
-    def todo(self):
+    def all(self):
         """Scan migrations in file system."""
         if not os.path.exists(self.migrate_dir):
             LOGGER.warning("Migration directory: %s does not exist.", self.migrate_dir)
@@ -96,15 +101,19 @@ class Router(object):
         return sorted(f[:-3] for f in os.listdir(self.migrate_dir) if self.filemask.match(f))
 
     @property
-    def done(self):
+    def in_db(self) -> list[str]:
         """Scan migrations in database."""
-        return [mm.name for mm in self.model.select().order_by(self.model.id)]
+        return [mm.name for mm in self.model.select().order_by(self.model.id)]  # type: ignore[attr-defined]
 
     @property
-    def diff(self):
-        """Calculate difference between fs and db."""
-        done = set(self.done)
-        return [name for name in self.todo if name not in done]
+    def applied(self) -> list[str]:
+        """Migrations present in both file system and database, in file system order."""
+        return [name for name in self.all if name in self.in_db]
+
+    @property
+    def unapplied(self) -> list[str]:
+        """Migrations present in file system but not in database, in file system order."""
+        return [name for name in self.all if name not in self.in_db]
 
     def load_project_state(self, auto) -> State:
         modules = [auto]
@@ -128,7 +137,7 @@ class Router(object):
                 LOGGER.exception("Can't import models module")
                 return None
 
-            self.init_state_from_migrations(use_unapplied=True)
+            self.init_state_from_migrations(applied_only=False)
 
             forward_changes = detect_changes(self.state, project_state)
             if not forward_changes:
@@ -179,7 +188,7 @@ class Router(object):
         """Create a migration."""
 
         if num is None:
-            num = len(self.todo) + 1
+            num = len(self.all) + 1
 
         attrs = {"atomic": True}
         if fake_initial:
@@ -276,7 +285,7 @@ class Router(object):
         LOGGER.info("Starting migrations")
 
         done = []
-        diff = self.diff
+        diff = self.unapplied
         if not diff:
             LOGGER.info("There is nothing to migrate")
             return done
@@ -290,24 +299,31 @@ class Router(object):
 
         return done
 
-    def rollback(self, name):
+    def rollback(self, name: str):
+
         name = name.strip()
-        done = self.done
-        if not done:
+
+        applied = self.applied
+        if not applied:
             raise MigrationError("No migrations are found.")
-        if name != done[-1]:
+        if name != applied[-1]:
+            # What is the purpose of the `name` parameter if only the last migration
+            # can be rolled back anyway? Consider deprecating this parameter.
             raise MigrationError("Only last migration can be canceled.")
 
         self.init_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
         LOGGER.warning("Downgraded migration: %s", name)
 
-    def squash(self, name="squashed"):
+    def squash(self, name="initial"):
         """Merge migrations into one."""
+
+        if self.unapplied:
+            raise UnappliedMigrationError(self.unapplied)
 
         self.init_state_from_migrations()
 
-        for mname in self.todo:
+        for mname in self.all:
             filename = os.path.join(self.migrate_dir, mname + ".py")
             os.remove(filename)
 
@@ -315,9 +331,6 @@ class Router(object):
         rollback_changes = detect_changes(self.state, State())
 
         name = self.compile(name, migrate_changes, rollback_changes, num=1, squash=True)
-
-        self.state = State()
-        self.run_one(name, change_schema=False, change_history=True)
         LOGGER.info('Migrations has been squashed into "%s"', name)
 
     # Candidates for deprecation
@@ -344,7 +357,7 @@ class Router(object):
         self.model.delete().execute()
 
         # Remove migrations from fs
-        for name in self.todo:
+        for name in self.all:
             filename = os.path.join(self.migrate_dir, name + ".py")
             os.remove(filename)
 

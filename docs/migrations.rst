@@ -225,11 +225,11 @@ reduce the existing set of migrations down to a single file with the
 
 
 The command deletes all migration files and creates a single
-``001_squashed.py`` that describes the current state of the schema. The
+``001_initial.py`` that describes the current state of the schema. The
 ``migratehistory`` table is updated accordingly and contains only the
 squashed migration:
 
-.. literalinclude:: ../examples/squash/001_squashed.py
+.. literalinclude:: ../examples/squash/001_initial.py
    :language: python
    :start-at: from miggy import operations
 
