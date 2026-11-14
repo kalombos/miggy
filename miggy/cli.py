@@ -162,7 +162,10 @@ def squash(database=None, directory=None, schema=None, verbose=None) -> None:
     try:
         router.squash()
     except UnappliedMigrationError as exc:
-        raise click.ClickException(str(exc)) from None
+        raise click.ClickException(
+            "Can't squash migrations: %s not applied yet. "
+            "Apply all migrations first with 'miggy migrate'." % ", ".join(exc.migrations)
+        ) from None
 
 
 @cli.command()

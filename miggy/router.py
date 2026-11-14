@@ -2,7 +2,6 @@ import os
 import pkgutil
 import re
 import sys
-import typing
 from functools import cached_property
 from importlib import import_module
 from pathlib import Path
@@ -30,7 +29,9 @@ class FakeInitialError(MigrationError):
 
 
 class UnappliedMigrationError(MigrationError):
-    pass
+    def __init__(self, migrations: list[str]) -> None:
+        self.migrations = migrations
+        super().__init__("The following migrations have not been applied: " + ", ".join(migrations))
 
 
 DEFAULT_MIGRATE_DIR = "migrations"
@@ -83,7 +84,7 @@ class Router(object):
             self.run_one(name)
 
     @cached_property
-    def model(self) -> typing.Type[MigrateHistory]:
+    def model(self) -> type[MigrateHistory]:
         """Initialize and cache MigrationHistory model."""
         MigrateHistory._meta.database = self.database
         MigrateHistory._meta.table_name = self.migrate_table
@@ -102,19 +103,17 @@ class Router(object):
     @property
     def in_db(self) -> list[str]:
         """Scan migrations in database."""
-        return [mm.name for mm in self.model.select().order_by(self.model.id)]
+        return [mm.name for mm in self.model.select().order_by(self.model.id)]  # type: ignore[attr-defined]
 
     @property
     def applied(self) -> list[str]:
         """Migrations present in both file system and database, in file system order."""
-        in_db = set(self.in_db)
-        return [name for name in self.all if name in in_db]
+        return [name for name in self.all if name in self.in_db]
 
     @property
     def unapplied(self) -> list[str]:
         """Migrations present in file system but not in database, in file system order."""
-        in_db = set(self.in_db)
-        return [name for name in self.all if name not in in_db]
+        return [name for name in self.all if name not in self.in_db]
 
     def load_project_state(self, auto) -> State:
         modules = [auto]
@@ -300,28 +299,27 @@ class Router(object):
 
         return done
 
-    def rollback(self, name):
+    def rollback(self, name: str):
+
         name = name.strip()
-        in_fs = set(self.all)
-        done = [name for name in self.in_db if name in in_fs]
-        if not done:
+
+        applied = self.applied
+        if not applied:
             raise MigrationError("No migrations are found.")
-        if name != done[-1]:
+        if name != applied[-1]:
+            # What is the purpose of the `name` parameter if only the last migration
+            # can be rolled back anyway? Consider deprecating this parameter.
             raise MigrationError("Only last migration can be canceled.")
 
         self.init_state_from_migrations()
         self.run_one(name, change_schema=True, backward=True, change_history=True)
         LOGGER.warning("Downgraded migration: %s", name)
 
-    def squash(self, name="squashed"):
+    def squash(self, name="initial"):
         """Merge migrations into one."""
 
-        unapplied = self.unapplied
-        if unapplied:
-            raise UnappliedMigrationError(
-                "Can't squash migrations: %s not applied yet. "
-                "Apply all migrations first with 'miggy migrate'." % ", ".join(unapplied)
-            )
+        if self.unapplied:
+            raise UnappliedMigrationError(self.unapplied)
 
         self.init_state_from_migrations()
 

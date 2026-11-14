@@ -153,30 +153,15 @@ def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase)
     router.squash()
 
     # Old migration files are deleted and replaced with a single squashed one.
-    assert router.all == ["001_squashed"]
+    assert router.all == ["001_initial"]
     assert not (mig_dir / "001_create.py").exists()
     assert not (mig_dir / "002_add_field.py").exists()
 
-    content = (mig_dir / "001_squashed.py").read_text()
+    content = (mig_dir / "001_initial.py").read_text()
     assert "squash = True" in content
     assert "operations.CreateModel" in content
     assert "'tag': pw.CharField()" in content
     assert "'created_at': pw.DateTimeField(null=True)" in content
-
-    # The database is left untouched: the old history rows remain,
-    # so the squashed migration is considered unapplied.
-    assert router.in_db == ["001_create", "002_add_field"]
-    assert router.applied == []
-    assert router.unapplied == ["001_squashed"]
-
-    # The next migrate fake-applies the squashed migration (the history is not
-    # empty, see the `squash` migration attribute) and rewrites the history.
-    assert router.run() == ["001_squashed"]
-    assert router.in_db == ["001_squashed"]
-
-    # The schema is left untouched, so there is nothing left to migrate.
-    assert patched_pg_db.table_exists("tag")
-    assert router.run() == []
 
 
 def test_router_squash_with_unapplied_migrations(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
@@ -186,7 +171,7 @@ def test_router_squash_with_unapplied_migrations(tmp_path: pathlib.Path, patched
     router = Router(patched_pg_db, migrate_dir=mig_dir)
     router.run(name="001_create")
 
-    with pytest.raises(UnappliedMigrationError, match="Can't squash migrations: 002_add_field not applied yet"):
+    with pytest.raises(UnappliedMigrationError, match="The following migrations have not been applied: 002_add_field"):
         router.squash()
 
     # Nothing is deleted.

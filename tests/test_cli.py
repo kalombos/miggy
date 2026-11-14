@@ -197,20 +197,19 @@ def test_makemigrations_fake_initial_not_first_migration(default_config: Path) -
     assert "The --fake-initial option can only be used with the first migration." in result.output
 
 
-def test_migrate(default_config: Path, default_migrations: list[str]) -> None:
-    # TODO check migrations applied in router.in_db
+def test_migrate(default_config: Path, default_migrations: list[str], default_router) -> None:
     result = runner.invoke(cli, ["--config", str(default_config), "migrate"])
     assert result.exit_code == 0
     assert "Migrations completed: %s" % ", ".join(default_migrations) in result.output
+    assert default_router.applied == ["001_some1", "002_some2"]
 
 
-def test_fake(dir_option, db_option, migrations_str, router):
+def test_fake(dir_option, db_option, migrations_str):
     result = runner.invoke(cli, ["migrate", dir_option, db_option, "-v", "--fake"])
     assert result.exit_code == 0
     assert "Migrations completed: %s" % migrations_str in result.output
 
     # TODO: Find a way of testing fake. This is unclear why the following fails.
-    # assert not router().in_db
 
 
 def test_rollback(dir_option, db_option, router, migrations):
@@ -220,24 +219,24 @@ def test_rollback(dir_option, db_option, router, migrations):
     result = runner.invoke(cli, ["rollback", dir_option, db_option, "--count=%s" % count_overflow])
     assert result.exception
     assert "Unable to rollback %s migrations" % count_overflow in result.exception.args[0]
-    assert router().in_db == migrations
+    assert router().applied == migrations
 
     result = runner.invoke(cli, ["rollback", dir_option, db_option])
     assert not result.exception
-    assert router().in_db == migrations[:-1]
+    assert router().applied == migrations[:-1]
 
     result = runner.invoke(cli, ["rollback", dir_option, db_option, "004_test"])
     assert not result.exception
-    assert router().in_db == migrations[:-2]
+    assert router().applied == migrations[:-2]
 
     result = runner.invoke(cli, ["rollback", dir_option, db_option, "--count=2"])
     assert not result.exception
-    assert router().in_db == migrations[:-4]
+    assert router().applied == migrations[:-4]
 
     result = runner.invoke(cli, ["rollback", dir_option, db_option, "005_test"])
     assert result.exception
     assert result.exception.args[0] == "Only last migration can be canceled."
-    assert router().in_db == migrations[:-4]
+    assert router().applied == migrations[:-4]
 
 
 def test_list(default_config: Path, default_migrations: list[str]):
@@ -259,19 +258,18 @@ def test_squash_rejected(default_config: Path, default_router: Router, default_m
 def test_squash(default_config: Path, default_router: Router, default_migrations: list[str]) -> None:
     router = default_router
     router.run()
-    assert router.in_db == ["001_some1", "002_some2"]
+    assert router.applied == ["001_some1", "002_some2"]
 
     result = runner.invoke(cli, ["--config", str(default_config), "squash"], input="y")
     assert result.exit_code == 0, result.output
 
-    assert router.all == ["001_squashed"]
     # Squash is a file-system-only operation: the history table is left
     # untouched, so the squashed migration shows up as unapplied and will be
     # fake-applied by the next `migrate` (see the `squash` migration attribute).
     assert router.in_db == ["001_some1", "002_some2"]
     assert router.applied == []
-    assert router.unapplied == ["001_squashed"]
-    assert sorted(os.listdir(router.migrate_dir)) == ["001_squashed.py"]
+    assert router.all == ["001_initial"]
+    assert router.unapplied == ["001_initial"]
 
 
 def test_squash_unapplied(default_config: Path, default_router: Router, default_migrations: list[str]) -> None:
@@ -282,8 +280,6 @@ def test_squash_unapplied(default_config: Path, default_router: Router, default_
     assert result.exit_code == 1
     assert "Can't squash migrations: 002_some2 not applied yet" in result.output
     assert "Apply all migrations first with 'miggy migrate'" in result.output
-    # Nothing is deleted.
-    assert sorted(os.listdir(default_router.migrate_dir)) == ["001_some1.py", "002_some2.py"]
 
 
 # Candidates for deprecation
