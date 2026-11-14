@@ -85,99 +85,43 @@ def test_router_merge(person_router: Router) -> None:
     os.remove(os.path.join(migrations_dir, "001_initial.py"))
 
 
-def write_tag_migrations(mig_dir: pathlib.Path) -> None:
-    (mig_dir / "001_create.py").write_text(
-        dedent(
-            """
-            import peewee as pw
-            from miggy import operations
-
-
-            class Migration(operations.Migration):
-                atomic = True
-
-                forward = [
-                    operations.CreateModel(
-                        'tag',
-                        {'tag': pw.CharField()},
-                        {},
-                    ),
-                ]
-
-                backward = [
-                    operations.RemoveModel(
-                        'tag',
-                    ),
-                ]
-            """
-        )
-    )
-    (mig_dir / "002_add_field.py").write_text(
-        dedent(
-            """
-            import peewee as pw
-            from miggy import operations
-
-
-            class Migration(operations.Migration):
-                atomic = True
-
-                forward = [
-                    operations.AddField(
-                        'tag',
-                        'created_at',
-                        pw.DateTimeField(null=True),
-                    ),
-                ]
-
-                backward = [
-                    operations.RemoveField(
-                        'tag',
-                        'created_at',
-                    ),
-                ]
-            """
-        )
-    )
-
-
-def test_router_squash(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
-    mig_dir = tmp_path / "migrations"
-    mig_dir.mkdir()
-    write_tag_migrations(mig_dir)
-    router = Router(patched_pg_db, migrate_dir=mig_dir)
+def test_router_squash(person_router: Router) -> None:
+    router = person_router
+    mig_dir = pathlib.Path(router.migrate_dir)
     router.run()
-    assert router.in_db == ["001_create", "002_add_field"]
-    assert patched_pg_db.table_exists("tag")
+    assert router.in_db == ["001_test", "002_test", "003_tespy", "004_test_insert"]
+    assert router.database.table_exists("tag")
 
     router.squash()
 
     # Old migration files are deleted and replaced with a single squashed one.
     assert router.all == ["001_initial"]
-    assert not (mig_dir / "001_create.py").exists()
-    assert not (mig_dir / "002_add_field.py").exists()
+    for name in ["001_test", "002_test", "003_tespy", "004_test_insert"]:
+        assert not (mig_dir / f"{name}.py").exists()
 
     content = (mig_dir / "001_initial.py").read_text()
     assert "squash = True" in content
     assert "operations.CreateModel" in content
     assert "'tag': pw.CharField()" in content
-    assert "'created_at': pw.DateTimeField(null=True)" in content
+    assert "'updated_at': pw.DateTimeField(null=True)" in content
+    assert "'email': pw.CharField(" in content
 
 
-def test_router_squash_with_unapplied_migrations(tmp_path: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> None:
-    mig_dir = tmp_path / "migrations"
-    mig_dir.mkdir()
-    write_tag_migrations(mig_dir)
-    router = Router(patched_pg_db, migrate_dir=mig_dir)
-    router.run(name="001_create")
+def test_router_squash_with_unapplied_migrations(person_router: Router) -> None:
+    router = person_router
+    mig_dir = pathlib.Path(router.migrate_dir)
+    router.run(name="001_test")
 
-    with pytest.raises(UnappliedMigrationError, match="The following migrations have not been applied: 002_add_field"):
+    with pytest.raises(
+        UnappliedMigrationError,
+        match="The following migrations have not been applied: 002_test, 003_tespy, 004_test_insert",
+    ):
         router.squash()
 
     # Nothing is deleted.
-    assert router.all == ["001_create", "002_add_field"]
-    assert (mig_dir / "001_create.py").exists()
-    assert (mig_dir / "002_add_field.py").exists()
+    assert router.all == ["001_test", "002_test", "003_tespy", "004_test_insert"]
+    for name in ["001_test", "002_test", "003_tespy", "004_test_insert"]:
+        assert (mig_dir / f"{name}.py").exists()
 
 
 @pytest.mark.parametrize(
