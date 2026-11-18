@@ -1,4 +1,5 @@
 import pathlib
+import shutil
 from collections.abc import Generator
 from typing import Any
 
@@ -62,8 +63,14 @@ def person_migrations_dir(resources_dir: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.fixture()
-def person_router(person_migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase) -> Router:
-    return Router(patched_pg_db, migrate_dir=person_migrations_dir)
+def person_router(
+    person_migrations_dir: pathlib.Path, patched_pg_db: PatchedPgDatabase, tmp_path: pathlib.Path
+) -> Router:
+    # Copy the migrations so that tests which modify the file system do not
+    # touch the tracked fixtures.
+    migrate_dir = tmp_path / "person_migrations"
+    shutil.copytree(person_migrations_dir, migrate_dir)
+    return Router(patched_pg_db, migrate_dir=migrate_dir)
 
 
 @pytest.fixture()

@@ -1,4 +1,4 @@
-"""Peewee migrations -- 001_squashed.py.
+"""Peewee migrations -- 001_initial.py.
 
 A migration is a `Migration` class. `forward` and `backward` are lists of
 operations from `miggy.operations` to apply forward and backward.

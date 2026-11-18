@@ -1,28 +1,29 @@
-"""Peewee migrations."""
+"""Peewee migrations -- 002_test.py.
+
+A migration is a `Migration` class. `forward` and `backward` are lists of
+operations from `miggy.operations` to apply forward and backward.
+Set `atomic = True` to run the migration inside a single transaction.
+"""
 
 import peewee as pw
 
+from miggy import operations
 
-def migrate(migrator, database, **kwargs):
-    """Write your migrations here.
 
-    > Model = migrator.state['name']
+class Migration(operations.Migration):
+    atomic = True
 
-    > migrator.sql(sql)
-    > migrator.python(func, *args, **kwargs)
-    > migrator.create_model(Model)
-    > migrator.store_model(Model)
-    > migrator.remove_model(Model, cascade=True)
-    > migrator.add_fields(Model, **fields)
-    > migrator.change_fields(Model, **fields)
-    > migrator.remove_fields(Model, *field_names, cascade=True)
-    > migrator.rename_field(Model, old_field_name, new_field_name)
-    > migrator.rename_table(Model, new_table_name)
-    > migrator.add_index(Model, *col_names, unique=False)
-    > migrator.drop_index(Model, index_name)
-    > migrator.add_not_null(Model, field_name)
-    > migrator.drop_not_null(Model, field_name)
-    > migrator.add_default(Model, field_name, default)
+    forward = [
+        operations.AddField(
+            model_name="tag",
+            name="created_at",
+            field=pw.DateTimeField(null=True),
+        ),
+    ]
 
-    """
-    migrator.add_fields("tag", created_at=pw.DateTimeField(null=True))
+    backward = [
+        operations.RemoveField(
+            model_name="tag",
+            name="created_at",
+        ),
+    ]

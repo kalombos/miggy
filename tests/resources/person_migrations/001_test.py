@@ -1,51 +1,46 @@
 """Peewee migrations -- 001_test.py.
 
-Some examples (model - class or model name)::
-
-    > Model = migrator.state['model_name']            # Return model in current state by name
-
-    > migrator.sql(sql)                             # Run custom SQL
-    > migrator.python(func, *args, **kwargs)        # Run python code
-    > migrator.create_model(Model: Model)                  # Create a model (could be used as decorator)
-    > migrator.remove_model(model: str | Model)    # Remove a model
-    > migrator.add_fields(model: str | Model, **fields: pw.Field)          # Add fields to a model
-    > migrator.change_fields(model: str | Model, **fields: pw.Field)       # Change fields
-    > migrator.remove_fields(model: str | Model, *field_names: pw.Field, cascade: bool = False)
-    > migrator.rename_field(model: str | Model, old_name: str, new_name: str)
-    > migrator.rename_table(model: str | Model, new_table_name: str)
-    > migrator.add_index(model: str | Model, *fields: str, name: str, unique: bool = False, where: pw.SQL | None = None)
-    > migrator.drop_index(model: str | Model, name: str)
-    > migrator.add_not_null(model: str | Model, *field_names: str)
-    > migrator.drop_not_null(model: str | Model, *field_names: str)
-
+A migration is a `Migration` class. `forward` and `backward` are lists of
+operations from `miggy.operations` to apply forward and backward.
+Set `atomic = True` to run the migration inside a single transaction.
 """
 
 import datetime as dt
 
 import peewee as pw
 
-SQL = pw.SQL
+from miggy import operations
 
 
-__ATOMIC = True
+class Migration(operations.Migration):
+    atomic = True
 
+    forward = [
+        operations.CreateModel(
+            name="Tag",
+            fields={
+                "tag": pw.CharField(),
+            },
+            meta={},
+        ),
+        operations.CreateModel(
+            name="Person",
+            fields={
+                "first_name": pw.CharField(),
+                "last_name": pw.CharField(index=True),
+                "dob": pw.DateField(null=True),
+                "birthday": pw.DateField(default=dt.datetime.now),
+                "email": pw.CharField(index=True, unique=True),
+            },
+            meta={},
+        ),
+    ]
 
-def migrate(migrator, database, fake=False):
-    """Write your migrations here."""
-
-    @migrator.create_model
-    class Tag(pw.Model):
-        tag = pw.CharField()
-
-    @migrator.create_model
-    class Person(pw.Model):
-        first_name = pw.CharField()
-        last_name = pw.CharField(index=True)
-        dob = pw.DateField(null=True)
-        birthday = pw.DateField(default=dt.datetime.now)
-        email = pw.CharField(index=True, unique=True)
-
-
-def rollback(migrator, database, fake=False):
-    """Write your rollback migrations here."""
-    pass
+    backward = [
+        operations.RemoveModel(
+            "Person",
+        ),
+        operations.RemoveModel(
+            "Tag",
+        ),
+    ]

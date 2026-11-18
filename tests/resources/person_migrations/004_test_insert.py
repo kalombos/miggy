@@ -1,43 +1,36 @@
-"""Peewee migrations."""
+"""Peewee migrations -- 004_test_insert.py.
+
+A migration is a `Migration` class. `forward` and `backward` are lists of
+operations from `miggy.operations` to apply forward and backward.
+Set `atomic = True` to run the migration inside a single transaction.
+"""
+
+from miggy import operations
+from miggy.schema import SchemaMigrator
+from miggy.state import State
 
 
-def migrate(migrator, database, **kwargs):
-    """Write your migrations here.
-
-    > Model = migrator.state['name']
-
-    > migrator.sql(sql)
-    > migrator.python(func, *args, **kwargs)
-    > migrator.create_model(Model)
-    > migrator.store_model(Model)
-    > migrator.remove_model(Model, cascade=True)
-    > migrator.add_fields(Model, **fields)
-    > migrator.change_fields(Model, **fields)
-    > migrator.remove_fields(Model, *field_names, cascade=True)
-    > migrator.rename_field(Model, old_field_name, new_field_name)
-    > migrator.rename_table(Model, new_table_name)
-    > migrator.add_index(Model, *col_names, unique=False)
-    > migrator.drop_index(Model, index_name)
-    > migrator.add_not_null(Model, field_name)
-    > migrator.drop_not_null(Model, field_name)
-    > migrator.add_default(Model, field_name, default)
-
-    """
-
-    def save_person(schema_migrator, state):
-        Person = state["person"]
-        Person(
-            first_name="First",
-            last_name="Last",
-            email="person@example.com",
-        ).save()
-
-    migrator.python(save_person)
+def save_person(schema_migrator: SchemaMigrator, state: State) -> None:
+    Person = state["person"]
+    Person(
+        first_name="First",
+        last_name="Last",
+        email="person@example.com",
+    ).save()
 
 
-def rollback(migrator, database, **kwargs):
-    def delete_person(schema_migrator, state):
-        Person = state["person"]
-        Person.delete().where(Person.email == "person@example.com").execute()
+def delete_person(schema_migrator: SchemaMigrator, state: State) -> None:
+    Person = state["person"]
+    Person.delete().where(Person.email == "person@example.com").execute()
 
-    migrator.python(delete_person)
+
+class Migration(operations.Migration):
+    atomic = True
+
+    forward = [
+        operations.RunPython(save_person),
+    ]
+
+    backward = [
+        operations.RunPython(delete_person),
+    ]
