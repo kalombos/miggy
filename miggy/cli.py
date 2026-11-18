@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from miggy.compat.cli import create, deprecated_options
+from miggy.compat.cli import create, deprecated_options, merge
 from miggy.router import FakeInitialError, Router, UnappliedMigrationError, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
@@ -187,9 +187,4 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
 cli.command(deprecated="Use `makemigrations --empty` instead.")(create)
 
 
-@cli.command(deprecated="Use `squash` command instead.")
-@deprecated_options
-def merge(database=None, directory=None, schema=None, verbose=None):
-    """Merge migrations into one."""
-    router = _load_router(directory, database, schema, verbose)
-    router.merge()
+cli.command(deprecated="Use `squash` command instead.")(merge)
