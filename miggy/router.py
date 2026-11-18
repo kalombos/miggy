@@ -5,6 +5,7 @@ import sys
 from functools import cached_property
 from importlib import import_module
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 import peewee as pw
@@ -34,11 +35,6 @@ class UnappliedMigrationError(MigrationError):
         super().__init__("The following migrations have not been applied: " + ", ".join(migrations))
 
 
-DEFAULT_MIGRATE_DIR = "migrations"
-UNDEFINED = object()
-VOID = lambda migrator, database, fake: None  # noqa
-
-
 def add_to_sys_path(directory: str | Path) -> None:
     if directory not in sys.path:
         sys.path.insert(0, str(directory))
@@ -57,6 +53,7 @@ class Router(object):
         ignore: list[str] | None = None,
         schema: str | None = None,
         working_dir: str | Path | None = None,
+        sources: list[str] | None = None,
     ) -> None:
         if isinstance(database, str):
             database = connect(database)
@@ -66,6 +63,7 @@ class Router(object):
             # Legacy
             database = database.obj
         self.database = cast("pw.Database", database)
+        self.sources = sources
         self.schema_migrator = SchemaMigrator.from_database(self.database)
         working_dir = working_dir or os.getcwd()
         self.working_dir = Path(working_dir)
@@ -115,16 +113,19 @@ class Router(object):
         """Migrations present in file system but not in database, in file system order."""
         return [name for name in self.all if name not in self.in_db]
 
-    def load_project_state(self, auto) -> State:
-        modules = [auto]
-        if isinstance(auto, bool):
+    def load_project_state(self, auto: bool | str) -> State:
+        if self.sources:
+            modules: list[str] = self.sources
+        elif isinstance(auto, str):
+            modules = [auto]
+        else:
             modules = [m for _, m, ispkg in pkgutil.iter_modules([str(self.working_dir)]) if ispkg]
 
-        models = [m for module in modules for m in load_models(module)]
+        models = [m for module in modules for m in ModelsFinder.load(module)]
 
         return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
-    def create(self, name="auto", auto=False, fake_initial: bool = False) -> str | None:
+    def create(self, name="auto", auto: bool | str = False, fake_initial: bool = False) -> str | None:
         """Create a migration.
         :param auto: Python module path to scan for models.
         """
@@ -237,6 +238,7 @@ class Router(object):
         )
 
     def create_migration_from_legacy_format(self, scope: dict[str, Any], fake: bool) -> type[Migration]:
+        VOID = lambda migrator, database, fake: None  # noqa
         atomic, migrate, rollback = (
             scope.get("__ATOMIC", True),
             scope.get("migrate", VOID),
@@ -362,40 +364,48 @@ class Router(object):
             os.remove(filename)
 
 
-def load_models(module):
-    """Load models from given module."""
-    modules = _import_submodules(module)
-    return {m for module in modules for m in filter(_check_model, (getattr(module, name) for name in dir(module)))}
+class ModelsFinder:
+    def __init__(self, package_name: str) -> None:
+        self.package_name = package_name
 
+    def load_models(self) -> set[type[pw.Model]]:
+        """Load all Peewee models from a package and its submodules."""
+        models = set()
 
-def _import_submodules(package, passed=UNDEFINED):
-    if passed is UNDEFINED:
-        passed = set()
+        for module in self.import_modules():
+            for name in dir(module):
+                obj = getattr(module, name)
 
-    if isinstance(package, str):
-        package = import_module(package)
+                if self.is_model(obj):
+                    models.add(obj)
 
-    modules = []
+        return models
 
-    for _loader, name, is_pkg in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
-        if name in passed:
-            continue
-        passed.add(name)
+    @classmethod
+    def load(cls, pacakge_name: str) -> set[type[pw.Model]]:
+        return cls(pacakge_name).load_models()
 
-        module = sys.modules.get(name)
-        if module is None:
-            module = import_module(name)
+    def import_modules(self) -> list[ModuleType]:
+        """Import a package and all of its submodules."""
+        package = import_module(self.package_name)
+        modules = [package]
 
-        modules.append(module)
-        if is_pkg:
-            modules += _import_submodules(module, passed=passed)
+        # A regular module has no submodules.
+        if not hasattr(package, "__path__"):
+            return modules
 
-    return modules
+        for module_info in pkgutil.walk_packages(
+            package.__path__,
+            prefix=f"{package.__name__}.",
+        ):
+            modules.append(import_module(module_info.name))
 
+        return modules
 
-def _check_model(obj, models=None):
-    """Checks object if it's a peewee model and unique."""
-    return isinstance(obj, type) and issubclass(obj, pw.Model) and hasattr(obj, "_meta")
+    @staticmethod
+    def is_model(obj: Any) -> bool:
+        """Return whether an object is a Peewee model class."""
+        return isinstance(obj, type) and obj is not pw.Model and issubclass(obj, pw.Model)
 
 
 def detect_changes(
@@ -413,6 +423,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
     working_directory = os.getcwd()
     migrate_dir = directory
     ignore = None
+    sources = None
 
     if conf_path:
         working_directory = conf_path.parent.as_posix()
@@ -430,6 +441,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             schema = config.get("SCHEMA", schema)
             migrate_table = config.get("MIGRATE_TABLE", migrate_table)
             migrate_dir = config.get("MIGRATE_DIR", migrate_dir)
+            sources = config.get("SOURCES", sources)
             logging_level = config.get("LOGGING_LEVEL", logging_level).upper()
 
     LOGGER.setLevel(logging_level)
@@ -442,6 +454,7 @@ def get_router(directory, database, schema=None, verbose=0, conf_path: Path | No
             ignore=ignore,
             schema=schema,
             working_dir=working_directory,
+            sources=sources,
         )
     except RuntimeError as exc:
         LOGGER.error(exc)

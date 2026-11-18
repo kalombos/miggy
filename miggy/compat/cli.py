@@ -41,3 +41,12 @@ def create(name, database=None, auto=False, auto_source=False, directory=None, s
     if auto and auto_source:
         auto = auto_source
     router.create(name, auto=auto)
+
+
+@deprecated_options
+def merge(database=None, directory=None, schema=None, verbose=None):
+    """Merge migrations into one."""
+    from miggy.cli import _load_router
+
+    router = _load_router(directory, database, schema, verbose)
+    router.merge()

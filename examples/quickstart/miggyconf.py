@@ -16,3 +16,7 @@ MIGRATE_TABLE = "migratehistory"
 
 # str | pathilib.Path. Path to the migration directory.
 MIGRATE_DIR = "migrations"
+
+# list[str]. Python module paths to scan for models (e.g. ["app.models"]).
+# If not set, the working directory is scanned for packages.
+SOURCES = ["app"]
