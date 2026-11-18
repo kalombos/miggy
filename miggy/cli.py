@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from miggy.compat.cli import create, deprecated_options
+from miggy.compat.cli import create, deprecated_options, merge
 from miggy.router import FakeInitialError, Router, UnappliedMigrationError, get_router
 from miggy.utils import CONFIG_TEMPLATE
 
@@ -77,14 +77,15 @@ def init() -> None:
 @click.option(
     "--auto-source",
     default=None,
+    deprecated=True,
     help=(
         "Set to python module path for changes autoscan (e.g. 'package.models'). "
-        "Current directory will be recursively scanned by default."
+        "Deprecated, use the SOURCES config option instead."
     ),
 )
 @deprecated_options
 def makemigrations(
-    name, fake_initial: bool, database, empty: bool, auto_source, directory=None, schema=None, verbose=None
+    name, fake_initial: bool, database, empty: bool, auto_source: str | None, directory=None, schema=None, verbose=None
 ) -> None:
     """Create a migration automatically
 
@@ -98,7 +99,7 @@ def makemigrations(
 
     router = _load_router(directory, database, schema, verbose)
 
-    auto = not empty
+    auto: bool | str = not empty
     if auto and auto_source:
         auto = auto_source
     try:
@@ -186,9 +187,4 @@ def list(database=None, directory=None, schema=None, verbose=None):  # noqa: A00
 cli.command(deprecated="Use `makemigrations --empty` instead.")(create)
 
 
-@cli.command()
-@deprecated_options
-def merge(database=None, directory=None, schema=None, verbose=None):
-    """Merge migrations into one."""
-    router = _load_router(directory, database, schema, verbose)
-    router.merge()
+cli.command(deprecated="Use `squash` command instead.")(merge)

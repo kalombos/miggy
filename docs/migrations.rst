@@ -32,6 +32,28 @@ the ``--config`` option or the ``MIGGY_CONFIG`` environment variable.
 See :doc:`cli` for the full command reference.
 
 
+Configuration
+-------------
+
+Run ``miggy init`` to create a ``miggyconf.py`` file with default values,
+then edit it to fit your project. The config file is a plain Python file;
+the supported settings are:
+
+* ``DATABASE`` — the database connection: a DSN string, a
+  ``peewee.Database`` instance, or a ``peewee.Proxy`` object. Required.
+* ``IGNORE`` — a list of model names to ignore when detecting changes.
+  Use ``Model._meta.name`` to get a model name.
+* ``SCHEMA`` — if set, run ``SET search_path TO 'schema'`` before each
+  migration so that it is applied to a different schema.
+* ``MIGRATE_TABLE`` — the name of the table used to store the migration
+  history. Defaults to ``migratehistory``.
+* ``MIGRATE_DIR`` — the path to the migration directory. Defaults to
+  ``migrations``.
+* ``SOURCES`` — a list of module paths to scan for models
+  (e.g. ``["app.models"]``). If it is not set, all packages in the
+  working directory are scanned for models.
+
+
 Workflow
 --------
 
