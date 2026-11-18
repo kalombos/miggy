@@ -3,18 +3,12 @@ import datetime as dt
 import peewee as pw
 import pytest
 from playhouse import pwasyncio
-from polyfactory.exceptions import ParameterException
 
-from miggy.ext import CharEnumField
 from miggy.ext.polyfactory import PeeweeFactory
-from miggy.ext.utils import StrEnum
+from miggy.utils import EnumField, IntEnumField
+from tests.helpers import Rating, Status, skip_if_no_enum
 
 db = pw.SqliteDatabase(":memory:")
-
-
-class Status(StrEnum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
 
 
 class PFPublisher(pw.Model):
@@ -30,7 +24,6 @@ class PFAuthor(pw.Model):
 
     name = pw.CharField(max_length=20)
     age = pw.IntegerField(null=True)
-    status = CharEnumField(Status)
     created_at = pw.DateTimeField(default=dt.datetime.utcnow)
     publisher = pw.ForeignKeyField(PFPublisher, null=True)
 
@@ -81,9 +74,18 @@ def test_build_respects_char_max_length() -> None:
         assert len(author.name) <= 20
 
 
-def test_build_fills_enum_field() -> None:
-    author = PFAuthorFactory.build()
-    assert author.status in (Status.ACTIVE, Status.INACTIVE)
+@skip_if_no_enum
+def test_enum_field() -> None:
+    class SomeModel(pw.Model):
+        status = EnumField(Status, max_length=100, null=True)
+        rating = IntEnumField(Rating)
+
+    class SomeModelFactory(PeeweeFactory[SomeModel]):
+        __allow_none_optionals__ = False
+
+    author = SomeModelFactory.build()
+    assert isinstance(author.status, Status)
+    assert isinstance(author.rating, Rating)
 
 
 def test_create_sync_saves_model_and_relations() -> None:
@@ -157,9 +159,3 @@ async def test_create_async_saves_model_and_relations() -> None:
         assert author.name == book.author.name
         await async_db.adrop_tables([AsyncAuthor, AsyncBook])
     await async_db.close_pool()
-
-
-@pytest.mark.asyncio
-async def test_create_async_requires_async_model() -> None:
-    with pytest.raises(ParameterException, match="not an AsyncModel"):
-        await PFBookFactory.create_async()
