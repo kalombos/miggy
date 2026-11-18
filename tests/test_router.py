@@ -14,11 +14,11 @@ except ImportError:  # peewee == 3.17.9
 from miggy.router import (
     FakeInitialError,
     MigrationError,
+    ModelsFinder,
     Router,
     UnappliedMigrationError,
     detect_changes,
     get_router,
-    load_models,
 )
 from miggy.state import State
 from tests.conftest import POSTGRES_DSN, PatchedPgDatabase
@@ -469,13 +469,36 @@ def test_rollback_only_last_migration(router: Router) -> None:
         router.rollback("001_test1")
 
 
-def test_load_models(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
+def test_load_project_state__sources(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
+) -> None:
+    router = Router(
+        patched_pg_db,
+        migrate_dir=migrations_dir,
+        sources=["autodiscover.some_folder_one", "autodiscover.some_folder_three.nested_referenced_model_s"],
+    )
+
+    state = router.load_project_state(True)
+    assert sorted(state) == ["model3", "object1", "object2", "object3"]
+
+
+def test_load_project_state__default(
+    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, resources_dir: pathlib.Path
+) -> None:
+    working_dir = resources_dir
+    router = Router(patched_pg_db, migrate_dir=migrations_dir, working_dir=working_dir)
+
+    state = router.load_project_state(True)
+    assert sorted(state) == ["basemodel", "model1", "model2", "model3", "object1", "object2", "object3"]
+
+
+def test_models_finder__load(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
     monkeypatch.syspath_prepend(str(resources_dir))
 
     def fqn(obj) -> str:
         return obj.__module__ + "." + obj.__name__
 
-    result = load_models("autodiscover")
+    result = ModelsFinder.load("autodiscover")
     result = sorted(fqn(x) for x in result)
     assert result == sorted(
         [
@@ -493,28 +516,8 @@ def test_load_models(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Pat
     )
 
 
-def test_load_models__plain_module(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
+def test_models_finder__load__plain_module(monkeypatch: pytest.MonkeyPatch, resources_dir: pathlib.Path) -> None:
     monkeypatch.syspath_prepend(str(resources_dir))
 
-    result = load_models("autodiscover.some_folder_one.one_models")
+    result = ModelsFinder.load("autodiscover.some_folder_one.one_models")
     assert [m.__name__ for m in result] == ["Object3"]
-
-
-def test_load_project_state__sources(
-    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, prepend_resources: None
-) -> None:
-    router = Router(patched_pg_db, migrate_dir=migrations_dir, sources=["autodiscover.some_folder_one"])
-
-    state = router.load_project_state(True)
-    assert sorted(state) == ["object1", "object2", "object3"]
-
-
-def test_load_project_state__default(
-    patched_pg_db: PatchedPgDatabase, migrations_dir: pathlib.Path, resources_dir: pathlib.Path
-) -> None:
-    # TODO handle with imports
-    working_dir = resources_dir / "autodiscover"
-    router = Router(patched_pg_db, migrate_dir=migrations_dir, working_dir=working_dir)
-
-    state = router.load_project_state(True)
-    assert sorted(state) == ["basemodel", "object1", "object2", "object3"]

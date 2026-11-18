@@ -121,7 +121,7 @@ class Router(object):
         else:
             modules = [m for _, m, ispkg in pkgutil.iter_modules([str(self.working_dir)]) if ispkg]
 
-        models = [m for module in modules for m in load_models(module)]
+        models = [m for module in modules for m in ModelsFinder.load(module)]
 
         return State({m._meta.name: m for m in models if m._meta.name not in self.ignore})
 
@@ -364,41 +364,48 @@ class Router(object):
             os.remove(filename)
 
 
-def load_models(package_name: str) -> set[type[pw.Model]]:
-    """Load all Peewee models from a package and its submodules."""
-    models = set()
+class ModelsFinder:
+    def __init__(self, package_name: str) -> None:
+        self.package_name = package_name
 
-    for module in import_modules(package_name):
-        for name in dir(module):
-            obj = getattr(module, name)
+    def load_models(self) -> set[type[pw.Model]]:
+        """Load all Peewee models from a package and its submodules."""
+        models = set()
 
-            if is_model(obj):
-                models.add(obj)
+        for module in self.import_modules():
+            for name in dir(module):
+                obj = getattr(module, name)
 
-    return models
+                if self.is_model(obj):
+                    models.add(obj)
 
+        return models
 
-def import_modules(package_name: str) -> list[ModuleType]:
-    """Import a package and all of its submodules."""
-    package = import_module(package_name)
-    modules = [package]
+    @classmethod
+    def load(cls, pacakge_name: str) -> set[type[pw.Model]]:
+        return cls(pacakge_name).load_models()
 
-    # A regular module has no submodules.
-    if not hasattr(package, "__path__"):
+    def import_modules(self) -> list[ModuleType]:
+        """Import a package and all of its submodules."""
+        package = import_module(self.package_name)
+        modules = [package]
+
+        # A regular module has no submodules.
+        if not hasattr(package, "__path__"):
+            return modules
+
+        for module_info in pkgutil.walk_packages(
+            package.__path__,
+            prefix=f"{package.__name__}.",
+        ):
+            modules.append(import_module(module_info.name))
+
         return modules
 
-    for module_info in pkgutil.walk_packages(
-        package.__path__,
-        prefix=f"{package.__name__}.",
-    ):
-        modules.append(import_module(module_info.name))
-
-    return modules
-
-
-def is_model(obj: Any) -> bool:
-    """Return whether an object is a Peewee model class."""
-    return isinstance(obj, type) and obj is not pw.Model and issubclass(obj, pw.Model)
+    @staticmethod
+    def is_model(obj: Any) -> bool:
+        """Return whether an object is a Peewee model class."""
+        return isinstance(obj, type) and obj is not pw.Model and issubclass(obj, pw.Model)
 
 
 def detect_changes(
