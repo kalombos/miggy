@@ -35,11 +35,6 @@ class UnappliedMigrationError(MigrationError):
         super().__init__("The following migrations have not been applied: " + ", ".join(migrations))
 
 
-DEFAULT_MIGRATE_DIR = "migrations"
-UNDEFINED = object()
-VOID = lambda migrator, database, fake: None  # noqa
-
-
 def add_to_sys_path(directory: str | Path) -> None:
     if directory not in sys.path:
         sys.path.insert(0, str(directory))
