@@ -8,7 +8,7 @@ import peewee as pw
 from playhouse.postgres_ext import BinaryJSONField, DateTimeTZField
 
 from miggy.ext import fields as ext_fields
-from miggy.utils import EnumField, IntEnumField
+from miggy.utils import EnumField, IntEnumField, deprecated_warn
 
 
 class Counter(collections.Counter):
@@ -79,6 +79,11 @@ def model_factory(
     Create and save an instance of a Peewee model, automatically populating
     all required fields.
 
+    Deprecated:
+        This function is deprecated and will be removed in a future release.
+        Use the :mod:`miggy.ext.peewee_factory` module
+        (:class:`~miggy.ext.peewee_factory.PeeweeFactory`) instead.
+
     Parameters
     ----------
     model : type[pw.Model]
@@ -101,6 +106,7 @@ def model_factory(
     -------
     >>> book = model_factory(Book, name="mytestname")
     """
+    deprecated_warn("model_factory is deprecated. Use the peewee_factory module (PeeweeFactory) instead.")
     _field_type_map = field_type_map.copy()
     if custom_field_type_map is not None:
         _field_type_map.update(custom_field_type_map)

@@ -4,6 +4,8 @@ from miggy.ext import model_factory
 
 from .models import Author, Book, Rating, Status, db
 
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 def test_intenumfield() -> None:
     model_factory(Book, rating=Rating.HIGH)

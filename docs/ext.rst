@@ -66,12 +66,20 @@ API
 Model Factory
 ++++++++++++++++++
 
+.. note::
+
+    **Deprecated.** ``model_factory`` is deprecated and will be removed in a
+    future release. Use the ``miggy.ext.peewee_factory`` module
+    (``PeeweeFactory``) instead, see :ref:`peewee-polyfactory`.
+
 **model_factory** is a simple helper to create dynamic model instances for testing purposes.
 
 .. automethod:: miggy.ext::model_factory
 
 
-Peewee Polyfactory
+.. _peewee-polyfactory:
+
+PeeweeFactory
 ++++++++++++++++++
 
 **PeeweeFactory** is a `polyfactory <https://github.com/litestar-org/polyfactory>`__
@@ -79,49 +87,35 @@ factory for Peewee models.
 It introspects model fields and generates values for them: field types are
 mapped to Python types, ``CharField.max_length`` and ``DecimalField``
 constraints are respected, ``ForeignKeyField`` values are built as related
-model instances, and pplayhouse ``EnumField``/``IntEnumField`` are filled with random enum values.
+model instances, and playhouse ``EnumField``/``IntEnumField`` are filled with random enum values.
 
-Sync usage::
+Dependencies
+------------
 
-    from peewee import CharField, ForeignKeyField, Model
-    from miggy.ext import PeeweeFactory
+* ``polyfactory`` is required for all factory features. It is installed
+  together with Miggy.
+* ``create_async`` (async usage) additionally requires ``peewee`` 4.0 or
+  newer, ``asyncpg`` and ``greenlet``.
 
+Sync usage
+----------
 
-    class Author(Model):
-        name = CharField(max_length=20)
-
-
-    class Book(Model):
-        title = CharField()
-        author = ForeignKeyField(Author, null=True)
-
-
-    class BookFactory(PeeweeFactory[Book]):
-        __allow_none_optionals__ = False
+.. literalinclude:: ../examples/peewee_factory/sync_usage.py
+   :language: python
 
 
-    book = BookFactory.build()              # unsaved instance
-    book = BookFactory.create_sync()        # built and saved, FK relations included
-    books = BookFactory.create_batch_sync(5)
+Async usage
+-----------
+
+.. literalinclude:: ../examples/peewee_factory/pwasyncio_usage.py
+   :language: python
 
 
-Async usage requires `playhouse.pwasyncio`: derive the model from
-``AsyncModel`` and bind it to an ``AsyncDatabaseMixin`` database
-(e.g. ``AsyncPostgresqlDatabase``)::
+Using with peewee-async
+-----------------------
 
-    import peewee as pw
-    from playhouse import pwasyncio
-    from miggy.ext import PeeweeFactory
+If you use `peewee-async <https://github.com/05bit/peewee-async>`__ instead
+of ``playhouse.pwasyncio``:
 
-
-    class AsyncBook(pwasyncio.AsyncModel):
-        class Meta:
-            database = async_db
-        title = pw.CharField()
-
-
-    class AsyncBookFactory(PeeweeFactory[AsyncBook]):
-        __allow_none_optionals__ = False
-
-
-    book = await AsyncBookFactory.create_async()
+.. literalinclude:: ../examples/peewee_factory/peewee_async_usage.py
+   :language: python
