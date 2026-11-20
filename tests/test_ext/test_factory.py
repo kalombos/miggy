@@ -10,6 +10,13 @@ from tests.helpers import skip_if_no_enum
 
 from .models import Author, Book, Rating, Status, db
 
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
+
+def test_model_factory_is_deprecated() -> None:
+    with pytest.warns(DeprecationWarning, match="model_factory is deprecated"):
+        model_factory(Book)
+
 
 def test_foreign_field_is_created() -> None:
     book = model_factory(Book)

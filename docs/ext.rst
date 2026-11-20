@@ -66,6 +66,56 @@ API
 Model Factory
 ++++++++++++++++++
 
+.. note::
+
+    **Deprecated.** ``model_factory`` is deprecated and will be removed in a
+    future release. Use the ``miggy.ext.peewee_factory`` module
+    (``PeeweeFactory``) instead, see :ref:`peewee-polyfactory`.
+
 **model_factory** is a simple helper to create dynamic model instances for testing purposes.
 
 .. automethod:: miggy.ext::model_factory
+
+
+.. _peewee-polyfactory:
+
+PeeweeFactory
+++++++++++++++++++
+
+**PeeweeFactory** is a `polyfactory <https://github.com/litestar-org/polyfactory>`__
+factory for Peewee models.
+It introspects model fields and generates values for them: field types are
+mapped to Python types, ``CharField.max_length`` and ``DecimalField``
+constraints are respected, ``ForeignKeyField`` values are built as related
+model instances, and playhouse ``EnumField``/``IntEnumField`` are filled with random enum values.
+
+Dependencies
+------------
+
+* ``polyfactory`` is required for all factory features. It is installed
+  together with Miggy.
+* ``create_async`` (async usage) additionally requires ``peewee`` 4.0 or
+  newer, ``asyncpg`` and ``greenlet``.
+
+Sync usage
+----------
+
+.. literalinclude:: ../examples/peewee_factory/sync_usage.py
+   :language: python
+
+
+Async usage
+-----------
+
+.. literalinclude:: ../examples/peewee_factory/pwasyncio_usage.py
+   :language: python
+
+
+Using with peewee-async
+-----------------------
+
+If you use `peewee-async <https://github.com/05bit/peewee-async>`__ instead
+of ``playhouse.pwasyncio``:
+
+.. literalinclude:: ../examples/peewee_factory/peewee_async_usage.py
+   :language: python
