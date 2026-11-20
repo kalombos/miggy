@@ -13,7 +13,7 @@ pytest.importorskip("peewee", minversion="4.0")
 
 from playhouse import pwasyncio
 
-from miggy.ext.polyfactory import PeeweeFactory
+from miggy.ext.peewee_factory import PeeweeFactory
 from miggy.utils import EnumField, IntEnumField
 from tests.helpers import Rating, Status, skip_if_no_enum
 

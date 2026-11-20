@@ -1,19 +1,3 @@
-"""Polyfactory-based factories for peewee models.
-
-An analog of :mod:`polyfactory.factories.sqlalchemy_factory` for the peewee ORM:
-:class:`PeeweeFactory` is a polyfactory ``BaseFactory`` subclass which knows how to
-introspect peewee model fields and persist the generated instances.
-
-Example:
-    >>> from peewee import Model, CharField
-    >>> from miggy.ext.polyfactory import PeeweeFactory
-    >>> class Author(Model):
-    ...     name = CharField()
-    >>> class AuthorFactory(PeeweeFactory[Author]):
-    ...     pass
-    >>> author = AuthorFactory.create_sync()  # built and saved in one call
-"""
-
 from __future__ import annotations
 
 from datetime import date, datetime, time
