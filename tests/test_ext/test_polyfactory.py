@@ -45,7 +45,7 @@ def test_build() -> None:
 
     assert isinstance(book, Book)
     assert book.id is None
-    assert book.title
+    assert isinstance(book.title, str)
 
     author = book.author
     assert isinstance(author, Author)
