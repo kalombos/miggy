@@ -41,7 +41,9 @@ dev = [
     "commitizen>=4.13.8,<5",
     "aiosqlite>=0.22.1",
     "pytest-asyncio>=1.0",
-    "polyfactory>=3.5.0"
+    "polyfactory==3.5.0",
+    "asyncpg==0.32.0",
+    "greenlet==3.5.6"
 ]
 docs = [
     "Sphinx==8.1.3",

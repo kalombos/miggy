@@ -75,15 +75,11 @@ Peewee Polyfactory
 ++++++++++++++++++
 
 **PeeweeFactory** is a `polyfactory <https://github.com/litestar-org/polyfactory>`__
-factory for Peewee models, an analog of polyfactory's ``SQLAlchemyFactory``.
+factory for Peewee models.
 It introspects model fields and generates values for them: field types are
 mapped to Python types, ``CharField.max_length`` and ``DecimalField``
 constraints are respected, ``ForeignKeyField`` values are built as related
-model instances, and enum fields (``CharEnumField``, ``IntEnumField``,
-playhouse ``EnumField``/``IntEnumField``) are filled with random enum values.
-
-Primary keys are skipped by default so that the database can assign them
-(disable with ``__skip_primary_keys__ = False``).
+model instances, and pplayhouse ``EnumField``/``IntEnumField`` are filled with random enum values.
 
 Sync usage::
 
