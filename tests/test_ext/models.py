@@ -36,8 +36,9 @@ class Book(pw.Model):
     class Meta:
         database = db
 
-    title = pw.CharField()
+    title = pw.CharField(max_length=10)
     author = pw.ForeignKeyField(Author)
     rating = pw.IntegerField()
     requests = pw.IntegerField(default=0)
     rating = IntEnumField(Rating)
+    feedback = pw.CharField(null=True)

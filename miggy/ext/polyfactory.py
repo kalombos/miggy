@@ -23,6 +23,7 @@ from uuid import UUID
 
 import peewee as pw
 from playhouse.postgres_ext import BinaryJSONField, DateTimeTZField
+from playhouse.pwasyncio import _aio_database
 from polyfactory.exceptions import ParameterException
 from polyfactory.factories.base import BaseFactory
 from polyfactory.field_meta import FieldMeta, Null
@@ -30,26 +31,26 @@ from polyfactory.persistence import AsyncPersistenceProtocol, SyncPersistencePro
 from polyfactory.utils.types import Frozendict
 
 if TYPE_CHECKING:
+    from enum import Enum
     from typing import TypeGuard
 
 
-T = TypeVar("T")
+T = TypeVar("T", bound=pw.Model)
 
 
-def _collect_unsaved_relations(obj: Any, seen: set[int] | None = None) -> list[Any]:
+def _collect_with_unsaved_relations(obj: pw.Model) -> list[pw.Model]:
     """Collect unsaved FK-related instances of ``obj`` in dependency order (children first)."""
-    if seen is None:
-        seen = set()
 
-    result: list[Any] = []
-    for ref in obj._meta.refs:
-        related = obj.__rel__.get(ref.name)
-        if related is None or related._pk is not None or id(related) in seen:
-            continue
-        seen.add(id(related))
-        result.extend(_collect_unsaved_relations(related, seen))
-        result.append(related)
-    return result
+    def collect(obj: pw.Model) -> list[pw.Model]:
+        result = []
+        for f in obj._meta.refs:
+            related = getattr(obj, f.name)
+            if related is not None:
+                result.extend(collect(related))
+                result.append(related)
+        return result
+
+    return [*collect(obj), obj]
 
 
 _PEEWEE_FIELD_PYTHON_TYPES: dict[type, type] = {
@@ -89,38 +90,35 @@ _PEEWEE_FIELD_PYTHON_TYPES: dict[type, type] = {
 
 
 class PeeweeSyncPersistence(SyncPersistenceProtocol[T]):
-    def _save(self, m: Any) -> None:
+    def _save(self, m: T) -> None:
         m.save(force_insert=True)
 
     def save(self, data: T) -> T:
-        for related in _collect_unsaved_relations(data):
-            self._save(related)
-        self._save(data)
+        for m in _collect_with_unsaved_relations(data):
+            self._save(m)
         return data
 
     def save_many(self, data: list[T]) -> list[T]:
-        for related in (rel for item in data for rel in _collect_unsaved_relations(item)):
-            self._save(related)
         for item in data:
-            self._save(item)
+            for m in _collect_with_unsaved_relations(item):
+                self._save(m)
         return data
 
 
 class PeeweeAsyncPersistence(AsyncPersistenceProtocol[T]):
-    async def _save(self, m: Any) -> None:
-        await m.asave(force_insert=True)
+    async def _save(self, m: T) -> None:
+        await _aio_database(type(m)).run(m.save, force_insert=True)
 
     async def save(self, data: T) -> T:
-        for related in _collect_unsaved_relations(data):
-            await self._save(related)
-        await self._save(data)
+        for m in _collect_with_unsaved_relations(data):
+            await self._save(m)
         return data
 
     async def save_many(self, data: list[T]) -> list[T]:
-        for related in (rel for item in data for rel in _collect_unsaved_relations(item)):
-            await self._save(related)
+
         for item in data:
-            await self._save(item)
+            for m in _collect_with_unsaved_relations(item):
+                await self._save(m)
         return data
 
 
@@ -167,11 +165,18 @@ class PeeweeFactory(BaseFactory[T], Generic[T]):
             return False
         return True
 
+    @staticmethod
+    def _get_enum_class(field: pw.Field) -> type[Enum] | None:
+        for attr in ("enum_class", "_enum"):
+            if enum_class := getattr(field, attr, None):
+                return enum_class
+        return None
+
     @classmethod
     def get_type_from_field(cls, field: pw.Field) -> type:
         if isinstance(field, pw.ForeignKeyField):
             annotation: Any = field.rel_model
-        elif enum_class := getattr(field, "enum_class", None):
+        elif enum_class := cls._get_enum_class(field):
             annotation = enum_class
         else:
             annotation = cls._get_python_type(field)

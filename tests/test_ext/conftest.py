@@ -7,6 +7,7 @@ from .utils import list_models
 
 @pytest.fixture(scope="session", autouse=True)
 def create_tables() -> None:
+    db.drop_tables(list_models(), safe=True)
     db.create_tables(list_models())
 
 
