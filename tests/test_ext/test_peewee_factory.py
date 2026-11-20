@@ -87,6 +87,15 @@ def test_create_sync() -> None:
     assert Book.get(id=book.id).title == book.title
 
 
+def test_create_sync_custom_fk() -> None:
+    author = AuthorFactory.create_sync()
+    book = BookFactory.create_sync(author=author)
+
+    assert isinstance(book, Book)
+    assert book.id == book.id
+    assert book.author.id == author.id
+
+
 def test_create_sync_custom_fields() -> None:
     book = BookFactory.create_sync(title="custom")
     assert book.title == "custom"
@@ -99,5 +108,12 @@ async def test_create_async(async_mode: None) -> None:
     assert isinstance(book, Book)
     assert book.id is not None
     assert book.author.id is not None
-    # assert await Author.aget(id=book.author.id).name == book.author.name
-    # assert await Book.get(id=book.id).title == book.title
+
+
+@pytest.mark.asyncio
+async def test_create_async__custom_fk(async_mode: None) -> None:
+    author = await AuthorFactory.create_async()
+    book = await BookFactory.create_async(author=author)
+
+    assert book.id == book.id
+    assert book.author.id == author.id

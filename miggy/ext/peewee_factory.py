@@ -29,7 +29,7 @@ def _collect_with_unsaved_relations(obj: T) -> list[T]:
         result = []
         for f in obj._meta.refs:
             related = getattr(obj, f.name)
-            if related is not None:
+            if related is not None and related._pk is None:
                 result.extend(collect(related))
                 result.append(related)
         return result
