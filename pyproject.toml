@@ -40,7 +40,8 @@ dev = [
     "mypy==2.4.0",
     "commitizen>=4.13.8,<5",
     "aiosqlite>=0.22.1",
-    "pytest-asyncio>=1.0"
+    "pytest-asyncio>=1.0",
+    "polyfactory==3.5.0"
 ]
 docs = [
     "Sphinx==8.1.3",
