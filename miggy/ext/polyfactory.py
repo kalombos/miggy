@@ -38,10 +38,10 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound=pw.Model)
 
 
-def _collect_with_unsaved_relations(obj: pw.Model) -> list[pw.Model]:
+def _collect_with_unsaved_relations(obj: T) -> list[T]:
     """Collect unsaved FK-related instances of ``obj`` in dependency order (children first)."""
 
-    def collect(obj: pw.Model) -> list[pw.Model]:
+    def collect(obj: T) -> list[T]:
         result = []
         for f in obj._meta.refs:
             related = getattr(obj, f.name)
@@ -90,7 +90,7 @@ _PEEWEE_FIELD_PYTHON_TYPES: dict[type, type] = {
 
 
 class PeeweeSyncPersistence(SyncPersistenceProtocol[T]):
-    def _save(self, m: T) -> None:
+    def _save(self, m: pw.Model) -> None:
         m.save(force_insert=True)
 
     def save(self, data: T) -> T:
@@ -106,7 +106,7 @@ class PeeweeSyncPersistence(SyncPersistenceProtocol[T]):
 
 
 class PeeweeAsyncPersistence(AsyncPersistenceProtocol[T]):
-    async def _save(self, m: T) -> None:
+    async def _save(self, m: pw.Model) -> None:
         await _aio_database(type(m)).run(m.save, force_insert=True)
 
     async def save(self, data: T) -> T:
