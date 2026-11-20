@@ -125,6 +125,3 @@ Async usage requires `playhouse.pwasyncio`: derive the model from
 
 
     book = await AsyncBookFactory.create_async()
-
-.. autoclass:: miggy.ext.polyfactory::PeeweeFactory
-    :members:
