@@ -1,9 +1,7 @@
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, StrEnum
 from typing import Any
 
 import peewee as pw
-
-from miggy.ext.utils import StrEnum
 
 
 class BaseEnumField(pw.Field):
