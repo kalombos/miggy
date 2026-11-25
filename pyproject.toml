@@ -27,8 +27,6 @@ license = "BSD-4-Clause"
 dependencies = [
     "peewee>=3.17.9,<4.6",
     "click>=8.3.1",
-    "polyfactory>=3.5",
-    "StrEnum; python_version < '3.11'"
 ]
 
 [project.optional-dependencies]
@@ -40,7 +38,7 @@ dev = [
     "mypy==2.4.0",
     "commitizen>=4.13.8,<5",
     "pytest-asyncio>=1.0",
-    "polyfactory==3.5.0",
+    "polyfactory>=3.5",
     "asyncpg==0.32.0",
     "greenlet==3.5.6",
 ]

@@ -1,10 +1,9 @@
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 import peewee as pw
 from playhouse.postgres_ext import DateTimeTZField
 
 from miggy.ext import CharEnumField, IntEnumField
-from miggy.ext.utils import StrEnum
 from tests.conftest import POSTGRES_DSN
 
 db = pw.PostgresqlDatabase(POSTGRES_DSN)

@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from textwrap import dedent
 
 import peewee as pw
@@ -7,7 +7,6 @@ import pytest
 from playhouse.migrate import Operation
 
 from miggy.auto import MigrationAutodetector
-from miggy.ext.utils import StrEnum
 from miggy.operations import MigrateOperation
 from miggy.state import State
 from miggy.types import ModelCls
